@@ -27,7 +27,8 @@ class MatchDetailScreen extends ConsumerWidget {
         error: (error, stackTrace) => const Center(
           child: Text('Unable to load local match detail.'),
         ),
-        data: (detail) {
+        data: (state) {
+          final detail = state.detail;
           final resolver = ref.read(appServicesProvider).assetResolver;
           final kickoff = DateFormat(
             'EEE, dd MMM • HH:mm',
@@ -97,6 +98,126 @@ class MatchDetailScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 8),
+              if (state.stats.isNotEmpty)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Stats',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        ...state.stats.map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 44,
+                                      child: Text(
+                                        _formatStatValue(item.homeValue),
+                                        textAlign: TextAlign.left,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        _prettifyStatKey(item.statKey),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 44,
+                                      child: Text(
+                                        _formatStatValue(item.awayValue),
+                                        textAlign: TextAlign.right,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                _statBar(item.homeValue, item.awayValue),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              if (state.events.isNotEmpty)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Timeline',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        ...state.events.map(
+                          (event) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 5),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 34,
+                                  child: Text(
+                                    "${event.event.minute}'",
+                                    style:
+                                        Theme.of(context).textTheme.labelLarge,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _prettifyEventType(event.event.eventType),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                      if (event.event.playerName != null)
+                                        Text(event.event.playerName!),
+                                      if (event.teamName != null)
+                                        Text(
+                                          event.teamName!,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelMedium,
+                                        ),
+                                      if (event.event.detail != null)
+                                        Text(
+                                          event.event.detail!,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
               const Card(
                 child: Padding(
                   padding: EdgeInsets.all(12),
@@ -155,5 +276,45 @@ class MatchDetailScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Widget _statBar(double homeValue, double awayValue) {
+    final total = (homeValue + awayValue).abs();
+    final homeRatio = total == 0 ? 0.5 : (homeValue / total);
+    final awayRatio = 1 - homeRatio;
+
+    return Row(
+      children: [
+        Expanded(
+          flex: (homeRatio * 100).round().clamp(1, 99),
+          child: Container(height: 5, color: AppColorTokens.accent),
+        ),
+        Expanded(
+          flex: (awayRatio * 100).round().clamp(1, 99),
+          child: Container(height: 5, color: AppColorTokens.surfaceAlt),
+        ),
+      ],
+    );
+  }
+
+  String _formatStatValue(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toInt().toString();
+    }
+    return value.toStringAsFixed(1);
+  }
+
+  String _prettifyStatKey(String key) {
+    return key
+        .replaceAll('_', ' ')
+        .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}')
+        .split(' ')
+        .where((part) => part.trim().isNotEmpty)
+        .map((part) => '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}')
+        .join(' ');
+  }
+
+  String _prettifyEventType(String type) {
+    return _prettifyStatKey(type);
   }
 }

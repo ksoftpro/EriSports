@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:eri_sports/core/log/app_logger.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/import/parsers/fixtures_parser.dart';
+import 'package:eri_sports/data/import/parsers/match_detail_parser.dart';
 import 'package:eri_sports/data/import/parsers/players_parser.dart';
 import 'package:eri_sports/data/import/parsers/standings_parser.dart';
 import 'package:eri_sports/data/import/parsers/teams_parser.dart';
@@ -42,7 +43,8 @@ class ImportCoordinator {
   })  : _teamsParser = TeamsParser(),
       _fixturesParser = FixturesParser(),
       _standingsParser = StandingsParser(),
-      _playersParser = PlayersParser();
+      _playersParser = PlayersParser(),
+      _matchDetailParser = MatchDetailParser();
 
   final AppDatabase database;
   final DaylySportLocator daylySportLocator;
@@ -52,6 +54,7 @@ class ImportCoordinator {
   final FixturesParser _fixturesParser;
   final StandingsParser _standingsParser;
   final PlayersParser _playersParser;
+  final MatchDetailParser _matchDetailParser;
 
   Future<ImportRunReport> runLocalImport({
     required String triggerType,
@@ -207,6 +210,15 @@ class ImportCoordinator {
   Future<bool> _importSnapshot(LocalJsonFileSnapshot snapshot) async {
     final filePath = snapshot.absolutePath;
     final lowerName = snapshot.fileName.toLowerCase();
+
+    if (lowerName.contains('match_detail') ||
+        lowerName.contains('match-detail') ||
+        lowerName.contains('timeline') ||
+        lowerName.contains('incidents') ||
+        lowerName.contains('events')) {
+      await _importMatchDetailFile(File(filePath));
+      return true;
+    }
 
     if (lowerName.contains('team')) {
       await _importTeamsFile(File(filePath));
@@ -414,6 +426,58 @@ class ImportCoordinator {
     });
   }
 
+  Future<void> _importMatchDetailFile(File file) async {
+    final content = await file.readAsString();
+    final parsed = _matchDetailParser.parse(content);
+    if (parsed == null) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+
+    await database.transaction(() async {
+      await (database.delete(database.matchEvents)
+            ..where((tbl) => tbl.matchId.equals(parsed.matchId)))
+          .go();
+      await (database.delete(database.matchTeamStats)
+            ..where((tbl) => tbl.matchId.equals(parsed.matchId)))
+          .go();
+
+      for (final event in parsed.events) {
+        if (event.teamId != null) {
+          await _ensureTeam(event.teamId!, now);
+        }
+        if (event.playerId != null) {
+          await _ensurePlayer(event.playerId!, event.playerName, event.teamId, now);
+        }
+
+        await database.into(database.matchEvents).insert(
+              MatchEventsCompanion.insert(
+                matchId: event.matchId,
+                minute: event.minute,
+                eventType: event.eventType,
+                teamId: Value(event.teamId),
+                playerId: Value(event.playerId),
+                playerName: Value(event.playerName),
+                detail: Value(event.detail),
+              ),
+            );
+      }
+
+      for (final stat in parsed.stats) {
+        await _ensureTeam(stat.teamId, now);
+        await database.into(database.matchTeamStats).insert(
+              MatchTeamStatsCompanion.insert(
+                matchId: stat.matchId,
+                teamId: stat.teamId,
+                statKey: stat.statKey,
+                statValue: stat.statValue,
+              ),
+            );
+      }
+    });
+  }
+
   Future<void> _ensureCompetition(String competitionId, DateTime now) async {
     final existing = await (database.select(database.competitions)
           ..where((tbl) => tbl.id.equals(competitionId)))
@@ -450,4 +514,30 @@ class ImportCoordinator {
           ),
         );
   }
+
+    Future<void> _ensurePlayer(
+      String playerId,
+      String? playerName,
+      String? teamId,
+      DateTime now,
+    ) async {
+      final existing = await (database.select(database.players)
+            ..where((tbl) => tbl.id.equals(playerId)))
+          .getSingleOrNull();
+      if (existing != null) {
+        return;
+      }
+
+      await database.into(database.players).insert(
+            PlayersCompanion.insert(
+              id: playerId,
+              teamId: Value(teamId),
+              name: playerName ?? 'Unknown Player',
+              position: const Value(null),
+              jerseyNumber: const Value(null),
+              photoAssetKey: const Value(null),
+              updatedAtUtc: now,
+            ),
+          );
+    }
 }

@@ -65,6 +65,27 @@ class Matches extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+@DataClassName('MatchEventRow')
+class MatchEvents extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get matchId => text().references(Matches, #id)();
+  IntColumn get minute => integer()();
+  TextColumn get eventType => text()();
+  TextColumn get teamId => text().nullable().references(Teams, #id)();
+  TextColumn get playerId => text().nullable().references(Players, #id)();
+  TextColumn get playerName => text().nullable()();
+  TextColumn get detail => text().nullable()();
+}
+
+@DataClassName('MatchTeamStatRow')
+class MatchTeamStats extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get matchId => text().references(Matches, #id)();
+  TextColumn get teamId => text().references(Teams, #id)();
+  TextColumn get statKey => text()();
+  RealColumn get statValue => real()();
+}
+
 @DataClassName('StandingsRowData')
 class StandingsRows extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -154,12 +175,36 @@ class MatchDetailView {
   final String awayTeamName;
 }
 
+class MatchEventView {
+  const MatchEventView({
+    required this.event,
+    required this.teamName,
+  });
+
+  final MatchEventRow event;
+  final String? teamName;
+}
+
+class MatchTeamStatComparison {
+  const MatchTeamStatComparison({
+    required this.statKey,
+    required this.homeValue,
+    required this.awayValue,
+  });
+
+  final String statKey;
+  final double homeValue;
+  final double awayValue;
+}
+
 @DriftDatabase(
   tables: [
     Competitions,
     Teams,
     Players,
     Matches,
+    MatchEvents,
+    MatchTeamStats,
     StandingsRows,
     AssetRefs,
     ImportRuns,
@@ -170,12 +215,18 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
           await m.createAll();
+        },
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.createTable(matchEvents);
+            await m.createTable(matchTeamStats);
+          }
         },
       );
 
@@ -251,6 +302,65 @@ class AppDatabase extends _$AppDatabase {
                 row.readTableOrNull(homeTeam)?.name ?? 'Unknown Team',
             awayTeamName:
                 row.readTableOrNull(awayTeam)?.name ?? 'Unknown Team',
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<MatchEventView>> readMatchEventsByMatchId(String matchId) async {
+    final teamAlias = alias(teams, 'match_event_team');
+    final query = select(matchEvents).join([
+      leftOuterJoin(teamAlias, teamAlias.id.equalsExp(matchEvents.teamId)),
+    ])
+      ..where(matchEvents.matchId.equals(matchId))
+      ..orderBy([
+        OrderingTerm.desc(matchEvents.minute),
+        OrderingTerm.desc(matchEvents.id),
+      ]);
+
+    final rows = await query.get();
+    return rows
+        .map(
+          (row) => MatchEventView(
+            event: row.readTable(matchEvents),
+            teamName: row.readTableOrNull(teamAlias)?.name,
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<MatchTeamStatComparison>> readMatchStatComparisons(
+    String matchId,
+  ) async {
+    final match = await (select(matches)..where((tbl) => tbl.id.equals(matchId)))
+        .getSingleOrNull();
+    if (match == null) {
+      return const [];
+    }
+
+    final stats = await (select(matchTeamStats)
+          ..where((tbl) => tbl.matchId.equals(matchId)))
+        .get();
+
+    final homeByKey = <String, double>{};
+    final awayByKey = <String, double>{};
+
+    for (final stat in stats) {
+      if (stat.teamId == match.homeTeamId) {
+        homeByKey[stat.statKey] = stat.statValue;
+      } else if (stat.teamId == match.awayTeamId) {
+        awayByKey[stat.statKey] = stat.statValue;
+      }
+    }
+
+    final allKeys = {...homeByKey.keys, ...awayByKey.keys}.toList()..sort();
+
+    return allKeys
+        .map(
+          (key) => MatchTeamStatComparison(
+            statKey: key,
+            homeValue: homeByKey[key] ?? 0,
+            awayValue: awayByKey[key] ?? 0,
           ),
         )
         .toList();
