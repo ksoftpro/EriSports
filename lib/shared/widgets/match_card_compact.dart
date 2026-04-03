@@ -1,4 +1,6 @@
 import 'package:eri_sports/app/theme/color_tokens.dart';
+import 'package:eri_sports/data/assets/local_asset_resolver.dart';
+import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:flutter/material.dart';
 
 class MatchCardCompact extends StatelessWidget {
@@ -7,6 +9,9 @@ class MatchCardCompact extends StatelessWidget {
     required this.timeOrMinute,
     required this.homeTeam,
     required this.awayTeam,
+    this.homeTeamId,
+    this.awayTeamId,
+    this.assetResolver,
     required this.homeScore,
     required this.awayScore,
     super.key,
@@ -16,6 +21,9 @@ class MatchCardCompact extends StatelessWidget {
   final String timeOrMinute;
   final String homeTeam;
   final String awayTeam;
+  final String? homeTeamId;
+  final String? awayTeamId;
+  final LocalAssetResolver? assetResolver;
   final int homeScore;
   final int awayScore;
 
@@ -57,9 +65,9 @@ class MatchCardCompact extends StatelessWidget {
             Expanded(
               child: Column(
                 children: [
-                  _teamRow(context, homeTeam, homeScore),
+                  _teamRow(context, homeTeam, homeScore, homeTeamId),
                   const Divider(height: 12, color: AppColorTokens.border),
-                  _teamRow(context, awayTeam, awayScore),
+                  _teamRow(context, awayTeam, awayScore, awayTeamId),
                 ],
               ),
             ),
@@ -69,17 +77,26 @@ class MatchCardCompact extends StatelessWidget {
     );
   }
 
-  Widget _teamRow(BuildContext context, String name, int score) {
+  Widget _teamRow(BuildContext context, String name, int score, [String? teamId]) {
+    final canResolveBadge = assetResolver != null && teamId != null && teamId.isNotEmpty;
+
     return Row(
       children: [
-        Container(
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            color: AppColorTokens.surfaceAlt,
-            borderRadius: BorderRadius.circular(9),
-          ),
-        ),
+        canResolveBadge
+            ? EntityBadge(
+                entityId: teamId,
+                type: SportsAssetType.teams,
+                resolver: assetResolver!,
+                size: 18,
+              )
+            : Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: AppColorTokens.surfaceAlt,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+              ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(

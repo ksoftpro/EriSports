@@ -4,6 +4,7 @@ import 'package:eri_sports/features/home/presentation/home_screen.dart';
 import 'package:eri_sports/features/leagues/presentation/leagues_screen.dart';
 import 'package:eri_sports/features/more/presentation/more_screen.dart';
 import 'package:eri_sports/features/search/presentation/search_screen.dart';
+import 'package:eri_sports/features/standings/presentation/standings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -72,6 +73,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/league/:leagueId',
         builder: (context, state) => _DetailPlaceholder(
           title: 'League ${state.pathParameters['leagueId']}',
+        ),
+      ),
+      GoRoute(
+        path: '/standings/:competitionId',
+        builder: (context, state) => StandingsScreen(
+          competitionId: state.pathParameters['competitionId']!,
         ),
       ),
       GoRoute(

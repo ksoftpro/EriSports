@@ -1,4 +1,5 @@
 import 'package:eri_sports/core/log/app_logger.dart';
+import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
@@ -9,11 +10,13 @@ class AppServices {
   AppServices({
     required this.database,
     required this.importCoordinator,
+    required this.assetResolver,
     required this.logger,
   });
 
   final AppDatabase database;
   final ImportCoordinator importCoordinator;
+  final LocalAssetResolver assetResolver;
   final AppLogger logger;
 
   static Future<AppServices> create() async {
@@ -21,6 +24,9 @@ class AppServices {
     final database = AppDatabase();
     final daylySportLocator = DaylySportLocator();
     final scanner = FileInventoryScanner();
+    final assetResolver = LocalAssetResolver(
+      daylySportLocator: daylySportLocator,
+    );
     final importCoordinator = ImportCoordinator(
       database: database,
       daylySportLocator: daylySportLocator,
@@ -31,6 +37,7 @@ class AppServices {
     return AppServices(
       database: database,
       importCoordinator: importCoordinator,
+      assetResolver: assetResolver,
       logger: logger,
     );
   }

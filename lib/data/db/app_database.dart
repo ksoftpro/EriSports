@@ -140,6 +140,18 @@ class HomeMatchView {
   final String awayTeamName;
 }
 
+  class StandingsTableView {
+    const StandingsTableView({
+      required this.row,
+      required this.teamName,
+      required this.teamId,
+    });
+
+    final StandingsRowData row;
+    final String teamName;
+    final String teamId;
+  }
+
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
@@ -170,6 +182,38 @@ class AppDatabase extends _$AppDatabase {
           ..where((tbl) => tbl.competitionId.equals(competitionId))
           ..orderBy([(tbl) => OrderingTerm.asc(tbl.position)]))
         .get();
+  }
+
+  Future<List<CompetitionRow>> readCompetitionsSorted() {
+    return (select(competitions)
+          ..orderBy([
+            (tbl) => OrderingTerm.asc(tbl.displayOrder),
+            (tbl) => OrderingTerm.asc(tbl.name),
+          ]))
+        .get();
+  }
+
+  Future<List<StandingsTableView>> readStandingsTableView(
+    String competitionId,
+  ) async {
+    final teamAlias = alias(teams, 'standings_team');
+    final query = select(standingsRows).join([
+      leftOuterJoin(teamAlias, teamAlias.id.equalsExp(standingsRows.teamId)),
+    ])
+      ..where(standingsRows.competitionId.equals(competitionId))
+      ..orderBy([OrderingTerm.asc(standingsRows.position)]);
+
+    final rows = await query.get();
+    return rows
+        .map(
+          (item) => StandingsTableView(
+            row: item.readTable(standingsRows),
+            teamName:
+                item.readTableOrNull(teamAlias)?.name ?? 'Unknown Team',
+            teamId: item.readTable(standingsRows).teamId,
+          ),
+        )
+        .toList();
   }
 
   Future<List<HomeMatchView>> readHomeFeedMatches({

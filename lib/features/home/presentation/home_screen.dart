@@ -1,5 +1,6 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/app/theme/color_tokens.dart';
+import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:eri_sports/features/home/presentation/home_providers.dart';
@@ -27,6 +28,7 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
         data: (state) {
+          final assetResolver = ref.read(appServicesProvider).assetResolver;
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
@@ -49,18 +51,21 @@ class HomeScreen extends ConsumerWidget {
                 actionLabel: 'All',
                 matches: state.live,
                 emptyLabel: 'No live matches in local dataset.',
+                assetResolver: assetResolver,
               ),
               _buildMatchSection(
                 title: 'Upcoming',
                 actionLabel: 'Calendar',
                 matches: state.upcoming,
                 emptyLabel: 'No upcoming fixtures in loaded range.',
+                assetResolver: assetResolver,
               ),
               _buildMatchSection(
                 title: 'Recent',
                 actionLabel: 'Results',
                 matches: state.recent,
                 emptyLabel: 'No recent matches in loaded range.',
+                assetResolver: assetResolver,
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
             ],
@@ -75,6 +80,7 @@ class HomeScreen extends ConsumerWidget {
     required String actionLabel,
     required List<HomeMatchView> matches,
     required String emptyLabel,
+    required LocalAssetResolver assetResolver,
   }) {
     if (matches.isEmpty) {
       return SliverList.list(
@@ -100,12 +106,12 @@ class HomeScreen extends ConsumerWidget {
           title: title,
           actionLabel: actionLabel,
         ),
-        ...matches.take(6).map(_buildMatchCard),
+        ...matches.take(6).map((item) => _buildMatchCard(item, assetResolver)),
       ],
     );
   }
 
-  Widget _buildMatchCard(HomeMatchView item) {
+  Widget _buildMatchCard(HomeMatchView item, LocalAssetResolver assetResolver) {
     final now = DateTime.now().toUtc();
     final lowerStatus = item.match.status.toLowerCase();
     final isLive = lowerStatus == 'live' ||
@@ -127,6 +133,9 @@ class HomeScreen extends ConsumerWidget {
       timeOrMinute: timeText,
       homeTeam: item.homeTeamName,
       awayTeam: item.awayTeamName,
+      homeTeamId: item.match.homeTeamId,
+      awayTeamId: item.match.awayTeamId,
+      assetResolver: assetResolver,
       homeScore: item.match.homeScore,
       awayScore: item.match.awayScore,
     );

@@ -67,6 +67,10 @@ flutter:
 
   assets:
     - assets/placeholders/
+    - assets/teams/
+    - assets/players/
+    - assets/leagues/
+    - assets/banners/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
