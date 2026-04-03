@@ -211,6 +211,31 @@ class ImportCoordinator {
     final filePath = snapshot.absolutePath;
     final lowerName = snapshot.fileName.toLowerCase();
 
+    if (lowerName == 'fotmob_leagues_complete_data.json') {
+      await _importFotmobLeaguesCompleteFile(File(filePath));
+      return true;
+    }
+
+    if (lowerName == 'fotmob_matches_data.json') {
+      await _importFotmobMatchesFile(File(filePath));
+      return true;
+    }
+
+    if (lowerName == 'fotmob_teams_data.json') {
+      await _importFotmobTeamsFile(File(filePath));
+      return true;
+    }
+
+    if (lowerName == 'fotmob_standings_data.json') {
+      await _importFotmobStandingsFile(File(filePath));
+      return true;
+    }
+
+    if (lowerName == 'fotmob_match_details_data.json') {
+      await _importFotmobMatchDetailsSummaryFile(File(filePath));
+      return true;
+    }
+
     if (lowerName.contains('match_detail') ||
         lowerName.contains('match-detail') ||
         lowerName.contains('timeline') ||
@@ -242,6 +267,556 @@ class ImportCoordinator {
 
     return false;
   }
+
+  Future<void> _importFotmobLeaguesCompleteFile(File file) async {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+
+    final leagues = decoded['leagues'];
+    if (leagues is! Map<String, dynamic>) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    await database.transaction(() async {
+      for (final entry in leagues.entries) {
+        final leagueKey = entry.key;
+        final leagueData = entry.value;
+        if (leagueData is! Map<String, dynamic>) {
+          continue;
+        }
+
+        final meta = leagueData['meta'] as Map<String, dynamic>?;
+        final explicitLeagueId = _asString(meta?['leagueId']);
+        final competitionId =
+            _competitionIdFromLeagueKey(leagueKey, explicitId: explicitLeagueId);
+
+        final leagueName = _asString(meta?['slug']) ??
+            _competitionNameFromLeagueKey(leagueKey);
+
+        await database.into(database.competitions).insertOnConflictUpdate(
+              CompetitionsCompanion.insert(
+                id: competitionId,
+                name: _normalizeLeagueName(leagueName),
+                country: const Value(null),
+                updatedAtUtc: now,
+              ),
+            );
+
+        final teams = leagueData['teams'];
+        if (teams is List) {
+          for (final rawTeam in teams) {
+            if (rawTeam is! Map<String, dynamic>) {
+              continue;
+            }
+
+            final teamId = _asString(rawTeam['teamId']);
+            final teamName = _asString(rawTeam['teamName']);
+            if (teamId == null || teamName == null) {
+              continue;
+            }
+
+            final isLeaguePlaceholder =
+                teamId == competitionId && _asString(rawTeam['pageUrl']) == null;
+            if (isLeaguePlaceholder) {
+              continue;
+            }
+
+            await database.into(database.teams).insertOnConflictUpdate(
+                  TeamsCompanion.insert(
+                    id: teamId,
+                    name: teamName,
+                    shortName: Value(_asString(rawTeam['shortName'])),
+                    competitionId: Value(competitionId),
+                    updatedAtUtc: now,
+                  ),
+                );
+          }
+        }
+
+        final matches = leagueData['matches'];
+        if (matches is List) {
+          await _importFotmobMatchRows(
+            rows: matches,
+            competitionId: competitionId,
+            competitionName: _normalizeLeagueName(leagueName),
+            now: now,
+          );
+        }
+
+        final standingsRoot = leagueData['standings'];
+        await _importFotmobStandingsForLeague(
+          competitionId: competitionId,
+          standingsRoot: standingsRoot,
+          now: now,
+        );
+      }
+    });
+  }
+
+  Future<void> _importFotmobMatchesFile(File file) async {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    await database.transaction(() async {
+      for (final entry in decoded.entries) {
+        final leagueKey = entry.key;
+        final rows = entry.value;
+        if (rows is! List) {
+          continue;
+        }
+
+        final competitionId = _competitionIdFromLeagueKey(leagueKey);
+        final competitionName = _competitionNameFromLeagueKey(leagueKey);
+
+        await _ensureCompetitionByName(competitionId, competitionName, now);
+        await _importFotmobMatchRows(
+          rows: rows,
+          competitionId: competitionId,
+          competitionName: competitionName,
+          now: now,
+        );
+      }
+    });
+  }
+
+  Future<void> _importFotmobTeamsFile(File file) async {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    await database.transaction(() async {
+      for (final entry in decoded.entries) {
+        final leagueKey = entry.key;
+        final rows = entry.value;
+        if (rows is! List) {
+          continue;
+        }
+
+        String competitionId = _competitionIdFromLeagueKey(leagueKey);
+        String competitionName = _competitionNameFromLeagueKey(leagueKey);
+
+        if (rows.isNotEmpty && rows.first is Map<String, dynamic>) {
+          final first = rows.first as Map<String, dynamic>;
+          final firstId = _asString(first['teamId']);
+          final firstName = _asString(first['teamName']);
+          final pageUrl = _asString(first['pageUrl']);
+          if (firstId != null && firstName != null && pageUrl == null) {
+            competitionId = firstId;
+            competitionName = firstName;
+          }
+        }
+
+        await _ensureCompetitionByName(competitionId, competitionName, now);
+
+        for (final rawTeam in rows) {
+          if (rawTeam is! Map<String, dynamic>) {
+            continue;
+          }
+
+          final teamId = _asString(rawTeam['teamId']);
+          final teamName = _asString(rawTeam['teamName']);
+          if (teamId == null || teamName == null) {
+            continue;
+          }
+
+          final isLeaguePlaceholder =
+              teamId == competitionId && _asString(rawTeam['pageUrl']) == null;
+          if (isLeaguePlaceholder) {
+            continue;
+          }
+
+          await database.into(database.teams).insertOnConflictUpdate(
+                TeamsCompanion.insert(
+                  id: teamId,
+                  name: teamName,
+                  shortName: Value(_asString(rawTeam['shortName'])),
+                  competitionId: Value(competitionId),
+                  updatedAtUtc: now,
+                ),
+              );
+        }
+      }
+    });
+  }
+
+  Future<void> _importFotmobStandingsFile(File file) async {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    await database.transaction(() async {
+      for (final entry in decoded.entries) {
+        final leagueKey = entry.key;
+        final standingsRoot = entry.value;
+        final competitionId = _competitionIdFromLeagueKey(leagueKey);
+        final competitionName = _competitionNameFromLeagueKey(leagueKey);
+
+        await _ensureCompetitionByName(competitionId, competitionName, now);
+        await _importFotmobStandingsForLeague(
+          competitionId: competitionId,
+          standingsRoot: standingsRoot,
+          now: now,
+        );
+      }
+    });
+  }
+
+  Future<void> _importFotmobMatchDetailsSummaryFile(File file) async {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    await database.transaction(() async {
+      for (final entry in decoded.entries) {
+        final leagueKey = entry.key;
+        final rows = entry.value;
+        if (rows is! List) {
+          continue;
+        }
+
+        final competitionId = _competitionIdFromLeagueKey(leagueKey);
+        final competitionName = _competitionNameFromLeagueKey(leagueKey);
+        await _ensureCompetitionByName(competitionId, competitionName, now);
+
+        for (final row in rows) {
+          if (row is! Map<String, dynamic>) {
+            continue;
+          }
+
+          final summary = row['summary'];
+          if (summary is! Map<String, dynamic>) {
+            continue;
+          }
+
+          final matchId = _asString(summary['matchId']) ?? _asString(row['matchId']);
+          final homeTeamId = _asString(summary['homeTeam'] is Map
+              ? (summary['homeTeam'] as Map)['id']
+              : null);
+          final awayTeamId = _asString(summary['awayTeam'] is Map
+              ? (summary['awayTeam'] as Map)['id']
+              : null);
+          if (matchId == null || homeTeamId == null || awayTeamId == null) {
+            continue;
+          }
+
+          final homeTeamName = _asString(summary['homeTeam'] is Map
+              ? (summary['homeTeam'] as Map)['name']
+              : null);
+          final awayTeamName = _asString(summary['awayTeam'] is Map
+              ? (summary['awayTeam'] as Map)['name']
+              : null);
+
+          final kickoff =
+              DateTime.tryParse(_asString(summary['utcTime']) ?? '')?.toUtc();
+          if (kickoff == null) {
+            continue;
+          }
+
+          await _ensureTeamWithName(homeTeamId, homeTeamName, competitionId, now);
+          await _ensureTeamWithName(awayTeamId, awayTeamName, competitionId, now);
+
+          await database.into(database.matches).insertOnConflictUpdate(
+                MatchesCompanion.insert(
+                  id: matchId,
+                  competitionId: competitionId,
+                  seasonId: const Value(null),
+                  homeTeamId: homeTeamId,
+                  awayTeamId: awayTeamId,
+                  kickoffUtc: kickoff,
+                  status: Value(_asString(summary['status']) ?? 'scheduled'),
+                  homeScore: Value(_asInt(summary['homeTeam'] is Map
+                          ? (summary['homeTeam'] as Map)['score']
+                          : null) ??
+                      0),
+                  awayScore: Value(_asInt(summary['awayTeam'] is Map
+                          ? (summary['awayTeam'] as Map)['score']
+                          : null) ??
+                      0),
+                  roundLabel: Value(_asString(summary['roundName'])),
+                  updatedAtUtc: now,
+                ),
+              );
+        }
+      }
+    });
+  }
+
+  Future<void> _importFotmobMatchRows({
+    required List rows,
+    required String competitionId,
+    required String competitionName,
+    required DateTime now,
+  }) async {
+    await _ensureCompetitionByName(competitionId, competitionName, now);
+
+    for (final raw in rows) {
+      if (raw is! Map<String, dynamic>) {
+        continue;
+      }
+
+      final matchId = _asString(raw['matchId']) ?? _asString(raw['id']);
+      final homeTeamId = _asString(raw['homeTeamId']);
+      final awayTeamId = _asString(raw['awayTeamId']);
+      if (matchId == null || homeTeamId == null || awayTeamId == null) {
+        continue;
+      }
+
+      final homeTeamName = _asString(raw['homeTeamName']);
+      final awayTeamName = _asString(raw['awayTeamName']);
+
+      final kickoff = DateTime.tryParse(
+            _asString(raw['startTime']) ??
+                _asString(raw['status'] is Map
+                    ? (raw['status'] as Map)['utcTime']
+                    : null) ??
+                '',
+          )
+              ?.toUtc();
+      if (kickoff == null) {
+        continue;
+      }
+
+      String status = 'scheduled';
+      final rawStatus = raw['status'];
+      if (rawStatus is Map) {
+        status = _asString(rawStatus['reason'] is Map
+                ? (rawStatus['reason'] as Map)['short']
+                : null) ??
+            _asString(rawStatus['short']) ??
+            status;
+      }
+
+      await _ensureTeamWithName(homeTeamId, homeTeamName, competitionId, now);
+      await _ensureTeamWithName(awayTeamId, awayTeamName, competitionId, now);
+
+      await database.into(database.matches).insertOnConflictUpdate(
+            MatchesCompanion.insert(
+              id: matchId,
+              competitionId: competitionId,
+              seasonId: const Value(null),
+              homeTeamId: homeTeamId,
+              awayTeamId: awayTeamId,
+              kickoffUtc: kickoff,
+              status: Value(status),
+              homeScore: Value(_asInt(raw['homeScore']) ?? 0),
+              awayScore: Value(_asInt(raw['awayScore']) ?? 0),
+              roundLabel: Value(_asString(raw['round'])),
+              updatedAtUtc: now,
+            ),
+          );
+    }
+  }
+
+  Future<void> _importFotmobStandingsForLeague({
+    required String competitionId,
+    required dynamic standingsRoot,
+    required DateTime now,
+  }) async {
+    final rows = _extractFotmobStandingsRows(standingsRoot);
+
+    await (database.delete(database.standingsRows)
+          ..where((tbl) => tbl.competitionId.equals(competitionId)))
+        .go();
+
+    for (var index = 0; index < rows.length; index++) {
+      final row = rows[index];
+      if (row is! Map<String, dynamic>) {
+        continue;
+      }
+
+      final teamId = _asString(row['teamId']) ??
+          _asString(row['id']) ??
+          _asString(row['team'] is Map ? (row['team'] as Map)['id'] : null);
+      final teamName = _asString(row['teamName']) ??
+          _asString(row['name']) ??
+          _asString(row['team'] is Map ? (row['team'] as Map)['name'] : null);
+      if (teamId == null) {
+        continue;
+      }
+
+      await _ensureTeamWithName(teamId, teamName, competitionId, now);
+
+      final scoresStr = _asString(row['scoresStr']);
+      final goals = _parseScoresStr(scoresStr);
+      final goalsFor = _asInt(row['goalsFor']) ?? goals.$1;
+      final goalsAgainst = _asInt(row['goalsAgainst']) ?? goals.$2;
+
+      await database.into(database.standingsRows).insert(
+            StandingsRowsCompanion.insert(
+              competitionId: competitionId,
+              seasonId: const Value(null),
+              teamId: teamId,
+              position: _asInt(row['idx']) ?? _asInt(row['position']) ?? (index + 1),
+              played: Value(_asInt(row['played']) ?? _asInt(row['mp']) ?? 0),
+              won: Value(_asInt(row['wins']) ?? _asInt(row['won']) ?? _asInt(row['w']) ?? 0),
+              draw: Value(_asInt(row['draws']) ?? _asInt(row['draw']) ?? _asInt(row['d']) ?? 0),
+              lost: Value(_asInt(row['losses']) ?? _asInt(row['lost']) ?? _asInt(row['l']) ?? 0),
+              goalsFor: Value(goalsFor),
+              goalsAgainst: Value(goalsAgainst),
+              goalDiff: Value(
+                _asInt(row['goalConDiff']) ?? _asInt(row['goalDiff']) ?? (goalsFor - goalsAgainst),
+              ),
+              points: Value(_asInt(row['pts']) ?? _asInt(row['points']) ?? 0),
+              form: Value(_asString(row['form']) ?? _asString(row['formStr'])),
+              updatedAtUtc: now,
+            ),
+          );
+    }
+  }
+
+  List<dynamic> _extractFotmobStandingsRows(dynamic standingsRoot) {
+    if (standingsRoot is! Map<String, dynamic>) {
+      return const [];
+    }
+
+    final flat = standingsRoot['flatTable'];
+    if (flat is List) {
+      return flat;
+    }
+
+    final tables = standingsRoot['tables'];
+    if (tables is List) {
+      final rows = <dynamic>[];
+      for (final table in tables) {
+        if (table is Map<String, dynamic>) {
+          final tableRows = table['table'];
+          if (tableRows is List) {
+            rows.addAll(tableRows);
+          }
+        }
+      }
+      return rows;
+    }
+
+    return const [];
+  }
+
+  Future<void> _ensureCompetitionByName(
+    String competitionId,
+    String competitionName,
+    DateTime now,
+  ) async {
+    await database.into(database.competitions).insertOnConflictUpdate(
+          CompetitionsCompanion.insert(
+            id: competitionId,
+            name: competitionName,
+            country: const Value(null),
+            updatedAtUtc: now,
+          ),
+        );
+  }
+
+  Future<void> _ensureTeamWithName(
+    String teamId,
+    String? teamName,
+    String? competitionId,
+    DateTime now,
+  ) async {
+    final existing =
+        await (database.select(database.teams)..where((tbl) => tbl.id.equals(teamId)))
+            .getSingleOrNull();
+
+    await database.into(database.teams).insertOnConflictUpdate(
+          TeamsCompanion.insert(
+            id: teamId,
+            name: teamName ?? existing?.name ?? 'Unknown Team',
+            shortName: Value(existing?.shortName),
+            competitionId: Value(competitionId ?? existing?.competitionId),
+            updatedAtUtc: now,
+          ),
+        );
+  }
+
+  String _competitionIdFromLeagueKey(String key, {String? explicitId}) {
+    if (explicitId != null && explicitId.isNotEmpty) {
+      return explicitId;
+    }
+    final known = _fotmobLeagueIdByKey[key];
+    if (known != null) {
+      return known;
+    }
+    return key;
+  }
+
+  String _competitionNameFromLeagueKey(String key) {
+    return key
+        .split('_')
+        .where((part) => part.isNotEmpty)
+        .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+        .join(' ');
+  }
+
+  String _normalizeLeagueName(String name) {
+    return name.replaceAll('-', ' ').split(' ').where((p) => p.isNotEmpty).map((p) {
+      final lower = p.toLowerCase();
+      if (lower.length <= 2) {
+        return lower.toUpperCase();
+      }
+      return '${lower[0].toUpperCase()}${lower.substring(1)}';
+    }).join(' ');
+  }
+
+  String? _asString(dynamic value) {
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+    if (value is num) {
+      return value.toString();
+    }
+    return null;
+  }
+
+  int? _asInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    return null;
+  }
+
+  (int, int) _parseScoresStr(String? scoresStr) {
+    if (scoresStr == null || scoresStr.isEmpty) {
+      return (0, 0);
+    }
+
+    final separator = scoresStr.contains('-') ? '-' : ':';
+    final parts = scoresStr.split(separator);
+    if (parts.length != 2) {
+      return (0, 0);
+    }
+
+    final gf = int.tryParse(parts[0].trim()) ?? 0;
+    final ga = int.tryParse(parts[1].trim()) ?? 0;
+    return (gf, ga);
+  }
+
+  static const Map<String, String> _fotmobLeagueIdByKey = {
+    'premier_league': '47',
+    'europa_league': '73',
+    'champions_league': '42',
+    'laliga': '87',
+    'bundesliga': '54',
+    'serie_a': '55',
+    'ligue1': '53',
+    'fa_cup': '132',
+  };
 
   Future<void> _importTeamsFile(File file) async {
     final content = await file.readAsString();
