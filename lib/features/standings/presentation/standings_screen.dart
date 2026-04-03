@@ -5,6 +5,7 @@ import 'package:eri_sports/features/standings/presentation/standings_providers.d
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 class StandingsScreen extends ConsumerWidget {
   const StandingsScreen({
@@ -66,6 +67,7 @@ class StandingsScreen extends ConsumerWidget {
                       goalDiff: item.row.goalDiff,
                       points: item.row.points,
                       resolver: resolver,
+                      onTap: () => context.push('/team/${item.teamId}'),
                     );
                   },
                 ),
@@ -118,6 +120,7 @@ class _StandingsRow extends StatelessWidget {
     required this.goalDiff,
     required this.points,
     required this.resolver,
+    required this.onTap,
   });
 
   final int position;
@@ -130,52 +133,56 @@ class _StandingsRow extends StatelessWidget {
   final int goalDiff;
   final int points;
   final LocalAssetResolver resolver;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final teamStyle = Theme.of(context).textTheme.bodyMedium;
     final statStyle = Theme.of(context).textTheme.bodyMedium;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 24,
-            child: Text('$position', style: statStyle),
-          ),
-          Expanded(
-            child: Row(
-              children: [
-                EntityBadge(
-                  entityId: teamId,
-                  type: SportsAssetType.teams,
-                  resolver: resolver,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    teamName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: teamStyle,
-                  ),
-                ),
-              ],
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 24,
+              child: Text('$position', style: statStyle),
             ),
-          ),
-          _statCell(played, statStyle),
-          _statCell(won, statStyle),
-          _statCell(draw, statStyle),
-          _statCell(lost, statStyle),
-          _statCell(goalDiff, statStyle, width: 36),
-          _statCell(
-            points,
-            statStyle?.copyWith(fontWeight: FontWeight.w700),
-            width: 36,
-          ),
-        ],
+            Expanded(
+              child: Row(
+                children: [
+                  EntityBadge(
+                    entityId: teamId,
+                    type: SportsAssetType.teams,
+                    resolver: resolver,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      teamName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: teamStyle,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _statCell(played, statStyle),
+            _statCell(won, statStyle),
+            _statCell(draw, statStyle),
+            _statCell(lost, statStyle),
+            _statCell(goalDiff, statStyle, width: 36),
+            _statCell(
+              points,
+              statStyle?.copyWith(fontWeight: FontWeight.w700),
+              width: 36,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,7 +14,9 @@ class MoreScreen extends ConsumerStatefulWidget {
 
 class _MoreScreenState extends ConsumerState<MoreScreen> {
   bool _isRefreshing = false;
+  bool _isDiagnosingAssets = false;
   ImportRunReport? _manualReport;
+  AssetDiagnosticsReport? _assetDiagnostics;
 
   Future<void> _runManualImport() async {
     if (_isRefreshing) {
@@ -27,6 +30,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     final services = ref.read(appServicesProvider);
     final report =
         await services.importCoordinator.runLocalImport(triggerType: 'manual');
+    services.assetResolver.invalidateCache();
 
     if (!mounted) {
       return;
@@ -35,6 +39,62 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     setState(() {
       _manualReport = report;
       _isRefreshing = false;
+    });
+  }
+
+  Future<void> _runAssetDiagnostics() async {
+    if (_isDiagnosingAssets) {
+      return;
+    }
+
+    setState(() {
+      _isDiagnosingAssets = true;
+    });
+
+    final services = ref.read(appServicesProvider);
+    services.assetResolver.invalidateCache();
+
+    final teamIds = await services.database.readAllTeamIds();
+    final playerIds = await services.database.readAllPlayerIds();
+    final competitionIds = await services.database.readAllCompetitionIds();
+
+    Future<List<String>> findMissing(
+      List<String> ids,
+      SportsAssetType type,
+    ) async {
+      final missing = <String>[];
+      for (final id in ids) {
+        final resolved = await services.assetResolver.resolveByEntityId(
+          type: type,
+          entityId: id,
+        );
+        if (resolved == null) {
+          missing.add(id);
+        }
+      }
+      return missing;
+    }
+
+    final missingTeamIds = await findMissing(teamIds, SportsAssetType.teams);
+    final missingPlayerIds =
+        await findMissing(playerIds, SportsAssetType.players);
+    final missingCompetitionIds =
+        await findMissing(competitionIds, SportsAssetType.leagues);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _assetDiagnostics = AssetDiagnosticsReport(
+        totalTeams: teamIds.length,
+        totalPlayers: playerIds.length,
+        totalCompetitions: competitionIds.length,
+        missingTeamIds: missingTeamIds,
+        missingPlayerIds: missingPlayerIds,
+        missingCompetitionIds: missingCompetitionIds,
+      );
+      _isDiagnosingAssets = false;
     });
   }
 
@@ -55,6 +115,16 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 ? 'Scanning local files...'
                 : 'Re-scan daylySport folder'),
           ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _isDiagnosingAssets ? null : _runAssetDiagnostics,
+            icon: const Icon(Icons.image_search),
+            label: Text(
+              _isDiagnosingAssets
+                  ? 'Checking local image coverage...'
+                  : 'Run offline asset diagnostics',
+            ),
+          ),
           const SizedBox(height: 16),
           _ReportCard(title: 'Startup import', report: startupReport),
           if (_manualReport != null)
@@ -62,8 +132,83 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
               padding: const EdgeInsets.only(top: 12),
               child: _ReportCard(title: 'Manual import', report: _manualReport!),
             ),
+          if (_assetDiagnostics != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: _AssetDiagnosticsCard(report: _assetDiagnostics!),
+            ),
         ],
       ),
+    );
+  }
+}
+
+class AssetDiagnosticsReport {
+  const AssetDiagnosticsReport({
+    required this.totalTeams,
+    required this.totalPlayers,
+    required this.totalCompetitions,
+    required this.missingTeamIds,
+    required this.missingPlayerIds,
+    required this.missingCompetitionIds,
+  });
+
+  final int totalTeams;
+  final int totalPlayers;
+  final int totalCompetitions;
+  final List<String> missingTeamIds;
+  final List<String> missingPlayerIds;
+  final List<String> missingCompetitionIds;
+}
+
+class _AssetDiagnosticsCard extends StatelessWidget {
+  const _AssetDiagnosticsCard({required this.report});
+
+  final AssetDiagnosticsReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Asset diagnostics', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              'Teams: ${report.totalTeams - report.missingTeamIds.length}/${report.totalTeams} mapped',
+            ),
+            Text(
+              'Players: ${report.totalPlayers - report.missingPlayerIds.length}/${report.totalPlayers} mapped',
+            ),
+            Text(
+              'Competitions: ${report.totalCompetitions - report.missingCompetitionIds.length}/${report.totalCompetitions} mapped',
+            ),
+            const SizedBox(height: 10),
+            _missingPreview('Missing team IDs', report.missingTeamIds),
+            _missingPreview('Missing player IDs', report.missingPlayerIds),
+            _missingPreview('Missing competition IDs', report.missingCompetitionIds),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _missingPreview(String title, List<String> ids) {
+    if (ids.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text('$title: none'),
+      );
+    }
+
+    final preview = ids.take(8).join(', ');
+    final suffix = ids.length > 8 ? ' ... (+${ids.length - 8} more)' : '';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text('$title: $preview$suffix'),
     );
   }
 }

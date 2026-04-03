@@ -116,18 +116,6 @@ class ImportFiles extends Table {
   TextColumn get errorMessage => text().nullable()();
 }
 
-@DriftDatabase(
-  tables: [
-    Competitions,
-    Teams,
-    Players,
-    Matches,
-    StandingsRows,
-    AssetRefs,
-    ImportRuns,
-    ImportFiles,
-  ],
-)
 class HomeMatchView {
   const HomeMatchView({
     required this.match,
@@ -140,18 +128,44 @@ class HomeMatchView {
   final String awayTeamName;
 }
 
-  class StandingsTableView {
-    const StandingsTableView({
-      required this.row,
-      required this.teamName,
-      required this.teamId,
-    });
+class StandingsTableView {
+  const StandingsTableView({
+    required this.row,
+    required this.teamName,
+    required this.teamId,
+  });
 
-    final StandingsRowData row;
-    final String teamName;
-    final String teamId;
-  }
+  final StandingsRowData row;
+  final String teamName;
+  final String teamId;
+}
 
+class MatchDetailView {
+  const MatchDetailView({
+    required this.match,
+    required this.competitionName,
+    required this.homeTeamName,
+    required this.awayTeamName,
+  });
+
+  final MatchRow match;
+  final String competitionName;
+  final String homeTeamName;
+  final String awayTeamName;
+}
+
+@DriftDatabase(
+  tables: [
+    Competitions,
+    Teams,
+    Players,
+    Matches,
+    StandingsRows,
+    AssetRefs,
+    ImportRuns,
+    ImportFiles,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
@@ -191,6 +205,140 @@ class AppDatabase extends _$AppDatabase {
             (tbl) => OrderingTerm.asc(tbl.name),
           ]))
         .get();
+  }
+
+  Future<TeamRow?> readTeamById(String teamId) {
+    return (select(teams)..where((tbl) => tbl.id.equals(teamId))).getSingleOrNull();
+  }
+
+  Future<CompetitionRow?> readCompetitionById(String competitionId) {
+    return (select(competitions)..where((tbl) => tbl.id.equals(competitionId)))
+        .getSingleOrNull();
+  }
+
+  Future<PlayerRow?> readPlayerById(String playerId) {
+    return (select(players)..where((tbl) => tbl.id.equals(playerId))).getSingleOrNull();
+  }
+
+  Future<List<PlayerRow>> readPlayersByTeam(String teamId) {
+    return (select(players)
+          ..where((tbl) => tbl.teamId.equals(teamId))
+          ..orderBy([(tbl) => OrderingTerm.asc(tbl.name)]))
+        .get();
+  }
+
+  Future<List<HomeMatchView>> readTeamMatches(
+    String teamId, {
+    int limit = 20,
+  }) async {
+    final homeTeam = alias(teams, 'team_matches_home_team');
+    final awayTeam = alias(teams, 'team_matches_away_team');
+
+    final query = select(matches).join([
+      leftOuterJoin(homeTeam, homeTeam.id.equalsExp(matches.homeTeamId)),
+      leftOuterJoin(awayTeam, awayTeam.id.equalsExp(matches.awayTeamId)),
+    ])
+      ..where(matches.homeTeamId.equals(teamId) | matches.awayTeamId.equals(teamId))
+      ..orderBy([OrderingTerm.desc(matches.kickoffUtc)])
+      ..limit(limit);
+
+    final rows = await query.get();
+    return rows
+        .map(
+          (row) => HomeMatchView(
+            match: row.readTable(matches),
+            homeTeamName:
+                row.readTableOrNull(homeTeam)?.name ?? 'Unknown Team',
+            awayTeamName:
+                row.readTableOrNull(awayTeam)?.name ?? 'Unknown Team',
+          ),
+        )
+        .toList();
+  }
+
+  Future<MatchDetailView?> readMatchDetailById(String matchId) async {
+    final competitionAlias = alias(competitions, 'match_detail_competition');
+    final homeTeamAlias = alias(teams, 'match_detail_home_team');
+    final awayTeamAlias = alias(teams, 'match_detail_away_team');
+
+    final query = select(matches).join([
+      leftOuterJoin(
+        competitionAlias,
+        competitionAlias.id.equalsExp(matches.competitionId),
+      ),
+      leftOuterJoin(homeTeamAlias, homeTeamAlias.id.equalsExp(matches.homeTeamId)),
+      leftOuterJoin(awayTeamAlias, awayTeamAlias.id.equalsExp(matches.awayTeamId)),
+    ])..where(matches.id.equals(matchId));
+
+    final row = await query.getSingleOrNull();
+    if (row == null) {
+      return null;
+    }
+
+    return MatchDetailView(
+      match: row.readTable(matches),
+      competitionName:
+          row.readTableOrNull(competitionAlias)?.name ?? 'Unknown Competition',
+      homeTeamName: row.readTableOrNull(homeTeamAlias)?.name ?? 'Unknown Team',
+      awayTeamName: row.readTableOrNull(awayTeamAlias)?.name ?? 'Unknown Team',
+    );
+  }
+
+  Future<List<TeamRow>> searchTeamsByName(String query, {int limit = 12}) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return Future.value(const []);
+    }
+
+    return (select(teams)
+          ..where((tbl) => tbl.name.lower().like('%$normalized%'))
+          ..orderBy([(tbl) => OrderingTerm.asc(tbl.name)])
+          ..limit(limit))
+        .get();
+  }
+
+  Future<List<PlayerRow>> searchPlayersByName(String query, {int limit = 12}) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return Future.value(const []);
+    }
+
+    return (select(players)
+          ..where((tbl) => tbl.name.lower().like('%$normalized%'))
+          ..orderBy([(tbl) => OrderingTerm.asc(tbl.name)])
+          ..limit(limit))
+        .get();
+  }
+
+  Future<List<CompetitionRow>> searchCompetitionsByName(
+    String query, {
+    int limit = 12,
+  }) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return Future.value(const []);
+    }
+
+    return (select(competitions)
+          ..where((tbl) => tbl.name.lower().like('%$normalized%'))
+          ..orderBy([(tbl) => OrderingTerm.asc(tbl.name)])
+          ..limit(limit))
+        .get();
+  }
+
+  Future<List<String>> readAllTeamIds() async {
+    final rows = await select(teams).get();
+    return rows.map((row) => row.id).toList(growable: false);
+  }
+
+  Future<List<String>> readAllPlayerIds() async {
+    final rows = await select(players).get();
+    return rows.map((row) => row.id).toList(growable: false);
+  }
+
+  Future<List<String>> readAllCompetitionIds() async {
+    final rows = await select(competitions).get();
+    return rows.map((row) => row.id).toList(growable: false);
   }
 
   Future<List<StandingsTableView>> readStandingsTableView(

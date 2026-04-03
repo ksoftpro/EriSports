@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:eri_sports/core/log/app_logger.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/import/parsers/fixtures_parser.dart';
+import 'package:eri_sports/data/import/parsers/players_parser.dart';
 import 'package:eri_sports/data/import/parsers/standings_parser.dart';
 import 'package:eri_sports/data/import/parsers/teams_parser.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
@@ -40,7 +41,8 @@ class ImportCoordinator {
     required this.logger,
   })  : _teamsParser = TeamsParser(),
       _fixturesParser = FixturesParser(),
-      _standingsParser = StandingsParser();
+      _standingsParser = StandingsParser(),
+      _playersParser = PlayersParser();
 
   final AppDatabase database;
   final DaylySportLocator daylySportLocator;
@@ -49,6 +51,7 @@ class ImportCoordinator {
   final TeamsParser _teamsParser;
   final FixturesParser _fixturesParser;
   final StandingsParser _standingsParser;
+  final PlayersParser _playersParser;
 
   Future<ImportRunReport> runLocalImport({
     required String triggerType,
@@ -220,6 +223,11 @@ class ImportCoordinator {
       return true;
     }
 
+    if (lowerName.contains('player') || lowerName.contains('squad')) {
+      await _importPlayersFile(File(filePath));
+      return true;
+    }
+
     return false;
   }
 
@@ -373,6 +381,32 @@ class ImportCoordinator {
                 goalDiff: Value(row.goalDiff),
                 points: Value(row.points),
                 form: Value(row.form),
+                updatedAtUtc: now,
+              ),
+            );
+      }
+    });
+  }
+
+  Future<void> _importPlayersFile(File file) async {
+    final content = await file.readAsString();
+    final parsed = _playersParser.parse(content);
+    final now = DateTime.now().toUtc();
+
+    await database.transaction(() async {
+      for (final player in parsed.players) {
+        if (player.teamId != null) {
+          await _ensureTeam(player.teamId!, now);
+        }
+
+        await database.into(database.players).insertOnConflictUpdate(
+              PlayersCompanion.insert(
+                id: player.id,
+                teamId: Value(player.teamId),
+                name: player.name,
+                position: Value(player.position),
+                jerseyNumber: Value(player.jerseyNumber),
+                photoAssetKey: const Value(null),
                 updatedAtUtc: now,
               ),
             );

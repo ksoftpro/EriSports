@@ -8,6 +8,7 @@ import 'package:eri_sports/shared/widgets/dense_section_header.dart';
 import 'package:eri_sports/shared/widgets/match_card_compact.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -47,6 +48,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
               _buildMatchSection(
+                context: context,
                 title: 'Live Now',
                 actionLabel: 'All',
                 matches: state.live,
@@ -54,6 +56,7 @@ class HomeScreen extends ConsumerWidget {
                 assetResolver: assetResolver,
               ),
               _buildMatchSection(
+                context: context,
                 title: 'Upcoming',
                 actionLabel: 'Calendar',
                 matches: state.upcoming,
@@ -61,6 +64,7 @@ class HomeScreen extends ConsumerWidget {
                 assetResolver: assetResolver,
               ),
               _buildMatchSection(
+                context: context,
                 title: 'Recent',
                 actionLabel: 'Results',
                 matches: state.recent,
@@ -76,6 +80,7 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildMatchSection({
+    required BuildContext context,
     required String title,
     required String actionLabel,
     required List<HomeMatchView> matches,
@@ -106,12 +111,18 @@ class HomeScreen extends ConsumerWidget {
           title: title,
           actionLabel: actionLabel,
         ),
-        ...matches.take(6).map((item) => _buildMatchCard(item, assetResolver)),
+        ...matches
+            .take(6)
+            .map((item) => _buildMatchCard(context, item, assetResolver)),
       ],
     );
   }
 
-  Widget _buildMatchCard(HomeMatchView item, LocalAssetResolver assetResolver) {
+  Widget _buildMatchCard(
+    BuildContext context,
+    HomeMatchView item,
+    LocalAssetResolver assetResolver,
+  ) {
     final now = DateTime.now().toUtc();
     final lowerStatus = item.match.status.toLowerCase();
     final isLive = lowerStatus == 'live' ||
@@ -136,6 +147,7 @@ class HomeScreen extends ConsumerWidget {
       homeTeamId: item.match.homeTeamId,
       awayTeamId: item.match.awayTeamId,
       assetResolver: assetResolver,
+      onTap: () => context.push('/match/${item.match.id}'),
       homeScore: item.match.homeScore,
       awayScore: item.match.awayScore,
     );

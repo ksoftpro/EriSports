@@ -12,6 +12,7 @@ class MatchCardCompact extends StatelessWidget {
     this.homeTeamId,
     this.awayTeamId,
     this.assetResolver,
+    this.onTap,
     required this.homeScore,
     required this.awayScore,
     super.key,
@@ -24,54 +25,59 @@ class MatchCardCompact extends StatelessWidget {
   final String? homeTeamId;
   final String? awayTeamId;
   final LocalAssetResolver? assetResolver;
+  final VoidCallback? onTap;
   final int homeScore;
   final int awayScore;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColorTokens.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColorTokens.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 52,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    status,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColorTokens.textSecondary,
-                        ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    timeOrMinute,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: AppColorTokens.textPrimary,
-                        ),
-                  ),
-                ],
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppColorTokens.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColorTokens.border),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 52,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      status,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppColorTokens.textSecondary,
+                          ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      timeOrMinute,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: AppColorTokens.textPrimary,
+                          ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: Column(
-                children: [
-                  _teamRow(context, homeTeam, homeScore, homeTeamId),
-                  const Divider(height: 12, color: AppColorTokens.border),
-                  _teamRow(context, awayTeam, awayScore, awayTeamId),
-                ],
+              Expanded(
+                child: Column(
+                  children: [
+                    _teamRow(context, homeTeam, homeScore, homeTeamId),
+                    const Divider(height: 12, color: AppColorTokens.border),
+                    _teamRow(context, awayTeam, awayScore, awayTeamId),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

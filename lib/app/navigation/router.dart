@@ -2,9 +2,12 @@ import 'package:eri_sports/app/navigation/app_shell.dart';
 import 'package:eri_sports/features/bookmarks/presentation/bookmarks_screen.dart';
 import 'package:eri_sports/features/home/presentation/home_screen.dart';
 import 'package:eri_sports/features/leagues/presentation/leagues_screen.dart';
+import 'package:eri_sports/features/match_detail/presentation/match_detail_screen.dart';
 import 'package:eri_sports/features/more/presentation/more_screen.dart';
+import 'package:eri_sports/features/player/presentation/player_screen.dart';
 import 'package:eri_sports/features/search/presentation/search_screen.dart';
 import 'package:eri_sports/features/standings/presentation/standings_screen.dart';
+import 'package:eri_sports/features/team/presentation/team_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -83,20 +86,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/match/:matchId',
-        builder: (context, state) => _DetailPlaceholder(
-          title: 'Match ${state.pathParameters['matchId']}',
+        builder: (context, state) => MatchDetailScreen(
+          matchId: state.pathParameters['matchId']!,
         ),
       ),
       GoRoute(
         path: '/team/:teamId',
-        builder: (context, state) => _DetailPlaceholder(
-          title: 'Team ${state.pathParameters['teamId']}',
+        builder: (context, state) => TeamScreen(
+          teamId: state.pathParameters['teamId']!,
         ),
       ),
       GoRoute(
         path: '/player/:playerId',
-        builder: (context, state) => _DetailPlaceholder(
-          title: 'Player ${state.pathParameters['playerId']}',
+        builder: (context, state) => PlayerScreen(
+          playerId: state.pathParameters['playerId']!,
         ),
       ),
     ],

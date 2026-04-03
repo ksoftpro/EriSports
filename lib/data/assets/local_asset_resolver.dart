@@ -41,6 +41,12 @@ class LocalAssetResolver {
   final Map<SportsAssetType, List<String>> _bundledAssetsByType = {};
   final Map<SportsAssetType, List<String>> _localFilesByType = {};
 
+  void invalidateCache() {
+    _bundleLoaded = false;
+    _bundledAssetsByType.clear();
+    _localFilesByType.clear();
+  }
+
   Future<ResolvedImageRef?> resolveByEntityId({
     required SportsAssetType type,
     required String entityId,
