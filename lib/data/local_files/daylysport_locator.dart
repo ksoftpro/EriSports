@@ -2,9 +2,14 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class DaylySportLocator {
   Future<Directory> getOrCreateDaylySportDirectory() async {
+    if (Platform.isAndroid) {
+      await _ensureAndroidStoragePermission();
+    }
+
     final candidates = await _candidateDirectories();
     Object? lastError;
 
@@ -31,6 +36,8 @@ class DaylySportLocator {
 
     if (Platform.isAndroid) {
       candidates.add(Directory('/storage/emulated/0/daylySport'));
+      candidates.add(Directory('/sdcard/daylySport'));
+      candidates.add(Directory('/storage/self/primary/daylySport'));
 
       final externalDir = await getExternalStorageDirectory();
       if (externalDir != null) {
@@ -39,6 +46,12 @@ class DaylySportLocator {
           candidates.add(Directory(p.join(sharedRoot, 'daylySport')));
         }
       }
+
+      final uniqueAndroid = <String, Directory>{};
+      for (final candidate in candidates) {
+        uniqueAndroid[candidate.path] = candidate;
+      }
+      return uniqueAndroid.values.toList(growable: false);
     }
 
     final docsDir = await getApplicationDocumentsDirectory();
@@ -50,6 +63,32 @@ class DaylySportLocator {
     }
 
     return unique.values.toList(growable: false);
+  }
+
+  Future<void> _ensureAndroidStoragePermission() async {
+    final manageStatus = await Permission.manageExternalStorage.status;
+    if (manageStatus.isGranted) {
+      return;
+    }
+
+    final storageStatus = await Permission.storage.status;
+    if (storageStatus.isGranted) {
+      return;
+    }
+
+    final requestedManage = await Permission.manageExternalStorage.request();
+    if (requestedManage.isGranted) {
+      return;
+    }
+
+    final requestedStorage = await Permission.storage.request();
+    if (requestedStorage.isGranted) {
+      return;
+    }
+
+    throw const FileSystemException(
+      'Storage permission denied. Enable "All files access" for EriSports to read /storage/emulated/0/daylySport.',
+    );
   }
 
   String? _extractAndroidSharedRoot(String externalPath) {

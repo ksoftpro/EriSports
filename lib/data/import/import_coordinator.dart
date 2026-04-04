@@ -40,11 +40,11 @@ class ImportCoordinator {
     required this.daylySportLocator,
     required this.scanner,
     required this.logger,
-  })  : _teamsParser = TeamsParser(),
-      _fixturesParser = FixturesParser(),
-      _standingsParser = StandingsParser(),
-      _playersParser = PlayersParser(),
-      _matchDetailParser = MatchDetailParser();
+  }) : _teamsParser = TeamsParser(),
+       _fixturesParser = FixturesParser(),
+       _standingsParser = StandingsParser(),
+       _playersParser = PlayersParser(),
+       _matchDetailParser = MatchDetailParser();
 
   final AppDatabase database;
   final DaylySportLocator daylySportLocator;
@@ -56,11 +56,11 @@ class ImportCoordinator {
   final PlayersParser _playersParser;
   final MatchDetailParser _matchDetailParser;
 
-  Future<ImportRunReport> runLocalImport({
-    required String triggerType,
-  }) async {
+  Future<ImportRunReport> runLocalImport({required String triggerType}) async {
     final startedAtUtc = DateTime.now().toUtc();
-    final runId = await database.into(database.importRuns).insert(
+    final runId = await database
+        .into(database.importRuns)
+        .insert(
           ImportRunsCompanion.insert(
             triggerType: triggerType,
             startedAtUtc: startedAtUtc,
@@ -69,7 +69,8 @@ class ImportCoordinator {
         );
 
     try {
-      final daylySportDir = await daylySportLocator.getOrCreateDaylySportDirectory();
+      final daylySportDir =
+          await daylySportLocator.getOrCreateDaylySportDirectory();
       final snapshots = await scanner.scanJsonFiles(daylySportDir);
 
       final latestChecksums = await _latestChecksumsByPath();
@@ -78,7 +79,9 @@ class ImportCoordinator {
       var failedFileCount = 0;
 
       for (final snapshot in snapshots) {
-        final importFileId = await database.into(database.importFiles).insert(
+        final importFileId = await database
+            .into(database.importFiles)
+            .insert(
               ImportFilesCompanion.insert(
                 runId: runId,
                 fileName: snapshot.fileName,
@@ -91,7 +94,10 @@ class ImportCoordinator {
         final previousChecksum = latestChecksums[snapshot.relativePath];
         if (previousChecksum != null && previousChecksum == snapshot.checksum) {
           skippedFileCount++;
-          await _markImportFileStatus(importFileId, status: 'skipped_unchanged');
+          await _markImportFileStatus(
+            importFileId,
+            status: 'skipped_unchanged',
+          );
           continue;
         }
 
@@ -102,7 +108,10 @@ class ImportCoordinator {
             await _markImportFileStatus(importFileId, status: 'imported');
           } else {
             skippedFileCount++;
-            await _markImportFileStatus(importFileId, status: 'skipped_unsupported');
+            await _markImportFileStatus(
+              importFileId,
+              status: 'skipped_unsupported',
+            );
           }
         } catch (error) {
           failedFileCount++;
@@ -126,8 +135,7 @@ class ImportCoordinator {
       };
 
       await (database.update(database.importRuns)
-            ..where((tbl) => tbl.id.equals(runId)))
-          .write(
+        ..where((tbl) => tbl.id.equals(runId))).write(
         ImportRunsCompanion(
           finishedAtUtc: Value(finishedAtUtc),
           status: Value(runStatus),
@@ -151,16 +159,11 @@ class ImportCoordinator {
     } catch (error) {
       final finishedAtUtc = DateTime.now().toUtc();
       await (database.update(database.importRuns)
-            ..where((tbl) => tbl.id.equals(runId)))
-          .write(
+        ..where((tbl) => tbl.id.equals(runId))).write(
         ImportRunsCompanion(
           finishedAtUtc: Value(finishedAtUtc),
           status: const Value('failed'),
-          summaryJson: Value(
-            jsonEncode({
-              'error': error.toString(),
-            }),
-          ),
+          summaryJson: Value(jsonEncode({'error': error.toString()})),
         ),
       );
 
@@ -180,9 +183,9 @@ class ImportCoordinator {
   }
 
   Future<Map<String, String>> _latestChecksumsByPath() async {
-    final rows = await (database.select(database.importFiles)
-          ..orderBy([(tbl) => OrderingTerm.desc(tbl.id)]))
-        .get();
+    final rows =
+        await (database.select(database.importFiles)
+          ..orderBy([(tbl) => OrderingTerm.desc(tbl.id)])).get();
 
     final checksumsByPath = <String, String>{};
     for (final row in rows) {
@@ -198,8 +201,7 @@ class ImportCoordinator {
     String? errorMessage,
   }) {
     return (database.update(database.importFiles)
-          ..where((tbl) => tbl.id.equals(importFileId)))
-        .write(
+      ..where((tbl) => tbl.id.equals(importFileId))).write(
       ImportFilesCompanion(
         status: Value(status),
         errorMessage: Value(errorMessage),
@@ -233,6 +235,22 @@ class ImportCoordinator {
 
     if (lowerName == 'fotmob_match_details_data.json') {
       await _importFotmobMatchDetailsSummaryFile(File(filePath));
+      return true;
+    }
+
+    if (lowerName == 'fixtures_full_data.json') {
+      await _importFixturesFullFile(File(filePath));
+      return true;
+    }
+
+    if (lowerName == 'top_score_data.json') {
+      await _importTopScoreDataFile(File(filePath));
+      return true;
+    }
+
+    if (lowerName.startsWith('top_standings_full_data') &&
+        lowerName.endsWith('.json')) {
+      await _importTopStandingsFullFile(File(filePath));
       return true;
     }
 
@@ -290,13 +308,18 @@ class ImportCoordinator {
 
         final meta = leagueData['meta'] as Map<String, dynamic>?;
         final explicitLeagueId = _asString(meta?['leagueId']);
-        final competitionId =
-            _competitionIdFromLeagueKey(leagueKey, explicitId: explicitLeagueId);
+        final competitionId = _competitionIdFromLeagueKey(
+          leagueKey,
+          explicitId: explicitLeagueId,
+        );
 
-        final leagueName = _asString(meta?['slug']) ??
+        final leagueName =
+            _asString(meta?['slug']) ??
             _competitionNameFromLeagueKey(leagueKey);
 
-        await database.into(database.competitions).insertOnConflictUpdate(
+        await database
+            .into(database.competitions)
+            .insertOnConflictUpdate(
               CompetitionsCompanion.insert(
                 id: competitionId,
                 name: _normalizeLeagueName(leagueName),
@@ -319,12 +342,15 @@ class ImportCoordinator {
             }
 
             final isLeaguePlaceholder =
-                teamId == competitionId && _asString(rawTeam['pageUrl']) == null;
+                teamId == competitionId &&
+                _asString(rawTeam['pageUrl']) == null;
             if (isLeaguePlaceholder) {
               continue;
             }
 
-            await database.into(database.teams).insertOnConflictUpdate(
+            await database
+                .into(database.teams)
+                .insertOnConflictUpdate(
                   TeamsCompanion.insert(
                     id: teamId,
                     name: teamName,
@@ -433,7 +459,9 @@ class ImportCoordinator {
             continue;
           }
 
-          await database.into(database.teams).insertOnConflictUpdate(
+          await database
+              .into(database.teams)
+              .insertOnConflictUpdate(
                 TeamsCompanion.insert(
                   id: teamId,
                   name: teamName,
@@ -500,23 +528,32 @@ class ImportCoordinator {
             continue;
           }
 
-          final matchId = _asString(summary['matchId']) ?? _asString(row['matchId']);
-          final homeTeamId = _asString(summary['homeTeam'] is Map
-              ? (summary['homeTeam'] as Map)['id']
-              : null);
-          final awayTeamId = _asString(summary['awayTeam'] is Map
-              ? (summary['awayTeam'] as Map)['id']
-              : null);
+          final matchId =
+              _asString(summary['matchId']) ?? _asString(row['matchId']);
+          final homeTeamId = _asString(
+            summary['homeTeam'] is Map
+                ? (summary['homeTeam'] as Map)['id']
+                : null,
+          );
+          final awayTeamId = _asString(
+            summary['awayTeam'] is Map
+                ? (summary['awayTeam'] as Map)['id']
+                : null,
+          );
           if (matchId == null || homeTeamId == null || awayTeamId == null) {
             continue;
           }
 
-          final homeTeamName = _asString(summary['homeTeam'] is Map
-              ? (summary['homeTeam'] as Map)['name']
-              : null);
-          final awayTeamName = _asString(summary['awayTeam'] is Map
-              ? (summary['awayTeam'] as Map)['name']
-              : null);
+          final homeTeamName = _asString(
+            summary['homeTeam'] is Map
+                ? (summary['homeTeam'] as Map)['name']
+                : null,
+          );
+          final awayTeamName = _asString(
+            summary['awayTeam'] is Map
+                ? (summary['awayTeam'] as Map)['name']
+                : null,
+          );
 
           final kickoff =
               DateTime.tryParse(_asString(summary['utcTime']) ?? '')?.toUtc();
@@ -524,10 +561,22 @@ class ImportCoordinator {
             continue;
           }
 
-          await _ensureTeamWithName(homeTeamId, homeTeamName, competitionId, now);
-          await _ensureTeamWithName(awayTeamId, awayTeamName, competitionId, now);
+          await _ensureTeamWithName(
+            homeTeamId,
+            homeTeamName,
+            competitionId,
+            now,
+          );
+          await _ensureTeamWithName(
+            awayTeamId,
+            awayTeamName,
+            competitionId,
+            now,
+          );
 
-          await database.into(database.matches).insertOnConflictUpdate(
+          await database
+              .into(database.matches)
+              .insertOnConflictUpdate(
                 MatchesCompanion.insert(
                   id: matchId,
                   competitionId: competitionId,
@@ -536,18 +585,197 @@ class ImportCoordinator {
                   awayTeamId: awayTeamId,
                   kickoffUtc: kickoff,
                   status: Value(_asString(summary['status']) ?? 'scheduled'),
-                  homeScore: Value(_asInt(summary['homeTeam'] is Map
-                          ? (summary['homeTeam'] as Map)['score']
-                          : null) ??
-                      0),
-                  awayScore: Value(_asInt(summary['awayTeam'] is Map
-                          ? (summary['awayTeam'] as Map)['score']
-                          : null) ??
-                      0),
+                  homeScore: Value(
+                    _asInt(
+                          summary['homeTeam'] is Map
+                              ? (summary['homeTeam'] as Map)['score']
+                              : null,
+                        ) ??
+                        0,
+                  ),
+                  awayScore: Value(
+                    _asInt(
+                          summary['awayTeam'] is Map
+                              ? (summary['awayTeam'] as Map)['score']
+                              : null,
+                        ) ??
+                        0,
+                  ),
                   roundLabel: Value(_asString(summary['roundName'])),
                   updatedAtUtc: now,
                 ),
               );
+        }
+      }
+    });
+  }
+
+  Future<void> _importFixturesFullFile(File file) async {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    await database.transaction(() async {
+      for (final entry in decoded.entries) {
+        final leagueKey = entry.key;
+        final root = entry.value;
+        if (root is! Map<String, dynamic>) {
+          continue;
+        }
+
+        final meta = root['meta'] as Map<String, dynamic>?;
+        final explicitLeagueId = _asString(meta?['leagueId']);
+        final competitionId = _competitionIdFromLeagueKey(
+          leagueKey,
+          explicitId: explicitLeagueId,
+        );
+        final competitionName = _normalizeLeagueName(
+          _asString(meta?['slug']) ?? _competitionNameFromLeagueKey(leagueKey),
+        );
+
+        await _ensureCompetitionByName(competitionId, competitionName, now);
+
+        final fixtures = root['fixtures'];
+        final extracted =
+            fixtures is Map<String, dynamic> ? fixtures['extracted'] : null;
+        final rows =
+            extracted is Map<String, dynamic> ? extracted['allMatches'] : null;
+        if (rows is! List) {
+          continue;
+        }
+
+        await _importFotmobMatchRows(
+          rows: rows,
+          competitionId: competitionId,
+          competitionName: competitionName,
+          now: now,
+        );
+      }
+    });
+  }
+
+  Future<void> _importTopStandingsFullFile(File file) async {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    await database.transaction(() async {
+      for (final entry in decoded.entries) {
+        final leagueKey = entry.key;
+        final root = entry.value;
+        if (root is! Map<String, dynamic>) {
+          continue;
+        }
+
+        final meta = root['meta'] as Map<String, dynamic>?;
+        final explicitLeagueId = _asString(meta?['leagueId']);
+        final competitionId = _competitionIdFromLeagueKey(
+          leagueKey,
+          explicitId: explicitLeagueId,
+        );
+        final competitionName = _normalizeLeagueName(
+          _asString(meta?['slug']) ?? _competitionNameFromLeagueKey(leagueKey),
+        );
+
+        await _ensureCompetitionByName(competitionId, competitionName, now);
+
+        await _importFotmobStandingsForLeague(
+          competitionId: competitionId,
+          standingsRoot: root['standings'],
+          now: now,
+        );
+      }
+    });
+  }
+
+  Future<void> _importTopScoreDataFile(File file) async {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    await database.transaction(() async {
+      for (final entry in decoded.entries) {
+        final leagueKey = entry.key;
+        final root = entry.value;
+        if (root is! Map<String, dynamic>) {
+          continue;
+        }
+
+        final competitionId = _competitionIdFromLeagueKey(leagueKey);
+        final competitionName = _competitionNameFromLeagueKey(leagueKey);
+
+        await _ensureCompetitionByName(competitionId, competitionName, now);
+
+        await (database.delete(database.topPlayerStats)
+          ..where((tbl) => tbl.competitionId.equals(competitionId))).go();
+
+        for (final statEntry in root.entries) {
+          final statType = statEntry.key;
+          final statRoot = statEntry.value;
+          if (statRoot is! Map<String, dynamic>) {
+            continue;
+          }
+
+          final statsData = statRoot['statsData'];
+          if (statsData is! List) {
+            continue;
+          }
+
+          for (final raw in statsData) {
+            if (raw is! Map<String, dynamic>) {
+              continue;
+            }
+
+            final playerId = _asString(raw['id']);
+            final playerName = _asString(raw['name']);
+            if (playerId == null || playerName == null) {
+              continue;
+            }
+
+            final teamId = _asString(raw['teamId']);
+            if (teamId != null) {
+              await _ensureTeam(teamId, now);
+            }
+            await _ensurePlayer(playerId, playerName, teamId, now);
+
+            final statValue = _asDouble(
+              raw['statValue'] is Map
+                  ? (raw['statValue'] as Map)['value']
+                  : null,
+            );
+            if (statValue == null) {
+              continue;
+            }
+
+            final subStatValue = _asDouble(
+              raw['substatValue'] is Map
+                  ? (raw['substatValue'] as Map)['value']
+                  : null,
+            );
+
+            await database
+                .into(database.topPlayerStats)
+                .insert(
+                  TopPlayerStatsCompanion.insert(
+                    competitionId: competitionId,
+                    seasonId: const Value(null),
+                    statType: statType,
+                    playerId: playerId,
+                    teamId: Value(teamId),
+                    playerName: playerName,
+                    rank: _asInt(raw['rank']) ?? 999,
+                    statValue: statValue,
+                    subStatValue: Value(subStatValue),
+                    updatedAtUtc: now,
+                  ),
+                );
+          }
         }
       }
     });
@@ -567,23 +795,33 @@ class ImportCoordinator {
       }
 
       final matchId = _asString(raw['matchId']) ?? _asString(raw['id']);
-      final homeTeamId = _asString(raw['homeTeamId']);
-      final awayTeamId = _asString(raw['awayTeamId']);
+      final homeTeamId =
+          _asString(raw['homeTeamId']) ??
+          _asString(raw['home'] is Map ? (raw['home'] as Map)['id'] : null);
+      final awayTeamId =
+          _asString(raw['awayTeamId']) ??
+          _asString(raw['away'] is Map ? (raw['away'] as Map)['id'] : null);
       if (matchId == null || homeTeamId == null || awayTeamId == null) {
         continue;
       }
 
-      final homeTeamName = _asString(raw['homeTeamName']);
-      final awayTeamName = _asString(raw['awayTeamName']);
+      final homeTeamName =
+          _asString(raw['homeTeamName']) ??
+          _asString(raw['home'] is Map ? (raw['home'] as Map)['name'] : null);
+      final awayTeamName =
+          _asString(raw['awayTeamName']) ??
+          _asString(raw['away'] is Map ? (raw['away'] as Map)['name'] : null);
 
-      final kickoff = DateTime.tryParse(
+      final kickoff =
+          DateTime.tryParse(
             _asString(raw['startTime']) ??
-                _asString(raw['status'] is Map
-                    ? (raw['status'] as Map)['utcTime']
-                    : null) ??
+                _asString(
+                  raw['status'] is Map
+                      ? (raw['status'] as Map)['utcTime']
+                      : null,
+                ) ??
                 '',
-          )
-              ?.toUtc();
+          )?.toUtc();
       if (kickoff == null) {
         continue;
       }
@@ -591,17 +829,27 @@ class ImportCoordinator {
       String status = 'scheduled';
       final rawStatus = raw['status'];
       if (rawStatus is Map) {
-        status = _asString(rawStatus['reason'] is Map
-                ? (rawStatus['reason'] as Map)['short']
-                : null) ??
+        status =
+            _asString(
+              rawStatus['reason'] is Map
+                  ? (rawStatus['reason'] as Map)['short']
+                  : null,
+            ) ??
             _asString(rawStatus['short']) ??
             status;
       }
 
+      final scoreStr = _asString(
+        rawStatus is Map ? rawStatus['scoreStr'] : null,
+      );
+      final parsedScore = _parseScoresStr(scoreStr);
+
       await _ensureTeamWithName(homeTeamId, homeTeamName, competitionId, now);
       await _ensureTeamWithName(awayTeamId, awayTeamName, competitionId, now);
 
-      await database.into(database.matches).insertOnConflictUpdate(
+      await database
+          .into(database.matches)
+          .insertOnConflictUpdate(
             MatchesCompanion.insert(
               id: matchId,
               competitionId: competitionId,
@@ -610,9 +858,11 @@ class ImportCoordinator {
               awayTeamId: awayTeamId,
               kickoffUtc: kickoff,
               status: Value(status),
-              homeScore: Value(_asInt(raw['homeScore']) ?? 0),
-              awayScore: Value(_asInt(raw['awayScore']) ?? 0),
-              roundLabel: Value(_asString(raw['round'])),
+              homeScore: Value(_asInt(raw['homeScore']) ?? parsedScore.$1),
+              awayScore: Value(_asInt(raw['awayScore']) ?? parsedScore.$2),
+              roundLabel: Value(
+                _asString(raw['round']) ?? _asString(raw['roundName']),
+              ),
               updatedAtUtc: now,
             ),
           );
@@ -627,8 +877,7 @@ class ImportCoordinator {
     final rows = _extractFotmobStandingsRows(standingsRoot);
 
     await (database.delete(database.standingsRows)
-          ..where((tbl) => tbl.competitionId.equals(competitionId)))
-        .go();
+      ..where((tbl) => tbl.competitionId.equals(competitionId))).go();
 
     for (var index = 0; index < rows.length; index++) {
       final row = rows[index];
@@ -636,10 +885,12 @@ class ImportCoordinator {
         continue;
       }
 
-      final teamId = _asString(row['teamId']) ??
+      final teamId =
+          _asString(row['teamId']) ??
           _asString(row['id']) ??
           _asString(row['team'] is Map ? (row['team'] as Map)['id'] : null);
-      final teamName = _asString(row['teamName']) ??
+      final teamName =
+          _asString(row['teamName']) ??
           _asString(row['name']) ??
           _asString(row['team'] is Map ? (row['team'] as Map)['name'] : null);
       if (teamId == null) {
@@ -653,20 +904,40 @@ class ImportCoordinator {
       final goalsFor = _asInt(row['goalsFor']) ?? goals.$1;
       final goalsAgainst = _asInt(row['goalsAgainst']) ?? goals.$2;
 
-      await database.into(database.standingsRows).insert(
+      await database
+          .into(database.standingsRows)
+          .insert(
             StandingsRowsCompanion.insert(
               competitionId: competitionId,
               seasonId: const Value(null),
               teamId: teamId,
-              position: _asInt(row['idx']) ?? _asInt(row['position']) ?? (index + 1),
+              position:
+                  _asInt(row['idx']) ?? _asInt(row['position']) ?? (index + 1),
               played: Value(_asInt(row['played']) ?? _asInt(row['mp']) ?? 0),
-              won: Value(_asInt(row['wins']) ?? _asInt(row['won']) ?? _asInt(row['w']) ?? 0),
-              draw: Value(_asInt(row['draws']) ?? _asInt(row['draw']) ?? _asInt(row['d']) ?? 0),
-              lost: Value(_asInt(row['losses']) ?? _asInt(row['lost']) ?? _asInt(row['l']) ?? 0),
+              won: Value(
+                _asInt(row['wins']) ??
+                    _asInt(row['won']) ??
+                    _asInt(row['w']) ??
+                    0,
+              ),
+              draw: Value(
+                _asInt(row['draws']) ??
+                    _asInt(row['draw']) ??
+                    _asInt(row['d']) ??
+                    0,
+              ),
+              lost: Value(
+                _asInt(row['losses']) ??
+                    _asInt(row['lost']) ??
+                    _asInt(row['l']) ??
+                    0,
+              ),
               goalsFor: Value(goalsFor),
               goalsAgainst: Value(goalsAgainst),
               goalDiff: Value(
-                _asInt(row['goalConDiff']) ?? _asInt(row['goalDiff']) ?? (goalsFor - goalsAgainst),
+                _asInt(row['goalConDiff']) ??
+                    _asInt(row['goalDiff']) ??
+                    (goalsFor - goalsAgainst),
               ),
               points: Value(_asInt(row['pts']) ?? _asInt(row['points']) ?? 0),
               form: Value(_asString(row['form']) ?? _asString(row['formStr'])),
@@ -700,6 +971,14 @@ class ImportCoordinator {
       return rows;
     }
 
+    final table = standingsRoot['table'];
+    if (table is Map<String, dynamic>) {
+      final all = table['all'];
+      if (all is List) {
+        return all;
+      }
+    }
+
     return const [];
   }
 
@@ -708,7 +987,9 @@ class ImportCoordinator {
     String competitionName,
     DateTime now,
   ) async {
-    await database.into(database.competitions).insertOnConflictUpdate(
+    await database
+        .into(database.competitions)
+        .insertOnConflictUpdate(
           CompetitionsCompanion.insert(
             id: competitionId,
             name: competitionName,
@@ -725,10 +1006,12 @@ class ImportCoordinator {
     DateTime now,
   ) async {
     final existing =
-        await (database.select(database.teams)..where((tbl) => tbl.id.equals(teamId)))
-            .getSingleOrNull();
+        await (database.select(database.teams)
+          ..where((tbl) => tbl.id.equals(teamId))).getSingleOrNull();
 
-    await database.into(database.teams).insertOnConflictUpdate(
+    await database
+        .into(database.teams)
+        .insertOnConflictUpdate(
           TeamsCompanion.insert(
             id: teamId,
             name: teamName ?? existing?.name ?? 'Unknown Team',
@@ -759,13 +1042,18 @@ class ImportCoordinator {
   }
 
   String _normalizeLeagueName(String name) {
-    return name.replaceAll('-', ' ').split(' ').where((p) => p.isNotEmpty).map((p) {
-      final lower = p.toLowerCase();
-      if (lower.length <= 2) {
-        return lower.toUpperCase();
-      }
-      return '${lower[0].toUpperCase()}${lower.substring(1)}';
-    }).join(' ');
+    return name
+        .replaceAll('-', ' ')
+        .split(' ')
+        .where((p) => p.isNotEmpty)
+        .map((p) {
+          final lower = p.toLowerCase();
+          if (lower.length <= 2) {
+            return lower.toUpperCase();
+          }
+          return '${lower[0].toUpperCase()}${lower.substring(1)}';
+        })
+        .join(' ');
   }
 
   String? _asString(dynamic value) {
@@ -787,6 +1075,19 @@ class ImportCoordinator {
     }
     if (value is String) {
       return int.tryParse(value);
+    }
+    return null;
+  }
+
+  double? _asDouble(dynamic value) {
+    if (value is double) {
+      return value;
+    }
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      return double.tryParse(value);
     }
     return null;
   }
@@ -825,7 +1126,9 @@ class ImportCoordinator {
 
     await database.transaction(() async {
       for (final competition in parsed.competitions) {
-        await database.into(database.competitions).insertOnConflictUpdate(
+        await database
+            .into(database.competitions)
+            .insertOnConflictUpdate(
               CompetitionsCompanion.insert(
                 id: competition.id,
                 name: competition.name,
@@ -836,7 +1139,9 @@ class ImportCoordinator {
       }
 
       for (final team in parsed.teams) {
-        await database.into(database.teams).insertOnConflictUpdate(
+        await database
+            .into(database.teams)
+            .insertOnConflictUpdate(
               TeamsCompanion.insert(
                 id: team.id,
                 name: team.name,
@@ -856,7 +1161,9 @@ class ImportCoordinator {
 
     await database.transaction(() async {
       for (final competition in parsed.competitions) {
-        await database.into(database.competitions).insertOnConflictUpdate(
+        await database
+            .into(database.competitions)
+            .insertOnConflictUpdate(
               CompetitionsCompanion.insert(
                 id: competition.id,
                 name: competition.name,
@@ -867,7 +1174,9 @@ class ImportCoordinator {
       }
 
       for (final team in parsed.teams) {
-        await database.into(database.teams).insertOnConflictUpdate(
+        await database
+            .into(database.teams)
+            .insertOnConflictUpdate(
               TeamsCompanion.insert(
                 id: team.id,
                 name: team.name,
@@ -883,7 +1192,9 @@ class ImportCoordinator {
         await _ensureTeam(match.homeTeamId, now);
         await _ensureTeam(match.awayTeamId, now);
 
-        await database.into(database.matches).insertOnConflictUpdate(
+        await database
+            .into(database.matches)
+            .insertOnConflictUpdate(
               MatchesCompanion.insert(
                 id: match.id,
                 competitionId: match.competitionId,
@@ -909,7 +1220,9 @@ class ImportCoordinator {
 
     await database.transaction(() async {
       for (final competition in parsed.competitions) {
-        await database.into(database.competitions).insertOnConflictUpdate(
+        await database
+            .into(database.competitions)
+            .insertOnConflictUpdate(
               CompetitionsCompanion.insert(
                 id: competition.id,
                 name: competition.name,
@@ -920,7 +1233,9 @@ class ImportCoordinator {
       }
 
       for (final team in parsed.teams) {
-        await database.into(database.teams).insertOnConflictUpdate(
+        await database
+            .into(database.teams)
+            .insertOnConflictUpdate(
               TeamsCompanion.insert(
                 id: team.id,
                 name: team.name,
@@ -953,7 +1268,9 @@ class ImportCoordinator {
         await _ensureCompetition(row.competitionId, now);
         await _ensureTeam(row.teamId, now);
 
-        await database.into(database.standingsRows).insert(
+        await database
+            .into(database.standingsRows)
+            .insert(
               StandingsRowsCompanion.insert(
                 competitionId: row.competitionId,
                 seasonId: Value(row.seasonId),
@@ -986,7 +1303,9 @@ class ImportCoordinator {
           await _ensureTeam(player.teamId!, now);
         }
 
-        await database.into(database.players).insertOnConflictUpdate(
+        await database
+            .into(database.players)
+            .insertOnConflictUpdate(
               PlayersCompanion.insert(
                 id: player.id,
                 teamId: Value(player.teamId),
@@ -1012,21 +1331,26 @@ class ImportCoordinator {
 
     await database.transaction(() async {
       await (database.delete(database.matchEvents)
-            ..where((tbl) => tbl.matchId.equals(parsed.matchId)))
-          .go();
+        ..where((tbl) => tbl.matchId.equals(parsed.matchId))).go();
       await (database.delete(database.matchTeamStats)
-            ..where((tbl) => tbl.matchId.equals(parsed.matchId)))
-          .go();
+        ..where((tbl) => tbl.matchId.equals(parsed.matchId))).go();
 
       for (final event in parsed.events) {
         if (event.teamId != null) {
           await _ensureTeam(event.teamId!, now);
         }
         if (event.playerId != null) {
-          await _ensurePlayer(event.playerId!, event.playerName, event.teamId, now);
+          await _ensurePlayer(
+            event.playerId!,
+            event.playerName,
+            event.teamId,
+            now,
+          );
         }
 
-        await database.into(database.matchEvents).insert(
+        await database
+            .into(database.matchEvents)
+            .insert(
               MatchEventsCompanion.insert(
                 matchId: event.matchId,
                 minute: event.minute,
@@ -1041,7 +1365,9 @@ class ImportCoordinator {
 
       for (final stat in parsed.stats) {
         await _ensureTeam(stat.teamId, now);
-        await database.into(database.matchTeamStats).insert(
+        await database
+            .into(database.matchTeamStats)
+            .insert(
               MatchTeamStatsCompanion.insert(
                 matchId: stat.matchId,
                 teamId: stat.teamId,
@@ -1054,14 +1380,16 @@ class ImportCoordinator {
   }
 
   Future<void> _ensureCompetition(String competitionId, DateTime now) async {
-    final existing = await (database.select(database.competitions)
-          ..where((tbl) => tbl.id.equals(competitionId)))
-        .getSingleOrNull();
+    final existing =
+        await (database.select(database.competitions)
+          ..where((tbl) => tbl.id.equals(competitionId))).getSingleOrNull();
     if (existing != null) {
       return;
     }
 
-    await database.into(database.competitions).insert(
+    await database
+        .into(database.competitions)
+        .insert(
           CompetitionsCompanion.insert(
             id: competitionId,
             name: 'Unknown Competition',
@@ -1072,14 +1400,16 @@ class ImportCoordinator {
   }
 
   Future<void> _ensureTeam(String teamId, DateTime now) async {
-    final existing = await (database.select(database.teams)
-          ..where((tbl) => tbl.id.equals(teamId)))
-        .getSingleOrNull();
+    final existing =
+        await (database.select(database.teams)
+          ..where((tbl) => tbl.id.equals(teamId))).getSingleOrNull();
     if (existing != null) {
       return;
     }
 
-    await database.into(database.teams).insert(
+    await database
+        .into(database.teams)
+        .insert(
           TeamsCompanion.insert(
             id: teamId,
             name: 'Unknown Team',
@@ -1090,29 +1420,31 @@ class ImportCoordinator {
         );
   }
 
-    Future<void> _ensurePlayer(
-      String playerId,
-      String? playerName,
-      String? teamId,
-      DateTime now,
-    ) async {
-      final existing = await (database.select(database.players)
-            ..where((tbl) => tbl.id.equals(playerId)))
-          .getSingleOrNull();
-      if (existing != null) {
-        return;
-      }
-
-      await database.into(database.players).insert(
-            PlayersCompanion.insert(
-              id: playerId,
-              teamId: Value(teamId),
-              name: playerName ?? 'Unknown Player',
-              position: const Value(null),
-              jerseyNumber: const Value(null),
-              photoAssetKey: const Value(null),
-              updatedAtUtc: now,
-            ),
-          );
+  Future<void> _ensurePlayer(
+    String playerId,
+    String? playerName,
+    String? teamId,
+    DateTime now,
+  ) async {
+    final existing =
+        await (database.select(database.players)
+          ..where((tbl) => tbl.id.equals(playerId))).getSingleOrNull();
+    if (existing != null) {
+      return;
     }
+
+    await database
+        .into(database.players)
+        .insert(
+          PlayersCompanion.insert(
+            id: playerId,
+            teamId: Value(teamId),
+            name: playerName ?? 'Unknown Player',
+            position: const Value(null),
+            jerseyNumber: const Value(null),
+            photoAssetKey: const Value(null),
+            updatedAtUtc: now,
+          ),
+        );
+  }
 }

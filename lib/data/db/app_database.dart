@@ -25,7 +25,8 @@ class Teams extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   TextColumn get shortName => text().nullable()();
-  TextColumn get competitionId => text().nullable().references(Competitions, #id)();
+  TextColumn get competitionId =>
+      text().nullable().references(Competitions, #id)();
   TextColumn get badgeAssetKey => text().nullable()();
   DateTimeColumn get updatedAtUtc => dateTime()();
 
@@ -84,6 +85,21 @@ class MatchTeamStats extends Table {
   TextColumn get teamId => text().references(Teams, #id)();
   TextColumn get statKey => text()();
   RealColumn get statValue => real()();
+}
+
+@DataClassName('TopPlayerStatRow')
+class TopPlayerStats extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get competitionId => text().references(Competitions, #id)();
+  TextColumn get seasonId => text().nullable()();
+  TextColumn get statType => text()();
+  TextColumn get playerId => text().references(Players, #id)();
+  TextColumn get teamId => text().nullable().references(Teams, #id)();
+  TextColumn get playerName => text()();
+  IntColumn get rank => integer()();
+  RealColumn get statValue => real()();
+  RealColumn get subStatValue => real().nullable()();
+  DateTimeColumn get updatedAtUtc => dateTime()();
 }
 
 @DataClassName('StandingsRowData')
@@ -176,10 +192,7 @@ class MatchDetailView {
 }
 
 class MatchEventView {
-  const MatchEventView({
-    required this.event,
-    required this.teamName,
-  });
+  const MatchEventView({required this.event, required this.teamName});
 
   final MatchEventRow event;
   final String? teamName;
@@ -205,6 +218,7 @@ class MatchTeamStatComparison {
     Matches,
     MatchEvents,
     MatchTeamStats,
+    TopPlayerStats,
     StandingsRows,
     AssetRefs,
     ImportRuns,
@@ -217,20 +231,23 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) async {
-          await m.createAll();
-        },
-        onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            await m.createTable(matchEvents);
-            await m.createTable(matchTeamStats);
-          }
-        },
-      );
+    onCreate: (m) async {
+      await m.createAll();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(matchEvents);
+        await m.createTable(matchTeamStats);
+      }
+      if (from < 3) {
+        await m.createTable(topPlayerStats);
+      }
+    },
+  );
 
   Future<List<MatchRow>> readHomeMatchesByDate(DateTime dayUtc) {
     final start = DateTime.utc(dayUtc.year, dayUtc.month, dayUtc.day);
@@ -252,25 +269,25 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<List<CompetitionRow>> readCompetitionsSorted() {
-    return (select(competitions)
-          ..orderBy([
-            (tbl) => OrderingTerm.asc(tbl.displayOrder),
-            (tbl) => OrderingTerm.asc(tbl.name),
-          ]))
-        .get();
+    return (select(competitions)..orderBy([
+      (tbl) => OrderingTerm.asc(tbl.displayOrder),
+      (tbl) => OrderingTerm.asc(tbl.name),
+    ])).get();
   }
 
   Future<TeamRow?> readTeamById(String teamId) {
-    return (select(teams)..where((tbl) => tbl.id.equals(teamId))).getSingleOrNull();
+    return (select(teams)
+      ..where((tbl) => tbl.id.equals(teamId))).getSingleOrNull();
   }
 
   Future<CompetitionRow?> readCompetitionById(String competitionId) {
-    return (select(competitions)..where((tbl) => tbl.id.equals(competitionId)))
-        .getSingleOrNull();
+    return (select(competitions)
+      ..where((tbl) => tbl.id.equals(competitionId))).getSingleOrNull();
   }
 
   Future<PlayerRow?> readPlayerById(String playerId) {
-    return (select(players)..where((tbl) => tbl.id.equals(playerId))).getSingleOrNull();
+    return (select(players)
+      ..where((tbl) => tbl.id.equals(playerId))).getSingleOrNull();
   }
 
   Future<List<PlayerRow>> readPlayersByTeam(String teamId) {
@@ -287,23 +304,25 @@ class AppDatabase extends _$AppDatabase {
     final homeTeam = alias(teams, 'team_matches_home_team');
     final awayTeam = alias(teams, 'team_matches_away_team');
 
-    final query = select(matches).join([
-      leftOuterJoin(homeTeam, homeTeam.id.equalsExp(matches.homeTeamId)),
-      leftOuterJoin(awayTeam, awayTeam.id.equalsExp(matches.awayTeamId)),
-    ])
-      ..where(matches.homeTeamId.equals(teamId) | matches.awayTeamId.equals(teamId))
-      ..orderBy([OrderingTerm.desc(matches.kickoffUtc)])
-      ..limit(limit);
+    final query =
+        select(matches).join([
+            leftOuterJoin(homeTeam, homeTeam.id.equalsExp(matches.homeTeamId)),
+            leftOuterJoin(awayTeam, awayTeam.id.equalsExp(matches.awayTeamId)),
+          ])
+          ..where(
+            matches.homeTeamId.equals(teamId) |
+                matches.awayTeamId.equals(teamId),
+          )
+          ..orderBy([OrderingTerm.desc(matches.kickoffUtc)])
+          ..limit(limit);
 
     final rows = await query.get();
     return rows
         .map(
           (row) => HomeMatchView(
             match: row.readTable(matches),
-            homeTeamName:
-                row.readTableOrNull(homeTeam)?.name ?? 'Unknown Team',
-            awayTeamName:
-                row.readTableOrNull(awayTeam)?.name ?? 'Unknown Team',
+            homeTeamName: row.readTableOrNull(homeTeam)?.name ?? 'Unknown Team',
+            awayTeamName: row.readTableOrNull(awayTeam)?.name ?? 'Unknown Team',
           ),
         )
         .toList();
@@ -311,14 +330,18 @@ class AppDatabase extends _$AppDatabase {
 
   Future<List<MatchEventView>> readMatchEventsByMatchId(String matchId) async {
     final teamAlias = alias(teams, 'match_event_team');
-    final query = select(matchEvents).join([
-      leftOuterJoin(teamAlias, teamAlias.id.equalsExp(matchEvents.teamId)),
-    ])
-      ..where(matchEvents.matchId.equals(matchId))
-      ..orderBy([
-        OrderingTerm.desc(matchEvents.minute),
-        OrderingTerm.desc(matchEvents.id),
-      ]);
+    final query =
+        select(matchEvents).join([
+            leftOuterJoin(
+              teamAlias,
+              teamAlias.id.equalsExp(matchEvents.teamId),
+            ),
+          ])
+          ..where(matchEvents.matchId.equals(matchId))
+          ..orderBy([
+            OrderingTerm.desc(matchEvents.minute),
+            OrderingTerm.desc(matchEvents.id),
+          ]);
 
     final rows = await query.get();
     return rows
@@ -334,15 +357,16 @@ class AppDatabase extends _$AppDatabase {
   Future<List<MatchTeamStatComparison>> readMatchStatComparisons(
     String matchId,
   ) async {
-    final match = await (select(matches)..where((tbl) => tbl.id.equals(matchId)))
-        .getSingleOrNull();
+    final match =
+        await (select(matches)
+          ..where((tbl) => tbl.id.equals(matchId))).getSingleOrNull();
     if (match == null) {
       return const [];
     }
 
-    final stats = await (select(matchTeamStats)
-          ..where((tbl) => tbl.matchId.equals(matchId)))
-        .get();
+    final stats =
+        await (select(matchTeamStats)
+          ..where((tbl) => tbl.matchId.equals(matchId))).get();
 
     final homeByKey = <String, double>{};
     final awayByKey = <String, double>{};
@@ -378,8 +402,14 @@ class AppDatabase extends _$AppDatabase {
         competitionAlias,
         competitionAlias.id.equalsExp(matches.competitionId),
       ),
-      leftOuterJoin(homeTeamAlias, homeTeamAlias.id.equalsExp(matches.homeTeamId)),
-      leftOuterJoin(awayTeamAlias, awayTeamAlias.id.equalsExp(matches.awayTeamId)),
+      leftOuterJoin(
+        homeTeamAlias,
+        homeTeamAlias.id.equalsExp(matches.homeTeamId),
+      ),
+      leftOuterJoin(
+        awayTeamAlias,
+        awayTeamAlias.id.equalsExp(matches.awayTeamId),
+      ),
     ])..where(matches.id.equals(matchId));
 
     final row = await query.getSingleOrNull();
@@ -457,19 +487,22 @@ class AppDatabase extends _$AppDatabase {
     String competitionId,
   ) async {
     final teamAlias = alias(teams, 'standings_team');
-    final query = select(standingsRows).join([
-      leftOuterJoin(teamAlias, teamAlias.id.equalsExp(standingsRows.teamId)),
-    ])
-      ..where(standingsRows.competitionId.equals(competitionId))
-      ..orderBy([OrderingTerm.asc(standingsRows.position)]);
+    final query =
+        select(standingsRows).join([
+            leftOuterJoin(
+              teamAlias,
+              teamAlias.id.equalsExp(standingsRows.teamId),
+            ),
+          ])
+          ..where(standingsRows.competitionId.equals(competitionId))
+          ..orderBy([OrderingTerm.asc(standingsRows.position)]);
 
     final rows = await query.get();
     return rows
         .map(
           (item) => StandingsTableView(
             row: item.readTable(standingsRows),
-            teamName:
-                item.readTableOrNull(teamAlias)?.name ?? 'Unknown Team',
+            teamName: item.readTableOrNull(teamAlias)?.name ?? 'Unknown Team',
             teamId: item.readTable(standingsRows).teamId,
           ),
         )
@@ -492,14 +525,15 @@ class AppDatabase extends _$AppDatabase {
     final homeTeam = alias(teams, 'home_team');
     final awayTeam = alias(teams, 'away_team');
 
-    final query = select(matches).join([
-      leftOuterJoin(homeTeam, homeTeam.id.equalsExp(matches.homeTeamId)),
-      leftOuterJoin(awayTeam, awayTeam.id.equalsExp(matches.awayTeamId)),
-    ])
-      ..where(matches.kickoffUtc.isBiggerOrEqualValue(start))
-      ..where(matches.kickoffUtc.isSmallerThanValue(end))
-      ..orderBy([OrderingTerm.asc(matches.kickoffUtc)])
-      ..limit(limit);
+    final query =
+        select(matches).join([
+            leftOuterJoin(homeTeam, homeTeam.id.equalsExp(matches.homeTeamId)),
+            leftOuterJoin(awayTeam, awayTeam.id.equalsExp(matches.awayTeamId)),
+          ])
+          ..where(matches.kickoffUtc.isBiggerOrEqualValue(start))
+          ..where(matches.kickoffUtc.isSmallerThanValue(end))
+          ..orderBy([OrderingTerm.asc(matches.kickoffUtc)])
+          ..limit(limit);
 
     final rows = await query.get();
     return rows

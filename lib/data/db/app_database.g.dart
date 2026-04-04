@@ -2937,6 +2937,689 @@ class MatchTeamStatsCompanion extends UpdateCompanion<MatchTeamStatRow> {
   }
 }
 
+class $TopPlayerStatsTable extends TopPlayerStats
+    with TableInfo<$TopPlayerStatsTable, TopPlayerStatRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TopPlayerStatsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _competitionIdMeta = const VerificationMeta(
+    'competitionId',
+  );
+  @override
+  late final GeneratedColumn<String> competitionId = GeneratedColumn<String>(
+    'competition_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES competitions (id)',
+    ),
+  );
+  static const VerificationMeta _seasonIdMeta = const VerificationMeta(
+    'seasonId',
+  );
+  @override
+  late final GeneratedColumn<String> seasonId = GeneratedColumn<String>(
+    'season_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _statTypeMeta = const VerificationMeta(
+    'statType',
+  );
+  @override
+  late final GeneratedColumn<String> statType = GeneratedColumn<String>(
+    'stat_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _playerIdMeta = const VerificationMeta(
+    'playerId',
+  );
+  @override
+  late final GeneratedColumn<String> playerId = GeneratedColumn<String>(
+    'player_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES players (id)',
+    ),
+  );
+  static const VerificationMeta _teamIdMeta = const VerificationMeta('teamId');
+  @override
+  late final GeneratedColumn<String> teamId = GeneratedColumn<String>(
+    'team_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES teams (id)',
+    ),
+  );
+  static const VerificationMeta _playerNameMeta = const VerificationMeta(
+    'playerName',
+  );
+  @override
+  late final GeneratedColumn<String> playerName = GeneratedColumn<String>(
+    'player_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _rankMeta = const VerificationMeta('rank');
+  @override
+  late final GeneratedColumn<int> rank = GeneratedColumn<int>(
+    'rank',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statValueMeta = const VerificationMeta(
+    'statValue',
+  );
+  @override
+  late final GeneratedColumn<double> statValue = GeneratedColumn<double>(
+    'stat_value',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _subStatValueMeta = const VerificationMeta(
+    'subStatValue',
+  );
+  @override
+  late final GeneratedColumn<double> subStatValue = GeneratedColumn<double>(
+    'sub_stat_value',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtUtcMeta = const VerificationMeta(
+    'updatedAtUtc',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAtUtc = GeneratedColumn<DateTime>(
+    'updated_at_utc',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    competitionId,
+    seasonId,
+    statType,
+    playerId,
+    teamId,
+    playerName,
+    rank,
+    statValue,
+    subStatValue,
+    updatedAtUtc,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'top_player_stats';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TopPlayerStatRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('competition_id')) {
+      context.handle(
+        _competitionIdMeta,
+        competitionId.isAcceptableOrUnknown(
+          data['competition_id']!,
+          _competitionIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_competitionIdMeta);
+    }
+    if (data.containsKey('season_id')) {
+      context.handle(
+        _seasonIdMeta,
+        seasonId.isAcceptableOrUnknown(data['season_id']!, _seasonIdMeta),
+      );
+    }
+    if (data.containsKey('stat_type')) {
+      context.handle(
+        _statTypeMeta,
+        statType.isAcceptableOrUnknown(data['stat_type']!, _statTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statTypeMeta);
+    }
+    if (data.containsKey('player_id')) {
+      context.handle(
+        _playerIdMeta,
+        playerId.isAcceptableOrUnknown(data['player_id']!, _playerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_playerIdMeta);
+    }
+    if (data.containsKey('team_id')) {
+      context.handle(
+        _teamIdMeta,
+        teamId.isAcceptableOrUnknown(data['team_id']!, _teamIdMeta),
+      );
+    }
+    if (data.containsKey('player_name')) {
+      context.handle(
+        _playerNameMeta,
+        playerName.isAcceptableOrUnknown(data['player_name']!, _playerNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_playerNameMeta);
+    }
+    if (data.containsKey('rank')) {
+      context.handle(
+        _rankMeta,
+        rank.isAcceptableOrUnknown(data['rank']!, _rankMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rankMeta);
+    }
+    if (data.containsKey('stat_value')) {
+      context.handle(
+        _statValueMeta,
+        statValue.isAcceptableOrUnknown(data['stat_value']!, _statValueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statValueMeta);
+    }
+    if (data.containsKey('sub_stat_value')) {
+      context.handle(
+        _subStatValueMeta,
+        subStatValue.isAcceptableOrUnknown(
+          data['sub_stat_value']!,
+          _subStatValueMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at_utc')) {
+      context.handle(
+        _updatedAtUtcMeta,
+        updatedAtUtc.isAcceptableOrUnknown(
+          data['updated_at_utc']!,
+          _updatedAtUtcMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtUtcMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TopPlayerStatRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TopPlayerStatRow(
+      id:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.int,
+            data['${effectivePrefix}id'],
+          )!,
+      competitionId:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}competition_id'],
+          )!,
+      seasonId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}season_id'],
+      ),
+      statType:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}stat_type'],
+          )!,
+      playerId:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}player_id'],
+          )!,
+      teamId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}team_id'],
+      ),
+      playerName:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}player_name'],
+          )!,
+      rank:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.int,
+            data['${effectivePrefix}rank'],
+          )!,
+      statValue:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}stat_value'],
+          )!,
+      subStatValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}sub_stat_value'],
+      ),
+      updatedAtUtc:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}updated_at_utc'],
+          )!,
+    );
+  }
+
+  @override
+  $TopPlayerStatsTable createAlias(String alias) {
+    return $TopPlayerStatsTable(attachedDatabase, alias);
+  }
+}
+
+class TopPlayerStatRow extends DataClass
+    implements Insertable<TopPlayerStatRow> {
+  final int id;
+  final String competitionId;
+  final String? seasonId;
+  final String statType;
+  final String playerId;
+  final String? teamId;
+  final String playerName;
+  final int rank;
+  final double statValue;
+  final double? subStatValue;
+  final DateTime updatedAtUtc;
+  const TopPlayerStatRow({
+    required this.id,
+    required this.competitionId,
+    this.seasonId,
+    required this.statType,
+    required this.playerId,
+    this.teamId,
+    required this.playerName,
+    required this.rank,
+    required this.statValue,
+    this.subStatValue,
+    required this.updatedAtUtc,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['competition_id'] = Variable<String>(competitionId);
+    if (!nullToAbsent || seasonId != null) {
+      map['season_id'] = Variable<String>(seasonId);
+    }
+    map['stat_type'] = Variable<String>(statType);
+    map['player_id'] = Variable<String>(playerId);
+    if (!nullToAbsent || teamId != null) {
+      map['team_id'] = Variable<String>(teamId);
+    }
+    map['player_name'] = Variable<String>(playerName);
+    map['rank'] = Variable<int>(rank);
+    map['stat_value'] = Variable<double>(statValue);
+    if (!nullToAbsent || subStatValue != null) {
+      map['sub_stat_value'] = Variable<double>(subStatValue);
+    }
+    map['updated_at_utc'] = Variable<DateTime>(updatedAtUtc);
+    return map;
+  }
+
+  TopPlayerStatsCompanion toCompanion(bool nullToAbsent) {
+    return TopPlayerStatsCompanion(
+      id: Value(id),
+      competitionId: Value(competitionId),
+      seasonId:
+          seasonId == null && nullToAbsent
+              ? const Value.absent()
+              : Value(seasonId),
+      statType: Value(statType),
+      playerId: Value(playerId),
+      teamId:
+          teamId == null && nullToAbsent ? const Value.absent() : Value(teamId),
+      playerName: Value(playerName),
+      rank: Value(rank),
+      statValue: Value(statValue),
+      subStatValue:
+          subStatValue == null && nullToAbsent
+              ? const Value.absent()
+              : Value(subStatValue),
+      updatedAtUtc: Value(updatedAtUtc),
+    );
+  }
+
+  factory TopPlayerStatRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TopPlayerStatRow(
+      id: serializer.fromJson<int>(json['id']),
+      competitionId: serializer.fromJson<String>(json['competitionId']),
+      seasonId: serializer.fromJson<String?>(json['seasonId']),
+      statType: serializer.fromJson<String>(json['statType']),
+      playerId: serializer.fromJson<String>(json['playerId']),
+      teamId: serializer.fromJson<String?>(json['teamId']),
+      playerName: serializer.fromJson<String>(json['playerName']),
+      rank: serializer.fromJson<int>(json['rank']),
+      statValue: serializer.fromJson<double>(json['statValue']),
+      subStatValue: serializer.fromJson<double?>(json['subStatValue']),
+      updatedAtUtc: serializer.fromJson<DateTime>(json['updatedAtUtc']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'competitionId': serializer.toJson<String>(competitionId),
+      'seasonId': serializer.toJson<String?>(seasonId),
+      'statType': serializer.toJson<String>(statType),
+      'playerId': serializer.toJson<String>(playerId),
+      'teamId': serializer.toJson<String?>(teamId),
+      'playerName': serializer.toJson<String>(playerName),
+      'rank': serializer.toJson<int>(rank),
+      'statValue': serializer.toJson<double>(statValue),
+      'subStatValue': serializer.toJson<double?>(subStatValue),
+      'updatedAtUtc': serializer.toJson<DateTime>(updatedAtUtc),
+    };
+  }
+
+  TopPlayerStatRow copyWith({
+    int? id,
+    String? competitionId,
+    Value<String?> seasonId = const Value.absent(),
+    String? statType,
+    String? playerId,
+    Value<String?> teamId = const Value.absent(),
+    String? playerName,
+    int? rank,
+    double? statValue,
+    Value<double?> subStatValue = const Value.absent(),
+    DateTime? updatedAtUtc,
+  }) => TopPlayerStatRow(
+    id: id ?? this.id,
+    competitionId: competitionId ?? this.competitionId,
+    seasonId: seasonId.present ? seasonId.value : this.seasonId,
+    statType: statType ?? this.statType,
+    playerId: playerId ?? this.playerId,
+    teamId: teamId.present ? teamId.value : this.teamId,
+    playerName: playerName ?? this.playerName,
+    rank: rank ?? this.rank,
+    statValue: statValue ?? this.statValue,
+    subStatValue: subStatValue.present ? subStatValue.value : this.subStatValue,
+    updatedAtUtc: updatedAtUtc ?? this.updatedAtUtc,
+  );
+  TopPlayerStatRow copyWithCompanion(TopPlayerStatsCompanion data) {
+    return TopPlayerStatRow(
+      id: data.id.present ? data.id.value : this.id,
+      competitionId:
+          data.competitionId.present
+              ? data.competitionId.value
+              : this.competitionId,
+      seasonId: data.seasonId.present ? data.seasonId.value : this.seasonId,
+      statType: data.statType.present ? data.statType.value : this.statType,
+      playerId: data.playerId.present ? data.playerId.value : this.playerId,
+      teamId: data.teamId.present ? data.teamId.value : this.teamId,
+      playerName:
+          data.playerName.present ? data.playerName.value : this.playerName,
+      rank: data.rank.present ? data.rank.value : this.rank,
+      statValue: data.statValue.present ? data.statValue.value : this.statValue,
+      subStatValue:
+          data.subStatValue.present
+              ? data.subStatValue.value
+              : this.subStatValue,
+      updatedAtUtc:
+          data.updatedAtUtc.present
+              ? data.updatedAtUtc.value
+              : this.updatedAtUtc,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TopPlayerStatRow(')
+          ..write('id: $id, ')
+          ..write('competitionId: $competitionId, ')
+          ..write('seasonId: $seasonId, ')
+          ..write('statType: $statType, ')
+          ..write('playerId: $playerId, ')
+          ..write('teamId: $teamId, ')
+          ..write('playerName: $playerName, ')
+          ..write('rank: $rank, ')
+          ..write('statValue: $statValue, ')
+          ..write('subStatValue: $subStatValue, ')
+          ..write('updatedAtUtc: $updatedAtUtc')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    competitionId,
+    seasonId,
+    statType,
+    playerId,
+    teamId,
+    playerName,
+    rank,
+    statValue,
+    subStatValue,
+    updatedAtUtc,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TopPlayerStatRow &&
+          other.id == this.id &&
+          other.competitionId == this.competitionId &&
+          other.seasonId == this.seasonId &&
+          other.statType == this.statType &&
+          other.playerId == this.playerId &&
+          other.teamId == this.teamId &&
+          other.playerName == this.playerName &&
+          other.rank == this.rank &&
+          other.statValue == this.statValue &&
+          other.subStatValue == this.subStatValue &&
+          other.updatedAtUtc == this.updatedAtUtc);
+}
+
+class TopPlayerStatsCompanion extends UpdateCompanion<TopPlayerStatRow> {
+  final Value<int> id;
+  final Value<String> competitionId;
+  final Value<String?> seasonId;
+  final Value<String> statType;
+  final Value<String> playerId;
+  final Value<String?> teamId;
+  final Value<String> playerName;
+  final Value<int> rank;
+  final Value<double> statValue;
+  final Value<double?> subStatValue;
+  final Value<DateTime> updatedAtUtc;
+  const TopPlayerStatsCompanion({
+    this.id = const Value.absent(),
+    this.competitionId = const Value.absent(),
+    this.seasonId = const Value.absent(),
+    this.statType = const Value.absent(),
+    this.playerId = const Value.absent(),
+    this.teamId = const Value.absent(),
+    this.playerName = const Value.absent(),
+    this.rank = const Value.absent(),
+    this.statValue = const Value.absent(),
+    this.subStatValue = const Value.absent(),
+    this.updatedAtUtc = const Value.absent(),
+  });
+  TopPlayerStatsCompanion.insert({
+    this.id = const Value.absent(),
+    required String competitionId,
+    this.seasonId = const Value.absent(),
+    required String statType,
+    required String playerId,
+    this.teamId = const Value.absent(),
+    required String playerName,
+    required int rank,
+    required double statValue,
+    this.subStatValue = const Value.absent(),
+    required DateTime updatedAtUtc,
+  }) : competitionId = Value(competitionId),
+       statType = Value(statType),
+       playerId = Value(playerId),
+       playerName = Value(playerName),
+       rank = Value(rank),
+       statValue = Value(statValue),
+       updatedAtUtc = Value(updatedAtUtc);
+  static Insertable<TopPlayerStatRow> custom({
+    Expression<int>? id,
+    Expression<String>? competitionId,
+    Expression<String>? seasonId,
+    Expression<String>? statType,
+    Expression<String>? playerId,
+    Expression<String>? teamId,
+    Expression<String>? playerName,
+    Expression<int>? rank,
+    Expression<double>? statValue,
+    Expression<double>? subStatValue,
+    Expression<DateTime>? updatedAtUtc,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (competitionId != null) 'competition_id': competitionId,
+      if (seasonId != null) 'season_id': seasonId,
+      if (statType != null) 'stat_type': statType,
+      if (playerId != null) 'player_id': playerId,
+      if (teamId != null) 'team_id': teamId,
+      if (playerName != null) 'player_name': playerName,
+      if (rank != null) 'rank': rank,
+      if (statValue != null) 'stat_value': statValue,
+      if (subStatValue != null) 'sub_stat_value': subStatValue,
+      if (updatedAtUtc != null) 'updated_at_utc': updatedAtUtc,
+    });
+  }
+
+  TopPlayerStatsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? competitionId,
+    Value<String?>? seasonId,
+    Value<String>? statType,
+    Value<String>? playerId,
+    Value<String?>? teamId,
+    Value<String>? playerName,
+    Value<int>? rank,
+    Value<double>? statValue,
+    Value<double?>? subStatValue,
+    Value<DateTime>? updatedAtUtc,
+  }) {
+    return TopPlayerStatsCompanion(
+      id: id ?? this.id,
+      competitionId: competitionId ?? this.competitionId,
+      seasonId: seasonId ?? this.seasonId,
+      statType: statType ?? this.statType,
+      playerId: playerId ?? this.playerId,
+      teamId: teamId ?? this.teamId,
+      playerName: playerName ?? this.playerName,
+      rank: rank ?? this.rank,
+      statValue: statValue ?? this.statValue,
+      subStatValue: subStatValue ?? this.subStatValue,
+      updatedAtUtc: updatedAtUtc ?? this.updatedAtUtc,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (competitionId.present) {
+      map['competition_id'] = Variable<String>(competitionId.value);
+    }
+    if (seasonId.present) {
+      map['season_id'] = Variable<String>(seasonId.value);
+    }
+    if (statType.present) {
+      map['stat_type'] = Variable<String>(statType.value);
+    }
+    if (playerId.present) {
+      map['player_id'] = Variable<String>(playerId.value);
+    }
+    if (teamId.present) {
+      map['team_id'] = Variable<String>(teamId.value);
+    }
+    if (playerName.present) {
+      map['player_name'] = Variable<String>(playerName.value);
+    }
+    if (rank.present) {
+      map['rank'] = Variable<int>(rank.value);
+    }
+    if (statValue.present) {
+      map['stat_value'] = Variable<double>(statValue.value);
+    }
+    if (subStatValue.present) {
+      map['sub_stat_value'] = Variable<double>(subStatValue.value);
+    }
+    if (updatedAtUtc.present) {
+      map['updated_at_utc'] = Variable<DateTime>(updatedAtUtc.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TopPlayerStatsCompanion(')
+          ..write('id: $id, ')
+          ..write('competitionId: $competitionId, ')
+          ..write('seasonId: $seasonId, ')
+          ..write('statType: $statType, ')
+          ..write('playerId: $playerId, ')
+          ..write('teamId: $teamId, ')
+          ..write('playerName: $playerName, ')
+          ..write('rank: $rank, ')
+          ..write('statValue: $statValue, ')
+          ..write('subStatValue: $subStatValue, ')
+          ..write('updatedAtUtc: $updatedAtUtc')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $StandingsRowsTable extends StandingsRows
     with TableInfo<$StandingsRowsTable, StandingsRowData> {
   @override
@@ -5164,6 +5847,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $MatchesTable matches = $MatchesTable(this);
   late final $MatchEventsTable matchEvents = $MatchEventsTable(this);
   late final $MatchTeamStatsTable matchTeamStats = $MatchTeamStatsTable(this);
+  late final $TopPlayerStatsTable topPlayerStats = $TopPlayerStatsTable(this);
   late final $StandingsRowsTable standingsRows = $StandingsRowsTable(this);
   late final $AssetRefsTable assetRefs = $AssetRefsTable(this);
   late final $ImportRunsTable importRuns = $ImportRunsTable(this);
@@ -5179,6 +5863,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     matches,
     matchEvents,
     matchTeamStats,
+    topPlayerStats,
     standingsRows,
     assetRefs,
     importRuns,
@@ -5247,6 +5932,27 @@ final class $$CompetitionsTableReferences
     ).filter((f) => f.competitionId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_matchesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TopPlayerStatsTable, List<TopPlayerStatRow>>
+  _topPlayerStatsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.topPlayerStats,
+    aliasName: $_aliasNameGenerator(
+      db.competitions.id,
+      db.topPlayerStats.competitionId,
+    ),
+  );
+
+  $$TopPlayerStatsTableProcessedTableManager get topPlayerStatsRefs {
+    final manager = $$TopPlayerStatsTableTableManager(
+      $_db,
+      $_db.topPlayerStats,
+    ).filter((f) => f.competitionId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_topPlayerStatsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -5354,6 +6060,31 @@ class $$CompetitionsTableFilterComposer
           }) => $$MatchesTableFilterComposer(
             $db: $db,
             $table: $db.matches,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> topPlayerStatsRefs(
+    Expression<bool> Function($$TopPlayerStatsTableFilterComposer f) f,
+  ) {
+    final $$TopPlayerStatsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.topPlayerStats,
+      getReferencedColumn: (t) => t.competitionId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TopPlayerStatsTableFilterComposer(
+            $db: $db,
+            $table: $db.topPlayerStats,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -5512,6 +6243,31 @@ class $$CompetitionsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> topPlayerStatsRefs<T extends Object>(
+    Expression<T> Function($$TopPlayerStatsTableAnnotationComposer a) f,
+  ) {
+    final $$TopPlayerStatsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.topPlayerStats,
+      getReferencedColumn: (t) => t.competitionId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TopPlayerStatsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.topPlayerStats,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> standingsRowsRefs<T extends Object>(
     Expression<T> Function($$StandingsRowsTableAnnotationComposer a) f,
   ) {
@@ -5554,6 +6310,7 @@ class $$CompetitionsTableTableManager
           PrefetchHooks Function({
             bool teamsRefs,
             bool matchesRefs,
+            bool topPlayerStatsRefs,
             bool standingsRowsRefs,
           })
         > {
@@ -5618,6 +6375,7 @@ class $$CompetitionsTableTableManager
           prefetchHooksCallback: ({
             teamsRefs = false,
             matchesRefs = false,
+            topPlayerStatsRefs = false,
             standingsRowsRefs = false,
           }) {
             return PrefetchHooks(
@@ -5625,6 +6383,7 @@ class $$CompetitionsTableTableManager
               explicitlyWatchedTables: [
                 if (teamsRefs) db.teams,
                 if (matchesRefs) db.matches,
+                if (topPlayerStatsRefs) db.topPlayerStats,
                 if (standingsRowsRefs) db.standingsRows,
               ],
               addJoins: null,
@@ -5668,6 +6427,28 @@ class $$CompetitionsTableTableManager
                                 table,
                                 p0,
                               ).matchesRefs,
+                      referencedItemsForCurrentItem:
+                          (item, referencedItems) => referencedItems.where(
+                            (e) => e.competitionId == item.id,
+                          ),
+                      typedResults: items,
+                    ),
+                  if (topPlayerStatsRefs)
+                    await $_getPrefetchedData<
+                      CompetitionRow,
+                      $CompetitionsTable,
+                      TopPlayerStatRow
+                    >(
+                      currentTable: table,
+                      referencedTable: $$CompetitionsTableReferences
+                          ._topPlayerStatsRefsTable(db),
+                      managerFromTypedResult:
+                          (p0) =>
+                              $$CompetitionsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).topPlayerStatsRefs,
                       referencedItemsForCurrentItem:
                           (item, referencedItems) => referencedItems.where(
                             (e) => e.competitionId == item.id,
@@ -5719,6 +6500,7 @@ typedef $$CompetitionsTableProcessedTableManager =
       PrefetchHooks Function({
         bool teamsRefs,
         bool matchesRefs,
+        bool topPlayerStatsRefs,
         bool standingsRowsRefs,
       })
     >;
@@ -5816,6 +6598,24 @@ final class $$TeamsTableReferences
     ).filter((f) => f.teamId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_matchTeamStatsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TopPlayerStatsTable, List<TopPlayerStatRow>>
+  _topPlayerStatsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.topPlayerStats,
+    aliasName: $_aliasNameGenerator(db.teams.id, db.topPlayerStats.teamId),
+  );
+
+  $$TopPlayerStatsTableProcessedTableManager get topPlayerStatsRefs {
+    final manager = $$TopPlayerStatsTableTableManager(
+      $_db,
+      $_db.topPlayerStats,
+    ).filter((f) => f.teamId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_topPlayerStatsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -5962,6 +6762,31 @@ class $$TeamsTableFilterComposer extends Composer<_$AppDatabase, $TeamsTable> {
           }) => $$MatchTeamStatsTableFilterComposer(
             $db: $db,
             $table: $db.matchTeamStats,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> topPlayerStatsRefs(
+    Expression<bool> Function($$TopPlayerStatsTableFilterComposer f) f,
+  ) {
+    final $$TopPlayerStatsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.topPlayerStats,
+      getReferencedColumn: (t) => t.teamId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TopPlayerStatsTableFilterComposer(
+            $db: $db,
+            $table: $db.topPlayerStats,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -6181,6 +7006,31 @@ class $$TeamsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> topPlayerStatsRefs<T extends Object>(
+    Expression<T> Function($$TopPlayerStatsTableAnnotationComposer a) f,
+  ) {
+    final $$TopPlayerStatsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.topPlayerStats,
+      getReferencedColumn: (t) => t.teamId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TopPlayerStatsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.topPlayerStats,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> standingsRowsRefs<T extends Object>(
     Expression<T> Function($$StandingsRowsTableAnnotationComposer a) f,
   ) {
@@ -6225,6 +7075,7 @@ class $$TeamsTableTableManager
             bool playersRefs,
             bool matchEventsRefs,
             bool matchTeamStatsRefs,
+            bool topPlayerStatsRefs,
             bool standingsRowsRefs,
           })
         > {
@@ -6290,6 +7141,7 @@ class $$TeamsTableTableManager
             playersRefs = false,
             matchEventsRefs = false,
             matchTeamStatsRefs = false,
+            topPlayerStatsRefs = false,
             standingsRowsRefs = false,
           }) {
             return PrefetchHooks(
@@ -6298,6 +7150,7 @@ class $$TeamsTableTableManager
                 if (playersRefs) db.players,
                 if (matchEventsRefs) db.matchEvents,
                 if (matchTeamStatsRefs) db.matchTeamStats,
+                if (topPlayerStatsRefs) db.topPlayerStats,
                 if (standingsRowsRefs) db.standingsRows,
               ],
               addJoins: <
@@ -6390,6 +7243,27 @@ class $$TeamsTableTableManager
                               referencedItems.where((e) => e.teamId == item.id),
                       typedResults: items,
                     ),
+                  if (topPlayerStatsRefs)
+                    await $_getPrefetchedData<
+                      TeamRow,
+                      $TeamsTable,
+                      TopPlayerStatRow
+                    >(
+                      currentTable: table,
+                      referencedTable: $$TeamsTableReferences
+                          ._topPlayerStatsRefsTable(db),
+                      managerFromTypedResult:
+                          (p0) =>
+                              $$TeamsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).topPlayerStatsRefs,
+                      referencedItemsForCurrentItem:
+                          (item, referencedItems) =>
+                              referencedItems.where((e) => e.teamId == item.id),
+                      typedResults: items,
+                    ),
                   if (standingsRowsRefs)
                     await $_getPrefetchedData<
                       TeamRow,
@@ -6436,6 +7310,7 @@ typedef $$TeamsTableProcessedTableManager =
         bool playersRefs,
         bool matchEventsRefs,
         bool matchTeamStatsRefs,
+        bool topPlayerStatsRefs,
         bool standingsRowsRefs,
       })
     >;
@@ -6497,6 +7372,24 @@ final class $$PlayersTableReferences
     ).filter((f) => f.playerId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_matchEventsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TopPlayerStatsTable, List<TopPlayerStatRow>>
+  _topPlayerStatsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.topPlayerStats,
+    aliasName: $_aliasNameGenerator(db.players.id, db.topPlayerStats.playerId),
+  );
+
+  $$TopPlayerStatsTableProcessedTableManager get topPlayerStatsRefs {
+    final manager = $$TopPlayerStatsTableTableManager(
+      $_db,
+      $_db.topPlayerStats,
+    ).filter((f) => f.playerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_topPlayerStatsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -6581,6 +7474,31 @@ class $$PlayersTableFilterComposer
           }) => $$MatchEventsTableFilterComposer(
             $db: $db,
             $table: $db.matchEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> topPlayerStatsRefs(
+    Expression<bool> Function($$TopPlayerStatsTableFilterComposer f) f,
+  ) {
+    final $$TopPlayerStatsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.topPlayerStats,
+      getReferencedColumn: (t) => t.playerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TopPlayerStatsTableFilterComposer(
+            $db: $db,
+            $table: $db.topPlayerStats,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -6734,6 +7652,31 @@ class $$PlayersTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> topPlayerStatsRefs<T extends Object>(
+    Expression<T> Function($$TopPlayerStatsTableAnnotationComposer a) f,
+  ) {
+    final $$TopPlayerStatsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.topPlayerStats,
+      getReferencedColumn: (t) => t.playerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TopPlayerStatsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.topPlayerStats,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$PlayersTableTableManager
@@ -6749,7 +7692,11 @@ class $$PlayersTableTableManager
           $$PlayersTableUpdateCompanionBuilder,
           (PlayerRow, $$PlayersTableReferences),
           PlayerRow,
-          PrefetchHooks Function({bool teamId, bool matchEventsRefs})
+          PrefetchHooks Function({
+            bool teamId,
+            bool matchEventsRefs,
+            bool topPlayerStatsRefs,
+          })
         > {
   $$PlayersTableTableManager(_$AppDatabase db, $PlayersTable table)
     : super(
@@ -6812,10 +7759,17 @@ class $$PlayersTableTableManager
                         ),
                       )
                       .toList(),
-          prefetchHooksCallback: ({teamId = false, matchEventsRefs = false}) {
+          prefetchHooksCallback: ({
+            teamId = false,
+            matchEventsRefs = false,
+            topPlayerStatsRefs = false,
+          }) {
             return PrefetchHooks(
               db: db,
-              explicitlyWatchedTables: [if (matchEventsRefs) db.matchEvents],
+              explicitlyWatchedTables: [
+                if (matchEventsRefs) db.matchEvents,
+                if (topPlayerStatsRefs) db.topPlayerStats,
+              ],
               addJoins: <
                 T extends TableManagerState<
                   dynamic,
@@ -6870,6 +7824,28 @@ class $$PlayersTableTableManager
                           ),
                       typedResults: items,
                     ),
+                  if (topPlayerStatsRefs)
+                    await $_getPrefetchedData<
+                      PlayerRow,
+                      $PlayersTable,
+                      TopPlayerStatRow
+                    >(
+                      currentTable: table,
+                      referencedTable: $$PlayersTableReferences
+                          ._topPlayerStatsRefsTable(db),
+                      managerFromTypedResult:
+                          (p0) =>
+                              $$PlayersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).topPlayerStatsRefs,
+                      referencedItemsForCurrentItem:
+                          (item, referencedItems) => referencedItems.where(
+                            (e) => e.playerId == item.id,
+                          ),
+                      typedResults: items,
+                    ),
                 ];
               },
             );
@@ -6890,7 +7866,11 @@ typedef $$PlayersTableProcessedTableManager =
       $$PlayersTableUpdateCompanionBuilder,
       (PlayerRow, $$PlayersTableReferences),
       PlayerRow,
-      PrefetchHooks Function({bool teamId, bool matchEventsRefs})
+      PrefetchHooks Function({
+        bool teamId,
+        bool matchEventsRefs,
+        bool topPlayerStatsRefs,
+      })
     >;
 typedef $$MatchesTableCreateCompanionBuilder =
     MatchesCompanion Function({
@@ -8679,6 +9659,640 @@ typedef $$MatchTeamStatsTableProcessedTableManager =
       MatchTeamStatRow,
       PrefetchHooks Function({bool matchId, bool teamId})
     >;
+typedef $$TopPlayerStatsTableCreateCompanionBuilder =
+    TopPlayerStatsCompanion Function({
+      Value<int> id,
+      required String competitionId,
+      Value<String?> seasonId,
+      required String statType,
+      required String playerId,
+      Value<String?> teamId,
+      required String playerName,
+      required int rank,
+      required double statValue,
+      Value<double?> subStatValue,
+      required DateTime updatedAtUtc,
+    });
+typedef $$TopPlayerStatsTableUpdateCompanionBuilder =
+    TopPlayerStatsCompanion Function({
+      Value<int> id,
+      Value<String> competitionId,
+      Value<String?> seasonId,
+      Value<String> statType,
+      Value<String> playerId,
+      Value<String?> teamId,
+      Value<String> playerName,
+      Value<int> rank,
+      Value<double> statValue,
+      Value<double?> subStatValue,
+      Value<DateTime> updatedAtUtc,
+    });
+
+final class $$TopPlayerStatsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $TopPlayerStatsTable, TopPlayerStatRow> {
+  $$TopPlayerStatsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $CompetitionsTable _competitionIdTable(_$AppDatabase db) =>
+      db.competitions.createAlias(
+        $_aliasNameGenerator(
+          db.topPlayerStats.competitionId,
+          db.competitions.id,
+        ),
+      );
+
+  $$CompetitionsTableProcessedTableManager get competitionId {
+    final $_column = $_itemColumn<String>('competition_id')!;
+
+    final manager = $$CompetitionsTableTableManager(
+      $_db,
+      $_db.competitions,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_competitionIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $PlayersTable _playerIdTable(_$AppDatabase db) =>
+      db.players.createAlias(
+        $_aliasNameGenerator(db.topPlayerStats.playerId, db.players.id),
+      );
+
+  $$PlayersTableProcessedTableManager get playerId {
+    final $_column = $_itemColumn<String>('player_id')!;
+
+    final manager = $$PlayersTableTableManager(
+      $_db,
+      $_db.players,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_playerIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $TeamsTable _teamIdTable(_$AppDatabase db) => db.teams.createAlias(
+    $_aliasNameGenerator(db.topPlayerStats.teamId, db.teams.id),
+  );
+
+  $$TeamsTableProcessedTableManager? get teamId {
+    final $_column = $_itemColumn<String>('team_id');
+    if ($_column == null) return null;
+    final manager = $$TeamsTableTableManager(
+      $_db,
+      $_db.teams,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_teamIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$TopPlayerStatsTableFilterComposer
+    extends Composer<_$AppDatabase, $TopPlayerStatsTable> {
+  $$TopPlayerStatsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get seasonId => $composableBuilder(
+    column: $table.seasonId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get statType => $composableBuilder(
+    column: $table.statType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get playerName => $composableBuilder(
+    column: $table.playerName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rank => $composableBuilder(
+    column: $table.rank,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get statValue => $composableBuilder(
+    column: $table.statValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get subStatValue => $composableBuilder(
+    column: $table.subStatValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAtUtc => $composableBuilder(
+    column: $table.updatedAtUtc,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$CompetitionsTableFilterComposer get competitionId {
+    final $$CompetitionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.competitionId,
+      referencedTable: $db.competitions,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CompetitionsTableFilterComposer(
+            $db: $db,
+            $table: $db.competitions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PlayersTableFilterComposer get playerId {
+    final $$PlayersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.playerId,
+      referencedTable: $db.players,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlayersTableFilterComposer(
+            $db: $db,
+            $table: $db.players,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TeamsTableFilterComposer get teamId {
+    final $$TeamsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.teamId,
+      referencedTable: $db.teams,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TeamsTableFilterComposer(
+            $db: $db,
+            $table: $db.teams,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TopPlayerStatsTableOrderingComposer
+    extends Composer<_$AppDatabase, $TopPlayerStatsTable> {
+  $$TopPlayerStatsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get seasonId => $composableBuilder(
+    column: $table.seasonId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get statType => $composableBuilder(
+    column: $table.statType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get playerName => $composableBuilder(
+    column: $table.playerName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get rank => $composableBuilder(
+    column: $table.rank,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get statValue => $composableBuilder(
+    column: $table.statValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get subStatValue => $composableBuilder(
+    column: $table.subStatValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAtUtc => $composableBuilder(
+    column: $table.updatedAtUtc,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$CompetitionsTableOrderingComposer get competitionId {
+    final $$CompetitionsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.competitionId,
+      referencedTable: $db.competitions,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CompetitionsTableOrderingComposer(
+            $db: $db,
+            $table: $db.competitions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PlayersTableOrderingComposer get playerId {
+    final $$PlayersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.playerId,
+      referencedTable: $db.players,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlayersTableOrderingComposer(
+            $db: $db,
+            $table: $db.players,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TeamsTableOrderingComposer get teamId {
+    final $$TeamsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.teamId,
+      referencedTable: $db.teams,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TeamsTableOrderingComposer(
+            $db: $db,
+            $table: $db.teams,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TopPlayerStatsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TopPlayerStatsTable> {
+  $$TopPlayerStatsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get seasonId =>
+      $composableBuilder(column: $table.seasonId, builder: (column) => column);
+
+  GeneratedColumn<String> get statType =>
+      $composableBuilder(column: $table.statType, builder: (column) => column);
+
+  GeneratedColumn<String> get playerName => $composableBuilder(
+    column: $table.playerName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get rank =>
+      $composableBuilder(column: $table.rank, builder: (column) => column);
+
+  GeneratedColumn<double> get statValue =>
+      $composableBuilder(column: $table.statValue, builder: (column) => column);
+
+  GeneratedColumn<double> get subStatValue => $composableBuilder(
+    column: $table.subStatValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAtUtc => $composableBuilder(
+    column: $table.updatedAtUtc,
+    builder: (column) => column,
+  );
+
+  $$CompetitionsTableAnnotationComposer get competitionId {
+    final $$CompetitionsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.competitionId,
+      referencedTable: $db.competitions,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CompetitionsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.competitions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PlayersTableAnnotationComposer get playerId {
+    final $$PlayersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.playerId,
+      referencedTable: $db.players,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlayersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.players,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$TeamsTableAnnotationComposer get teamId {
+    final $$TeamsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.teamId,
+      referencedTable: $db.teams,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TeamsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.teams,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TopPlayerStatsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TopPlayerStatsTable,
+          TopPlayerStatRow,
+          $$TopPlayerStatsTableFilterComposer,
+          $$TopPlayerStatsTableOrderingComposer,
+          $$TopPlayerStatsTableAnnotationComposer,
+          $$TopPlayerStatsTableCreateCompanionBuilder,
+          $$TopPlayerStatsTableUpdateCompanionBuilder,
+          (TopPlayerStatRow, $$TopPlayerStatsTableReferences),
+          TopPlayerStatRow,
+          PrefetchHooks Function({
+            bool competitionId,
+            bool playerId,
+            bool teamId,
+          })
+        > {
+  $$TopPlayerStatsTableTableManager(
+    _$AppDatabase db,
+    $TopPlayerStatsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer:
+              () => $$TopPlayerStatsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer:
+              () =>
+                  $$TopPlayerStatsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer:
+              () => $$TopPlayerStatsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> competitionId = const Value.absent(),
+                Value<String?> seasonId = const Value.absent(),
+                Value<String> statType = const Value.absent(),
+                Value<String> playerId = const Value.absent(),
+                Value<String?> teamId = const Value.absent(),
+                Value<String> playerName = const Value.absent(),
+                Value<int> rank = const Value.absent(),
+                Value<double> statValue = const Value.absent(),
+                Value<double?> subStatValue = const Value.absent(),
+                Value<DateTime> updatedAtUtc = const Value.absent(),
+              }) => TopPlayerStatsCompanion(
+                id: id,
+                competitionId: competitionId,
+                seasonId: seasonId,
+                statType: statType,
+                playerId: playerId,
+                teamId: teamId,
+                playerName: playerName,
+                rank: rank,
+                statValue: statValue,
+                subStatValue: subStatValue,
+                updatedAtUtc: updatedAtUtc,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String competitionId,
+                Value<String?> seasonId = const Value.absent(),
+                required String statType,
+                required String playerId,
+                Value<String?> teamId = const Value.absent(),
+                required String playerName,
+                required int rank,
+                required double statValue,
+                Value<double?> subStatValue = const Value.absent(),
+                required DateTime updatedAtUtc,
+              }) => TopPlayerStatsCompanion.insert(
+                id: id,
+                competitionId: competitionId,
+                seasonId: seasonId,
+                statType: statType,
+                playerId: playerId,
+                teamId: teamId,
+                playerName: playerName,
+                rank: rank,
+                statValue: statValue,
+                subStatValue: subStatValue,
+                updatedAtUtc: updatedAtUtc,
+              ),
+          withReferenceMapper:
+              (p0) =>
+                  p0
+                      .map(
+                        (e) => (
+                          e.readTable(table),
+                          $$TopPlayerStatsTableReferences(db, table, e),
+                        ),
+                      )
+                      .toList(),
+          prefetchHooksCallback: ({
+            competitionId = false,
+            playerId = false,
+            teamId = false,
+          }) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                T extends TableManagerState<
+                  dynamic,
+                  dynamic,
+                  dynamic,
+                  dynamic,
+                  dynamic,
+                  dynamic,
+                  dynamic,
+                  dynamic,
+                  dynamic,
+                  dynamic,
+                  dynamic
+                >
+              >(state) {
+                if (competitionId) {
+                  state =
+                      state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.competitionId,
+                            referencedTable: $$TopPlayerStatsTableReferences
+                                ._competitionIdTable(db),
+                            referencedColumn:
+                                $$TopPlayerStatsTableReferences
+                                    ._competitionIdTable(db)
+                                    .id,
+                          )
+                          as T;
+                }
+                if (playerId) {
+                  state =
+                      state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.playerId,
+                            referencedTable: $$TopPlayerStatsTableReferences
+                                ._playerIdTable(db),
+                            referencedColumn:
+                                $$TopPlayerStatsTableReferences
+                                    ._playerIdTable(db)
+                                    .id,
+                          )
+                          as T;
+                }
+                if (teamId) {
+                  state =
+                      state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.teamId,
+                            referencedTable: $$TopPlayerStatsTableReferences
+                                ._teamIdTable(db),
+                            referencedColumn:
+                                $$TopPlayerStatsTableReferences
+                                    ._teamIdTable(db)
+                                    .id,
+                          )
+                          as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$TopPlayerStatsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TopPlayerStatsTable,
+      TopPlayerStatRow,
+      $$TopPlayerStatsTableFilterComposer,
+      $$TopPlayerStatsTableOrderingComposer,
+      $$TopPlayerStatsTableAnnotationComposer,
+      $$TopPlayerStatsTableCreateCompanionBuilder,
+      $$TopPlayerStatsTableUpdateCompanionBuilder,
+      (TopPlayerStatRow, $$TopPlayerStatsTableReferences),
+      TopPlayerStatRow,
+      PrefetchHooks Function({bool competitionId, bool playerId, bool teamId})
+    >;
 typedef $$StandingsRowsTableCreateCompanionBuilder =
     StandingsRowsCompanion Function({
       Value<int> id,
@@ -10229,6 +11843,8 @@ class $AppDatabaseManager {
       $$MatchEventsTableTableManager(_db, _db.matchEvents);
   $$MatchTeamStatsTableTableManager get matchTeamStats =>
       $$MatchTeamStatsTableTableManager(_db, _db.matchTeamStats);
+  $$TopPlayerStatsTableTableManager get topPlayerStats =>
+      $$TopPlayerStatsTableTableManager(_db, _db.topPlayerStats);
   $$StandingsRowsTableTableManager get standingsRows =>
       $$StandingsRowsTableTableManager(_db, _db.standingsRows);
   $$AssetRefsTableTableManager get assetRefs =>

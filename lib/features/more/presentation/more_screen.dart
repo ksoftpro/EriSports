@@ -236,6 +236,10 @@ class _ReportCard extends StatelessWidget {
             Text('Started: ${formatter.format(report.startedAtUtc.toLocal())}'),
             Text('Finished: ${formatter.format(report.finishedAtUtc.toLocal())}'),
             if (report.sourcePath.isNotEmpty) Text('Source: ${report.sourcePath}'),
+            if (report.sourcePath.isEmpty)
+              const Text(
+                'Source path unresolved. On Android, grant "All files access" and ensure folder exists at /storage/emulated/0/daylySport.',
+              ),
             if (report.errorMessage != null)
               Text('Error: ${report.errorMessage!}'),
           ],
