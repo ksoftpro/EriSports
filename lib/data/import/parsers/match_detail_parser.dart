@@ -53,21 +53,69 @@ class MatchDetailParser {
       return null;
     }
 
-    final matchId = _readString(decoded, ['matchId', 'id', 'fixtureId']);
+    final general = _readMap(decoded, ['general']);
+    final summary = _readMap(decoded, ['summary']);
+
+    final matchId =
+        _readString(decoded, ['matchId', 'id', 'fixtureId']) ??
+        _readString(general, ['matchId', 'id', 'fixtureId']) ??
+        _readString(summary, ['matchId', 'id', 'fixtureId']);
     if (matchId == null) {
       return null;
     }
 
-    final events = _parseEvents(decoded, matchId);
-    final stats = _parseStats(decoded, matchId);
-    return MatchDetailParseResult(matchId: matchId, events: events, stats: stats);
+    final homeTeam =
+        _readMap(decoded, ['homeTeam']) ??
+        _readMap(summary, ['homeTeam']) ??
+        _readMap(general, ['homeTeam']);
+    final awayTeam =
+        _readMap(decoded, ['awayTeam']) ??
+        _readMap(summary, ['awayTeam']) ??
+        _readMap(general, ['awayTeam']);
+
+    final homeTeamId =
+        _readString(decoded, ['homeTeamId', 'home_team_id']) ??
+        _readString(homeTeam, ['id', 'teamId', 'team_id']);
+    final awayTeamId =
+        _readString(decoded, ['awayTeamId', 'away_team_id']) ??
+        _readString(awayTeam, ['id', 'teamId', 'team_id']);
+
+    final events = _parseEvents(
+      decoded,
+      matchId,
+      homeTeamId: homeTeamId,
+      awayTeamId: awayTeamId,
+    );
+    final stats = _parseStats(
+      decoded,
+      matchId,
+      homeTeamId: homeTeamId,
+      awayTeamId: awayTeamId,
+    );
+    return MatchDetailParseResult(
+      matchId: matchId,
+      events: events,
+      stats: stats,
+    );
   }
 
   List<ParsedMatchEvent> _parseEvents(
     Map<String, dynamic> root,
-    String matchId,
-  ) {
-    final rawList = _extractList(root, ['events', 'timeline', 'incidents']);
+    String matchId, {
+    required String? homeTeamId,
+    required String? awayTeamId,
+  }) {
+    final rawList = <dynamic>[
+      ..._extractList(root, ['events', 'timeline', 'incidents']),
+      ..._extractListAtPath(root, [
+        'content',
+        'matchFacts',
+        'events',
+        'events',
+      ]),
+      ..._extractListAtPath(root, ['matchFacts', 'events', 'events']),
+    ];
+
     final events = <ParsedMatchEvent>[];
 
     for (final item in rawList) {
@@ -75,13 +123,30 @@ class MatchDetailParser {
         continue;
       }
 
-      final minute = _readInt(item, ['minute', 'time', 'matchMinute']) ?? 0;
-      final type = _readString(item, ['type', 'eventType', 'incidentType']) ??
-          'event';
-      final teamId = _readString(item, ['teamId', 'team_id']);
-      final playerId = _readString(item, ['playerId', 'player_id']);
-      final playerName = _readString(item, ['playerName', 'name']);
-      final detail = _readString(item, ['detail', 'description', 'text']);
+      final minute = _parseMinute(item);
+      final type =
+          _readString(item, ['type', 'eventType', 'incidentType']) ?? 'event';
+
+      var teamId =
+          _readString(item, ['teamId', 'team_id']) ??
+          _readString(_readMap(item, ['team']), ['id', 'teamId', 'team_id']);
+
+      final isHome = _readBool(item, ['isHome', 'homeTeam']);
+      if (teamId == null && isHome != null) {
+        teamId = isHome ? homeTeamId : awayTeamId;
+      }
+
+      final player = _readMap(item, ['player']);
+      final playerId =
+          _readString(item, ['playerId', 'player_id']) ??
+          _readString(player, ['id', 'playerId', 'player_id']);
+      final playerName =
+          _readString(item, ['playerName', 'name', 'participantName']) ??
+          _readString(player, ['name']);
+
+      final detail =
+          _readString(item, ['detail', 'description', 'text', 'assistStr']) ??
+          _readString(_readMap(item, ['assist']), ['name']);
 
       events.add(
         ParsedMatchEvent(
@@ -101,11 +166,17 @@ class MatchDetailParser {
 
   List<ParsedMatchTeamStat> _parseStats(
     Map<String, dynamic> root,
-    String matchId,
-  ) {
+    String matchId, {
+    required String? homeTeamId,
+    required String? awayTeamId,
+  }) {
     final stats = <ParsedMatchTeamStat>[];
 
-    final statsList = _extractList(root, ['stats', 'statistics']);
+    final statsList = <dynamic>[
+      ..._extractList(root, ['stats', 'statistics']),
+      ..._extractListAtPath(root, ['content', 'stats']),
+    ];
+
     for (final stat in statsList) {
       if (stat is! Map<String, dynamic>) {
         continue;
@@ -116,28 +187,38 @@ class MatchDetailParser {
         continue;
       }
 
-      final homeTeamId = _readString(stat, ['homeTeamId', 'home_team_id']);
-      final awayTeamId = _readString(stat, ['awayTeamId', 'away_team_id']);
+      final statHomeTeamId =
+          _readString(stat, ['homeTeamId', 'home_team_id']) ?? homeTeamId;
+      final statAwayTeamId =
+          _readString(stat, ['awayTeamId', 'away_team_id']) ?? awayTeamId;
 
-      final homeValue = _readDouble(stat, ['homeValue', 'home', 'valueHome']);
-      final awayValue = _readDouble(stat, ['awayValue', 'away', 'valueAway']);
+      var homeValue = _readDouble(stat, ['homeValue', 'home', 'valueHome']);
+      var awayValue = _readDouble(stat, ['awayValue', 'away', 'valueAway']);
 
-      if (homeTeamId != null && homeValue != null) {
+      final pair = stat['stats'];
+      if ((homeValue == null || awayValue == null) &&
+          pair is List &&
+          pair.length >= 2) {
+        homeValue ??= _asDouble(pair[0]);
+        awayValue ??= _asDouble(pair[1]);
+      }
+
+      if (statHomeTeamId != null && homeValue != null) {
         stats.add(
           ParsedMatchTeamStat(
             matchId: matchId,
-            teamId: homeTeamId,
+            teamId: statHomeTeamId,
             statKey: key,
             statValue: homeValue,
           ),
         );
       }
 
-      if (awayTeamId != null && awayValue != null) {
+      if (statAwayTeamId != null && awayValue != null) {
         stats.add(
           ParsedMatchTeamStat(
             matchId: matchId,
-            teamId: awayTeamId,
+            teamId: statAwayTeamId,
             statKey: key,
             statValue: awayValue,
           ),
@@ -145,12 +226,73 @@ class MatchDetailParser {
       }
     }
 
+    final periods = _extractListAtPath(root, [
+      'content',
+      'matchFacts',
+      'stats',
+      'Periods',
+    ]);
+    for (final period in periods) {
+      if (period is! Map<String, dynamic>) {
+        continue;
+      }
+
+      final periodStats = _extractList(period, ['stats', 'items']);
+      for (final item in periodStats) {
+        if (item is! Map<String, dynamic>) {
+          continue;
+        }
+
+        final key = _readString(item, [
+          'key',
+          'name',
+          'title',
+          'label',
+          'statKey',
+        ]);
+        if (key == null) {
+          continue;
+        }
+
+        var homeValue = _readDouble(item, ['homeValue', 'home', 'valueHome']);
+        var awayValue = _readDouble(item, ['awayValue', 'away', 'valueAway']);
+
+        final pair = item['stats'];
+        if ((homeValue == null || awayValue == null) &&
+            pair is List &&
+            pair.length >= 2) {
+          homeValue ??= _asDouble(pair[0]);
+          awayValue ??= _asDouble(pair[1]);
+        }
+
+        if (homeTeamId != null && homeValue != null) {
+          stats.add(
+            ParsedMatchTeamStat(
+              matchId: matchId,
+              teamId: homeTeamId,
+              statKey: key,
+              statValue: homeValue,
+            ),
+          );
+        }
+
+        if (awayTeamId != null && awayValue != null) {
+          stats.add(
+            ParsedMatchTeamStat(
+              matchId: matchId,
+              teamId: awayTeamId,
+              statKey: key,
+              statValue: awayValue,
+            ),
+          );
+        }
+      }
+    }
+
     final nested = root['teamStats'];
     if (nested is Map<String, dynamic>) {
       final home = nested['home'];
       final away = nested['away'];
-      final homeTeamId = _readString(root, ['homeTeamId', 'home_team_id']);
-      final awayTeamId = _readString(root, ['awayTeamId', 'away_team_id']);
 
       if (home is Map<String, dynamic> && homeTeamId != null) {
         for (final entry in home.entries) {
@@ -185,7 +327,11 @@ class MatchDetailParser {
       }
     }
 
-    return stats;
+    final deduped = <String, ParsedMatchTeamStat>{};
+    for (final stat in stats) {
+      deduped['${stat.teamId}|${stat.statKey.toLowerCase()}'] = stat;
+    }
+    return deduped.values.toList();
   }
 
   List<dynamic> _extractList(Map<String, dynamic> root, List<String> keys) {
@@ -198,7 +344,40 @@ class MatchDetailParser {
     return const [];
   }
 
-  String? _readString(Map<String, dynamic> map, List<String> keys) {
+  List<dynamic> _extractListAtPath(
+    Map<String, dynamic> root,
+    List<String> path,
+  ) {
+    dynamic current = root;
+    for (final segment in path) {
+      if (current is! Map<String, dynamic>) {
+        return const [];
+      }
+      current = current[segment];
+    }
+    if (current is List) {
+      return current;
+    }
+    return const [];
+  }
+
+  Map<String, dynamic>? _readMap(Map<String, dynamic>? map, List<String> keys) {
+    if (map == null) {
+      return null;
+    }
+    for (final key in keys) {
+      final value = map[key];
+      if (value is Map<String, dynamic>) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  String? _readString(Map<String, dynamic>? map, List<String> keys) {
+    if (map == null) {
+      return null;
+    }
     for (final key in keys) {
       final value = map[key];
       if (value is String && value.trim().isNotEmpty) {
@@ -211,7 +390,73 @@ class MatchDetailParser {
     return null;
   }
 
-  int? _readInt(Map<String, dynamic> map, List<String> keys) {
+  bool? _readBool(Map<String, dynamic>? map, List<String> keys) {
+    if (map == null) {
+      return null;
+    }
+    for (final key in keys) {
+      final value = map[key];
+      if (value is bool) {
+        return value;
+      }
+      if (value is num) {
+        return value != 0;
+      }
+      if (value is String) {
+        final normalized = value.trim().toLowerCase();
+        if (normalized == 'true' || normalized == '1') {
+          return true;
+        }
+        if (normalized == 'false' || normalized == '0') {
+          return false;
+        }
+      }
+    }
+    return null;
+  }
+
+  int _parseMinute(Map<String, dynamic> item) {
+    final direct = _readInt(item, ['minute', 'matchMinute', 'elapsed']);
+    if (direct != null) {
+      return direct;
+    }
+
+    final timeMap = item['time'];
+    if (timeMap is Map<String, dynamic>) {
+      final normal =
+          _asInt(timeMap['minute']) ?? _asInt(timeMap['normalTime']) ?? 0;
+      final added = _asInt(timeMap['addedTime']) ?? 0;
+      if (normal > 0 || added > 0) {
+        return normal + added;
+      }
+    }
+
+    final raw = _readString(item, ['time']);
+    if (raw == null) {
+      return 0;
+    }
+
+    final normalized = raw.replaceAll("'", '').trim();
+    if (normalized.contains('+')) {
+      final parts = normalized.split('+');
+      if (parts.length == 2) {
+        final base = int.tryParse(parts[0].trim()) ?? 0;
+        final added = int.tryParse(parts[1].trim()) ?? 0;
+        return base + added;
+      }
+    }
+
+    final match = RegExp(r'\d+').firstMatch(normalized);
+    if (match == null) {
+      return 0;
+    }
+    return int.tryParse(match.group(0) ?? '') ?? 0;
+  }
+
+  int? _readInt(Map<String, dynamic>? map, List<String> keys) {
+    if (map == null) {
+      return null;
+    }
     for (final key in keys) {
       final value = map[key];
       if (value is int) {
@@ -230,7 +475,10 @@ class MatchDetailParser {
     return null;
   }
 
-  double? _readDouble(Map<String, dynamic> map, List<String> keys) {
+  double? _readDouble(Map<String, dynamic>? map, List<String> keys) {
+    if (map == null) {
+      return null;
+    }
     for (final key in keys) {
       final value = _asDouble(map[key]);
       if (value != null) {
@@ -247,6 +495,19 @@ class MatchDetailParser {
     if (value is String) {
       final cleaned = value.replaceAll('%', '').trim();
       return double.tryParse(cleaned);
+    }
+    return null;
+  }
+
+  int? _asInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      return int.tryParse(value.trim());
     }
     return null;
   }

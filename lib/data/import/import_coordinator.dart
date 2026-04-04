@@ -605,6 +605,21 @@ class ImportCoordinator {
                   updatedAtUtc: now,
                 ),
               );
+
+          final detailPayload =
+              Map<String, dynamic>.from(row)
+                ..putIfAbsent('matchId', () => matchId)
+                ..putIfAbsent('homeTeamId', () => homeTeamId)
+                ..putIfAbsent('awayTeamId', () => awayTeamId);
+
+          final parsedDetail = _matchDetailParser.parse(
+            jsonEncode(detailPayload),
+          );
+          if (parsedDetail != null &&
+              (parsedDetail.events.isNotEmpty ||
+                  parsedDetail.stats.isNotEmpty)) {
+            await _upsertParsedMatchDetail(parsedDetail, now);
+          }
         }
       }
     });
@@ -1330,53 +1345,60 @@ class ImportCoordinator {
     final now = DateTime.now().toUtc();
 
     await database.transaction(() async {
-      await (database.delete(database.matchEvents)
-        ..where((tbl) => tbl.matchId.equals(parsed.matchId))).go();
-      await (database.delete(database.matchTeamStats)
-        ..where((tbl) => tbl.matchId.equals(parsed.matchId))).go();
-
-      for (final event in parsed.events) {
-        if (event.teamId != null) {
-          await _ensureTeam(event.teamId!, now);
-        }
-        if (event.playerId != null) {
-          await _ensurePlayer(
-            event.playerId!,
-            event.playerName,
-            event.teamId,
-            now,
-          );
-        }
-
-        await database
-            .into(database.matchEvents)
-            .insert(
-              MatchEventsCompanion.insert(
-                matchId: event.matchId,
-                minute: event.minute,
-                eventType: event.eventType,
-                teamId: Value(event.teamId),
-                playerId: Value(event.playerId),
-                playerName: Value(event.playerName),
-                detail: Value(event.detail),
-              ),
-            );
-      }
-
-      for (final stat in parsed.stats) {
-        await _ensureTeam(stat.teamId, now);
-        await database
-            .into(database.matchTeamStats)
-            .insert(
-              MatchTeamStatsCompanion.insert(
-                matchId: stat.matchId,
-                teamId: stat.teamId,
-                statKey: stat.statKey,
-                statValue: stat.statValue,
-              ),
-            );
-      }
+      await _upsertParsedMatchDetail(parsed, now);
     });
+  }
+
+  Future<void> _upsertParsedMatchDetail(
+    MatchDetailParseResult parsed,
+    DateTime now,
+  ) async {
+    await (database.delete(database.matchEvents)
+      ..where((tbl) => tbl.matchId.equals(parsed.matchId))).go();
+    await (database.delete(database.matchTeamStats)
+      ..where((tbl) => tbl.matchId.equals(parsed.matchId))).go();
+
+    for (final event in parsed.events) {
+      if (event.teamId != null) {
+        await _ensureTeam(event.teamId!, now);
+      }
+      if (event.playerId != null) {
+        await _ensurePlayer(
+          event.playerId!,
+          event.playerName,
+          event.teamId,
+          now,
+        );
+      }
+
+      await database
+          .into(database.matchEvents)
+          .insert(
+            MatchEventsCompanion.insert(
+              matchId: event.matchId,
+              minute: event.minute,
+              eventType: event.eventType,
+              teamId: Value(event.teamId),
+              playerId: Value(event.playerId),
+              playerName: Value(event.playerName),
+              detail: Value(event.detail),
+            ),
+          );
+    }
+
+    for (final stat in parsed.stats) {
+      await _ensureTeam(stat.teamId, now);
+      await database
+          .into(database.matchTeamStats)
+          .insert(
+            MatchTeamStatsCompanion.insert(
+              matchId: stat.matchId,
+              teamId: stat.teamId,
+              statKey: stat.statKey,
+              statValue: stat.statValue,
+            ),
+          );
+    }
   }
 
   Future<void> _ensureCompetition(String competitionId, DateTime now) async {

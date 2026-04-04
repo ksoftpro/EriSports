@@ -9,10 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 class MatchDetailScreen extends ConsumerWidget {
-  const MatchDetailScreen({
-    required this.matchId,
-    super.key,
-  });
+  const MatchDetailScreen({required this.matchId, super.key});
 
   final String matchId;
 
@@ -24,9 +21,9 @@ class MatchDetailScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Match Detail')),
       body: matchAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => const Center(
-          child: Text('Unable to load local match detail.'),
-        ),
+        error:
+            (error, stackTrace) =>
+                const Center(child: Text('Unable to load local match detail.')),
         data: (state) {
           final detail = state.detail;
           final resolver = ref.read(appServicesProvider).assetResolver;
@@ -40,10 +37,9 @@ class MatchDetailScreen extends ConsumerWidget {
               Center(
                 child: Text(
                   detail.competitionName,
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelLarge
-                      ?.copyWith(color: AppColorTokens.textSecondary),
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: AppColorTokens.textSecondary,
+                  ),
                 ),
               ),
               const SizedBox(height: 6),
@@ -62,7 +58,9 @@ class MatchDetailScreen extends ConsumerWidget {
                       resolver,
                       detail.match.homeTeamId,
                       detail.homeTeamName,
-                      onTap: () => context.push('/team/${detail.match.homeTeamId}'),
+                      onTap:
+                          () =>
+                              context.push('/team/${detail.match.homeTeamId}'),
                     ),
                   ),
                   Padding(
@@ -78,7 +76,9 @@ class MatchDetailScreen extends ConsumerWidget {
                       resolver,
                       detail.match.awayTeamId,
                       detail.awayTeamName,
-                      onTap: () => context.push('/team/${detail.match.awayTeamId}'),
+                      onTap:
+                          () =>
+                              context.push('/team/${detail.match.awayTeamId}'),
                     ),
                   ),
                 ],
@@ -98,18 +98,20 @@ class MatchDetailScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              if (state.stats.isNotEmpty)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Stats',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Stats',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      if (state.stats.isEmpty)
+                        const Text('No local stats available for this match.')
+                      else
                         ...state.stats.map(
                           (item) => Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
@@ -145,23 +147,27 @@ class MatchDetailScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
+              ),
               const SizedBox(height: 8),
-              if (state.events.isNotEmpty)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Timeline',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Timeline',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      if (state.events.isEmpty)
+                        const Text(
+                          'No local timeline events available for this match.',
+                        )
+                      else
                         ...state.events.map(
                           (event) => Padding(
                             padding: const EdgeInsets.symmetric(vertical: 5),
@@ -182,29 +188,32 @@ class MatchDetailScreen extends ConsumerWidget {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        _prettifyEventType(event.event.eventType),
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                            ),
+                                        _prettifyEventType(
+                                          event.event.eventType,
+                                        ),
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodyMedium?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                       if (event.event.playerName != null)
                                         Text(event.event.playerName!),
                                       if (event.teamName != null)
                                         Text(
                                           event.teamName!,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelMedium,
+                                          style:
+                                              Theme.of(
+                                                context,
+                                              ).textTheme.labelMedium,
                                         ),
                                       if (event.event.detail != null)
                                         Text(
                                           event.event.detail!,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall,
+                                          style:
+                                              Theme.of(
+                                                context,
+                                              ).textTheme.bodySmall,
                                         ),
                                     ],
                                   ),
@@ -213,10 +222,10 @@ class MatchDetailScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
+              ),
               const SizedBox(height: 8),
               const Card(
                 child: Padding(
@@ -269,12 +278,7 @@ class MatchDetailScreen extends ConsumerWidget {
   Widget _meta(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          Expanded(child: Text(label)),
-          Text(value),
-        ],
-      ),
+      child: Row(children: [Expanded(child: Text(label)), Text(value)]),
     );
   }
 
@@ -310,7 +314,10 @@ class MatchDetailScreen extends ConsumerWidget {
         .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}')
         .split(' ')
         .where((part) => part.trim().isNotEmpty)
-        .map((part) => '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}')
+        .map(
+          (part) =>
+              '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+        )
         .join(' ');
   }
 
