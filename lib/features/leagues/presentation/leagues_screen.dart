@@ -18,14 +18,12 @@ class LeaguesScreen extends ConsumerWidget {
     return SafeArea(
       child: leaguesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => const Center(
-          child: Text('Unable to load local competitions.'),
-        ),
+        error:
+            (error, stackTrace) =>
+                const Center(child: Text('Unable to load local competitions.')),
         data: (leagues) {
           if (leagues.isEmpty) {
-            return const Center(
-              child: Text('No competitions imported yet.'),
-            );
+            return const Center(child: Text('No competitions imported yet.'));
           }
 
           return ListView(
@@ -64,7 +62,7 @@ class _LeagueTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      onTap: () => context.push('/standings/$leagueId'),
+      onTap: () => context.push('/league/$leagueId'),
       leading: EntityBadge(
         entityId: leagueId,
         type: SportsAssetType.leagues,
@@ -72,7 +70,10 @@ class _LeagueTile extends StatelessWidget {
         size: 22,
       ),
       title: Text(name, style: Theme.of(context).textTheme.bodyLarge),
-      subtitle: Text(country ?? '', style: Theme.of(context).textTheme.labelMedium),
+      subtitle: Text(
+        country ?? '',
+        style: Theme.of(context).textTheme.labelMedium,
+      ),
       trailing: const Icon(Icons.chevron_right),
     );
   }

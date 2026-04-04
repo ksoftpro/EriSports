@@ -177,6 +177,33 @@ class StandingsTableView {
   final String teamId;
 }
 
+class TopStatsCompetitionView {
+  const TopStatsCompetitionView({
+    required this.competitionId,
+    required this.competitionName,
+  });
+
+  final String competitionId;
+  final String competitionName;
+}
+
+class TopStatCategoryView {
+  const TopStatCategoryView({required this.statType, required this.entryCount});
+
+  final String statType;
+  final int entryCount;
+}
+
+class TopPlayerLeaderboardEntryView {
+  const TopPlayerLeaderboardEntryView({
+    required this.stat,
+    required this.teamName,
+  });
+
+  final TopPlayerStatRow stat;
+  final String? teamName;
+}
+
 class MatchDetailView {
   const MatchDetailView({
     required this.match,
@@ -481,6 +508,88 @@ class AppDatabase extends _$AppDatabase {
   Future<List<String>> readAllCompetitionIds() async {
     final rows = await select(competitions).get();
     return rows.map((row) => row.id).toList(growable: false);
+  }
+
+  Future<List<TopStatsCompetitionView>> readTopStatsCompetitions() async {
+    final rows =
+        await customSelect('''
+      SELECT DISTINCT
+        t.competition_id AS competition_id,
+        COALESCE(c.name, t.competition_id) AS competition_name,
+        COALESCE(c.display_order, 9999) AS display_order
+      FROM top_player_stats t
+      LEFT JOIN competitions c ON c.id = t.competition_id
+      ORDER BY display_order ASC, competition_name ASC
+      ''').get();
+
+    return rows
+        .map(
+          (row) => TopStatsCompetitionView(
+            competitionId: row.data['competition_id'] as String,
+            competitionName: row.data['competition_name'] as String,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<List<TopStatCategoryView>> readTopStatCategories(
+    String competitionId,
+  ) async {
+    final rows =
+        await customSelect(
+          '''
+      SELECT
+        stat_type,
+        COUNT(*) AS entry_count
+      FROM top_player_stats
+      WHERE competition_id = ?
+      GROUP BY stat_type
+      ORDER BY MIN(rank) ASC, stat_type ASC
+      ''',
+          variables: [Variable.withString(competitionId)],
+        ).get();
+
+    return rows
+        .map(
+          (row) => TopStatCategoryView(
+            statType: row.data['stat_type'] as String,
+            entryCount: row.data['entry_count'] as int,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<List<TopPlayerLeaderboardEntryView>> readTopPlayersForCategory(
+    String competitionId,
+    String statType, {
+    int limit = 40,
+  }) async {
+    final teamAlias = alias(teams, 'top_stat_team');
+    final query =
+        select(topPlayerStats).join([
+            leftOuterJoin(
+              teamAlias,
+              teamAlias.id.equalsExp(topPlayerStats.teamId),
+            ),
+          ])
+          ..where(topPlayerStats.competitionId.equals(competitionId))
+          ..where(topPlayerStats.statType.equals(statType))
+          ..orderBy([
+            OrderingTerm.asc(topPlayerStats.rank),
+            OrderingTerm.desc(topPlayerStats.statValue),
+            OrderingTerm.asc(topPlayerStats.playerName),
+          ])
+          ..limit(limit);
+
+    final rows = await query.get();
+    return rows
+        .map(
+          (row) => TopPlayerLeaderboardEntryView(
+            stat: row.readTable(topPlayerStats),
+            teamName: row.readTableOrNull(teamAlias)?.name,
+          ),
+        )
+        .toList(growable: false);
   }
 
   Future<List<StandingsTableView>> readStandingsTableView(

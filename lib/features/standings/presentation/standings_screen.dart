@@ -8,24 +8,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 class StandingsScreen extends ConsumerWidget {
-  const StandingsScreen({
-    required this.competitionId,
-    super.key,
-  });
+  const StandingsScreen({required this.competitionId, super.key});
 
   final String competitionId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final standingsAsync = ref.watch(standingsProvider(competitionId));
+    final encodedCompetitionId = Uri.encodeQueryComponent(competitionId);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Standings')),
+      appBar: AppBar(
+        title: const Text('Standings'),
+        actions: [
+          IconButton(
+            tooltip: 'Player stats',
+            onPressed:
+                () => context.push(
+                  '/player-stats?competitionId=$encodedCompetitionId',
+                ),
+            icon: const Icon(Icons.leaderboard),
+          ),
+        ],
+      ),
       body: standingsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => const Center(
-          child: Text('Unable to load local standings data.'),
-        ),
+        error:
+            (error, stackTrace) => const Center(
+              child: Text('Unable to load local standings data.'),
+            ),
         data: (state) {
           final resolver = ref.read(appServicesProvider).assetResolver;
 
@@ -52,8 +63,11 @@ class StandingsScreen extends ConsumerWidget {
               Expanded(
                 child: ListView.separated(
                   itemCount: state.rows.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(height: 1, color: AppColorTokens.border),
+                  separatorBuilder:
+                      (_, __) => const Divider(
+                        height: 1,
+                        color: AppColorTokens.border,
+                      ),
                   itemBuilder: (context, index) {
                     final item = state.rows[index];
                     return _StandingsRow(
@@ -85,10 +99,9 @@ class _StandingsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context)
-        .textTheme
-        .labelMedium
-        ?.copyWith(color: AppColorTokens.textSecondary);
+    final style = Theme.of(
+      context,
+    ).textTheme.labelMedium?.copyWith(color: AppColorTokens.textSecondary);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
@@ -96,12 +109,30 @@ class _StandingsHeader extends StatelessWidget {
         children: [
           SizedBox(width: 24, child: Text('#', style: style)),
           const Expanded(child: Text('Team')),
-          SizedBox(width: 30, child: Text('P', style: style, textAlign: TextAlign.right)),
-          SizedBox(width: 30, child: Text('W', style: style, textAlign: TextAlign.right)),
-          SizedBox(width: 30, child: Text('D', style: style, textAlign: TextAlign.right)),
-          SizedBox(width: 30, child: Text('L', style: style, textAlign: TextAlign.right)),
-          SizedBox(width: 36, child: Text('GD', style: style, textAlign: TextAlign.right)),
-          SizedBox(width: 36, child: Text('Pts', style: style, textAlign: TextAlign.right)),
+          SizedBox(
+            width: 30,
+            child: Text('P', style: style, textAlign: TextAlign.right),
+          ),
+          SizedBox(
+            width: 30,
+            child: Text('W', style: style, textAlign: TextAlign.right),
+          ),
+          SizedBox(
+            width: 30,
+            child: Text('D', style: style, textAlign: TextAlign.right),
+          ),
+          SizedBox(
+            width: 30,
+            child: Text('L', style: style, textAlign: TextAlign.right),
+          ),
+          SizedBox(
+            width: 36,
+            child: Text('GD', style: style, textAlign: TextAlign.right),
+          ),
+          SizedBox(
+            width: 36,
+            child: Text('Pts', style: style, textAlign: TextAlign.right),
+          ),
         ],
       ),
     );
@@ -146,10 +177,7 @@ class _StandingsRow extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Row(
           children: [
-            SizedBox(
-              width: 24,
-              child: Text('$position', style: statStyle),
-            ),
+            SizedBox(width: 24, child: Text('$position', style: statStyle)),
             Expanded(
               child: Row(
                 children: [
@@ -190,11 +218,7 @@ class _StandingsRow extends StatelessWidget {
   Widget _statCell(int value, TextStyle? style, {double width = 30}) {
     return SizedBox(
       width: width,
-      child: Text(
-        '$value',
-        textAlign: TextAlign.right,
-        style: style,
-      ),
+      child: Text('$value', textAlign: TextAlign.right, style: style),
     );
   }
 }

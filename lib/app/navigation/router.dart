@@ -1,14 +1,14 @@
 import 'package:eri_sports/app/navigation/app_shell.dart';
 import 'package:eri_sports/features/bookmarks/presentation/bookmarks_screen.dart';
 import 'package:eri_sports/features/home/presentation/home_screen.dart';
+import 'package:eri_sports/features/leagues/presentation/league_overview_screen.dart';
 import 'package:eri_sports/features/leagues/presentation/leagues_screen.dart';
 import 'package:eri_sports/features/match_detail/presentation/match_detail_screen.dart';
 import 'package:eri_sports/features/more/presentation/more_screen.dart';
 import 'package:eri_sports/features/player/presentation/player_screen.dart';
+import 'package:eri_sports/features/player_stats/presentation/player_stats_screen.dart';
 import 'package:eri_sports/features/search/presentation/search_screen.dart';
-import 'package:eri_sports/features/standings/presentation/standings_screen.dart';
 import 'package:eri_sports/features/team/presentation/team_screen.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -17,16 +17,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: '/home',
     routes: [
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) =>
-            AppShell(navigationShell: navigationShell),
+        builder:
+            (context, state, navigationShell) =>
+                AppShell(navigationShell: navigationShell),
         branches: [
           StatefulShellBranch(
             routes: [
               GoRoute(
                 path: '/home',
                 name: 'home',
-                pageBuilder: (context, state) =>
-                    const NoTransitionPage(child: HomeScreen()),
+                pageBuilder:
+                    (context, state) =>
+                        const NoTransitionPage(child: HomeScreen()),
               ),
             ],
           ),
@@ -35,8 +37,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/leagues',
                 name: 'leagues',
-                pageBuilder: (context, state) =>
-                    const NoTransitionPage(child: LeaguesScreen()),
+                pageBuilder:
+                    (context, state) =>
+                        const NoTransitionPage(child: LeaguesScreen()),
               ),
             ],
           ),
@@ -45,8 +48,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/search',
                 name: 'search',
-                pageBuilder: (context, state) =>
-                    const NoTransitionPage(child: SearchScreen()),
+                pageBuilder:
+                    (context, state) =>
+                        const NoTransitionPage(child: SearchScreen()),
               ),
             ],
           ),
@@ -55,8 +59,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/bookmarks',
                 name: 'bookmarks',
-                pageBuilder: (context, state) =>
-                    const NoTransitionPage(child: BookmarksScreen()),
+                pageBuilder:
+                    (context, state) =>
+                        const NoTransitionPage(child: BookmarksScreen()),
               ),
             ],
           ),
@@ -65,8 +70,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/more',
                 name: 'more',
-                pageBuilder: (context, state) =>
-                    const NoTransitionPage(child: MoreScreen()),
+                pageBuilder:
+                    (context, state) =>
+                        const NoTransitionPage(child: MoreScreen()),
               ),
             ],
           ),
@@ -74,53 +80,44 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/league/:leagueId',
-        builder: (context, state) => _DetailPlaceholder(
-          title: 'League ${state.pathParameters['leagueId']}',
-        ),
+        builder:
+            (context, state) => LeagueOverviewScreen(
+              competitionId: state.pathParameters['leagueId']!,
+            ),
       ),
       GoRoute(
         path: '/standings/:competitionId',
-        builder: (context, state) => StandingsScreen(
-          competitionId: state.pathParameters['competitionId']!,
-        ),
+        builder:
+            (context, state) => LeagueOverviewScreen(
+              competitionId: state.pathParameters['competitionId']!,
+            ),
       ),
       GoRoute(
         path: '/match/:matchId',
-        builder: (context, state) => MatchDetailScreen(
-          matchId: state.pathParameters['matchId']!,
-        ),
+        builder:
+            (context, state) =>
+                MatchDetailScreen(matchId: state.pathParameters['matchId']!),
       ),
       GoRoute(
         path: '/team/:teamId',
-        builder: (context, state) => TeamScreen(
-          teamId: state.pathParameters['teamId']!,
-        ),
+        builder:
+            (context, state) =>
+                TeamScreen(teamId: state.pathParameters['teamId']!),
       ),
       GoRoute(
         path: '/player/:playerId',
-        builder: (context, state) => PlayerScreen(
-          playerId: state.pathParameters['playerId']!,
-        ),
+        builder:
+            (context, state) =>
+                PlayerScreen(playerId: state.pathParameters['playerId']!),
+      ),
+      GoRoute(
+        path: '/player-stats',
+        builder:
+            (context, state) => PlayerStatsScreen(
+              initialCompetitionId: state.uri.queryParameters['competitionId'],
+              initialStatType: state.uri.queryParameters['statType'],
+            ),
       ),
     ],
   );
 });
-
-class _DetailPlaceholder extends StatelessWidget {
-  const _DetailPlaceholder({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Text(
-          '$title page is ready for data-bound implementation.',
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-      ),
-    );
-  }
-}

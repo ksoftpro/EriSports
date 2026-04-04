@@ -248,6 +248,11 @@ class ImportCoordinator {
       return true;
     }
 
+    if (lowerName == 'fotmob_full_player_stats.json') {
+      await _importFotmobFullPlayerStatsFile(File(filePath));
+      return true;
+    }
+
     if (lowerName.startsWith('top_standings_full_data') &&
         lowerName.endsWith('.json')) {
       await _importTopStandingsFullFile(File(filePath));
@@ -733,12 +738,8 @@ class ImportCoordinator {
         for (final statEntry in root.entries) {
           final statType = statEntry.key;
           final statRoot = statEntry.value;
-          if (statRoot is! Map<String, dynamic>) {
-            continue;
-          }
-
-          final statsData = statRoot['statsData'];
-          if (statsData is! List) {
+          final statsData = _extractTopPlayerStatRows(statRoot);
+          if (statsData.isEmpty) {
             continue;
           }
 
@@ -794,6 +795,128 @@ class ImportCoordinator {
         }
       }
     });
+  }
+
+  Future<void> _importFotmobFullPlayerStatsFile(File file) async {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map<String, dynamic>) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    await database.transaction(() async {
+      for (final entry in decoded.entries) {
+        final leagueKey = entry.key;
+        final root = entry.value;
+        if (root is! Map<String, dynamic>) {
+          continue;
+        }
+
+        final meta = root['meta'] as Map<String, dynamic>?;
+        final explicitLeagueId = _asString(meta?['leagueId']);
+        final competitionId = _competitionIdFromLeagueKey(
+          leagueKey,
+          explicitId: explicitLeagueId,
+        );
+        final competitionName = _normalizeLeagueName(
+          _asString(meta?['slug']) ?? _competitionNameFromLeagueKey(leagueKey),
+        );
+        final seasonId = _asString(meta?['seasonId']);
+
+        await _ensureCompetitionByName(competitionId, competitionName, now);
+        await (database.delete(database.topPlayerStats)
+          ..where((tbl) => tbl.competitionId.equals(competitionId))).go();
+
+        final stats = root['stats'];
+        if (stats is! Map<String, dynamic>) {
+          continue;
+        }
+
+        for (final statEntry in stats.entries) {
+          final statType = statEntry.key;
+          final statsData = _extractTopPlayerStatRows(statEntry.value);
+          if (statsData.isEmpty) {
+            continue;
+          }
+
+          for (final raw in statsData) {
+            if (raw is! Map<String, dynamic>) {
+              continue;
+            }
+
+            final itemType = _asString(raw['type']);
+            if (itemType != null && itemType != 'players') {
+              continue;
+            }
+
+            final playerId = _asString(raw['id']);
+            final playerName = _asString(raw['name']);
+            if (playerId == null || playerName == null) {
+              continue;
+            }
+
+            final teamId = _asString(raw['teamId']);
+            if (teamId != null) {
+              await _ensureTeam(teamId, now);
+            }
+            await _ensurePlayer(playerId, playerName, teamId, now);
+
+            final statValue = _asDouble(
+              raw['statValue'] is Map
+                  ? (raw['statValue'] as Map)['value']
+                  : raw['statValue'],
+            );
+            if (statValue == null) {
+              continue;
+            }
+
+            final subStatValue = _asDouble(
+              raw['substatValue'] is Map
+                  ? (raw['substatValue'] as Map)['value']
+                  : raw['substatValue'],
+            );
+
+            await database
+                .into(database.topPlayerStats)
+                .insert(
+                  TopPlayerStatsCompanion.insert(
+                    competitionId: competitionId,
+                    seasonId: Value(seasonId),
+                    statType: statType,
+                    playerId: playerId,
+                    teamId: Value(teamId),
+                    playerName: playerName,
+                    rank: _asInt(raw['rank']) ?? 999,
+                    statValue: statValue,
+                    subStatValue: Value(subStatValue),
+                    updatedAtUtc: now,
+                  ),
+                );
+          }
+        }
+      }
+    });
+  }
+
+  List<dynamic> _extractTopPlayerStatRows(dynamic statRoot) {
+    if (statRoot is! Map<String, dynamic>) {
+      return const [];
+    }
+
+    final direct = statRoot['statsData'];
+    if (direct is List) {
+      return direct;
+    }
+
+    final data = statRoot['data'];
+    if (data is Map<String, dynamic>) {
+      final nested = data['statsData'];
+      if (nested is List) {
+        return nested;
+      }
+    }
+
+    return const [];
   }
 
   Future<void> _importFotmobMatchRows({

@@ -4,6 +4,7 @@ import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 
 class MoreScreen extends ConsumerStatefulWidget {
   const MoreScreen({super.key});
@@ -28,8 +29,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     });
 
     final services = ref.read(appServicesProvider);
-    final report =
-        await services.importCoordinator.runLocalImport(triggerType: 'manual');
+    final report = await services.importCoordinator.runLocalImport(
+      triggerType: 'manual',
+    );
     services.assetResolver.invalidateCache();
 
     if (!mounted) {
@@ -76,10 +78,14 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     }
 
     final missingTeamIds = await findMissing(teamIds, SportsAssetType.teams);
-    final missingPlayerIds =
-        await findMissing(playerIds, SportsAssetType.players);
-    final missingCompetitionIds =
-        await findMissing(competitionIds, SportsAssetType.leagues);
+    final missingPlayerIds = await findMissing(
+      playerIds,
+      SportsAssetType.players,
+    );
+    final missingCompetitionIds = await findMissing(
+      competitionIds,
+      SportsAssetType.leagues,
+    );
 
     if (!mounted) {
       return;
@@ -109,11 +115,19 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
           Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 12),
           FilledButton.icon(
+            onPressed: () => context.push('/player-stats'),
+            icon: const Icon(Icons.leaderboard),
+            label: const Text('Open offline player leaderboards'),
+          ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
             onPressed: _isRefreshing ? null : _runManualImport,
             icon: const Icon(Icons.sync),
-            label: Text(_isRefreshing
-                ? 'Scanning local files...'
-                : 'Re-scan daylySport folder'),
+            label: Text(
+              _isRefreshing
+                  ? 'Scanning local files...'
+                  : 'Re-scan daylySport folder',
+            ),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
@@ -130,7 +144,10 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
           if (_manualReport != null)
             Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: _ReportCard(title: 'Manual import', report: _manualReport!),
+              child: _ReportCard(
+                title: 'Manual import',
+                report: _manualReport!,
+              ),
             ),
           if (_assetDiagnostics != null)
             Padding(
@@ -174,7 +191,10 @@ class _AssetDiagnosticsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Asset diagnostics', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Asset diagnostics',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
             Text(
               'Teams: ${report.totalTeams - report.missingTeamIds.length}/${report.totalTeams} mapped',
@@ -188,7 +208,10 @@ class _AssetDiagnosticsCard extends StatelessWidget {
             const SizedBox(height: 10),
             _missingPreview('Missing team IDs', report.missingTeamIds),
             _missingPreview('Missing player IDs', report.missingPlayerIds),
-            _missingPreview('Missing competition IDs', report.missingCompetitionIds),
+            _missingPreview(
+              'Missing competition IDs',
+              report.missingCompetitionIds,
+            ),
           ],
         ),
       ),
@@ -234,8 +257,11 @@ class _ReportCard extends StatelessWidget {
             Text('Run ID: ${report.runId}'),
             Text('JSON files discovered: ${report.jsonFileCount}'),
             Text('Started: ${formatter.format(report.startedAtUtc.toLocal())}'),
-            Text('Finished: ${formatter.format(report.finishedAtUtc.toLocal())}'),
-            if (report.sourcePath.isNotEmpty) Text('Source: ${report.sourcePath}'),
+            Text(
+              'Finished: ${formatter.format(report.finishedAtUtc.toLocal())}',
+            ),
+            if (report.sourcePath.isNotEmpty)
+              Text('Source: ${report.sourcePath}'),
             if (report.sourcePath.isEmpty)
               const Text(
                 'Source path unresolved. On Android, grant "All files access" and ensure folder exists at /storage/emulated/0/daylySport.',

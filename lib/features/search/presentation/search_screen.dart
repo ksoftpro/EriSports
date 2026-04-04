@@ -67,14 +67,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
           ] else
             resultsAsync.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, stackTrace) => const ListTile(
-                dense: true,
-                title: Text('Unable to run local search.'),
-              ),
+              loading:
+                  () => const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+              error:
+                  (error, stackTrace) => const ListTile(
+                    dense: true,
+                    title: Text('Unable to run local search.'),
+                  ),
               data: (results) {
                 if (results.teams.isEmpty &&
                     results.players.isEmpty &&
@@ -127,8 +129,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       ...results.competitions.map(
                         (competition) => ListTile(
                           dense: true,
-                          onTap: () =>
-                              context.push('/standings/${competition.id}'),
+                          onTap:
+                              () => context.push('/league/${competition.id}'),
                           leading: EntityBadge(
                             entityId: competition.id,
                             type: SportsAssetType.leagues,
