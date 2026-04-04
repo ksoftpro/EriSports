@@ -1,5 +1,4 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
-import 'package:eri_sports/app/theme/color_tokens.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/player_stats/presentation/player_stats_providers.dart';
@@ -220,11 +219,17 @@ class _TopPanel extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      constraints: const BoxConstraints(minHeight: 104),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColorTokens.border),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1A2430), Color(0xFF0F151D)],
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.65),
+        ),
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.18),
+            Theme.of(context).colorScheme.surface,
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -237,7 +242,7 @@ class _TopPanel extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColorTokens.textSecondary,
+              color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
             ),
           ),
           const SizedBox(height: 10),
@@ -290,7 +295,7 @@ class _CategoryStrip extends StatelessWidget {
             child: Text(
               'Categories',
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: AppColorTokens.textSecondary,
+                color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
               ),
             ),
           ),
@@ -341,9 +346,11 @@ class _LeaderboardRow extends StatelessWidget {
       onTap: () => context.push('/player/${entry.stat.playerId}'),
       child: Ink(
         decoration: BoxDecoration(
-          color: AppColorTokens.surface,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColorTokens.border),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.65),
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -411,7 +418,11 @@ class _LeaderboardRow extends StatelessWidget {
                   Text(
                     statTypeLabel(statType),
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppColorTokens.textSecondary,
+                      color: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.color
+                          ?.withValues(alpha: 0.82),
                     ),
                   ),
                   if (entry.stat.subStatValue != null)
@@ -436,11 +447,12 @@ class _RankPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final color = switch (rank) {
       1 => const Color(0xFFF5B93D),
       2 => const Color(0xFFA8B0BB),
       3 => const Color(0xFFBD7F44),
-      _ => AppColorTokens.surfaceAlt,
+      _ => scheme.secondary,
     };
 
     return Container(
@@ -454,7 +466,7 @@ class _RankPill extends StatelessWidget {
       child: Text(
         '$rank',
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-          color: rank <= 3 ? Colors.black : AppColorTokens.textPrimary,
+          color: rank <= 3 ? Colors.black : scheme.onSecondary,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -477,7 +489,9 @@ class _EmptyStatsState extends StatelessWidget {
           textAlign: TextAlign.center,
           style: Theme.of(
             context,
-          ).textTheme.bodyLarge?.copyWith(color: AppColorTokens.textSecondary),
+          ).textTheme.bodyLarge?.copyWith(
+            color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
+          ),
         ),
       ),
     );

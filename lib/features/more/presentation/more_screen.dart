@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:flutter/material.dart';
@@ -107,6 +108,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
   @override
   Widget build(BuildContext context) {
     final startupReport = ref.watch(startupImportReportProvider);
+    final themeMode = ref.watch(themeModeProvider);
 
     return SafeArea(
       child: ListView(
@@ -114,6 +116,52 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
         children: [
           Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Appearance',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _themeChip(
+                        context: context,
+                        label: 'System',
+                        selected: themeMode == ThemeMode.system,
+                        onTap: () => ref
+                            .read(themeModeProvider.notifier)
+                            .setThemeMode(ThemeMode.system),
+                      ),
+                      _themeChip(
+                        context: context,
+                        label: 'Light',
+                        selected: themeMode == ThemeMode.light,
+                        onTap: () => ref
+                            .read(themeModeProvider.notifier)
+                            .setThemeMode(ThemeMode.light),
+                      ),
+                      _themeChip(
+                        context: context,
+                        label: 'Dark',
+                        selected: themeMode == ThemeMode.dark,
+                        onTap: () => ref
+                            .read(themeModeProvider.notifier)
+                            .setThemeMode(ThemeMode.dark),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
           FilledButton.icon(
             onPressed: () => context.push('/player-stats'),
             icon: const Icon(Icons.leaderboard),
@@ -156,6 +204,19 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _themeChip({
+    required BuildContext context,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
     );
   }
 }

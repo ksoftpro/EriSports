@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:eri_sports/app/theme/color_tokens.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:flutter/material.dart';
 
@@ -28,7 +27,7 @@ class EntityBadge extends StatelessWidget {
         final imageRef = snapshot.data;
 
         if (imageRef == null) {
-          return _fallback();
+          return _fallback(context);
         }
 
         final imageWidget = imageRef.isFile
@@ -57,12 +56,14 @@ class EntityBadge extends StatelessWidget {
     );
   }
 
-  Widget _fallback() {
+  Widget _fallback(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColorTokens.surfaceAlt,
+        color: scheme.secondary,
         shape: isCircular ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: isCircular ? null : BorderRadius.circular(4),
       ),

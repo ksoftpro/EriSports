@@ -1,4 +1,3 @@
-import 'package:eri_sports/app/theme/color_tokens.dart';
 import 'package:flutter/material.dart';
 
 class DenseSectionHeader extends StatelessWidget {
@@ -29,7 +28,7 @@ class DenseSectionHeader extends StatelessWidget {
             TextButton(
               onPressed: onAction,
               style: TextButton.styleFrom(
-                foregroundColor: AppColorTokens.accent,
+                foregroundColor: Theme.of(context).colorScheme.primary,
               ),
               child: Text(actionLabel!),
             ),

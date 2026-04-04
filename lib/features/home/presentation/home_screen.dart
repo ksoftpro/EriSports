@@ -1,23 +1,33 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
-import 'package:eri_sports/app/theme/color_tokens.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:eri_sports/features/home/presentation/home_providers.dart';
-import 'package:eri_sports/shared/widgets/dense_section_header.dart';
+import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:eri_sports/shared/widgets/match_card_compact.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  DateTime _selectedDay = _dayKey(DateTime.now());
+
+  @override
+  Widget build(BuildContext context) {
     final importReport = ref.watch(startupImportReportProvider);
     final homeFeed = ref.watch(homeFeedProvider);
+    final days = _windowDays();
+    final effectiveSelectedDay = days.any((item) => _isSameDay(item, _selectedDay))
+        ? _selectedDay
+        : days[1];
 
     return SafeArea(
       child: homeFeed.when(
@@ -30,15 +40,54 @@ class HomeScreen extends ConsumerWidget {
         ),
         data: (state) {
           final assetResolver = ref.read(appServicesProvider).assetResolver;
+          final dayMatches = state.all
+              .where((item) => _isSameDay(item.match.kickoffUtc.toLocal(), effectiveSelectedDay))
+              .toList(growable: false)
+            ..sort((a, b) => a.match.kickoffUtc.compareTo(b.match.kickoffUtc));
+          final grouped = _groupByCompetition(
+            dayMatches,
+            state.competitionNamesById,
+          );
+
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                  child: Text(
-                    'Matches',
-                    style: Theme.of(context).textTheme.headlineLarge,
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Matches',
+                        style: Theme.of(context).textTheme.headlineLarge,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Live scores and fixtures from your offline feed',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.color
+                                  ?.withValues(alpha: 0.82),
+                            ),
+                      ),
+                    ],
                   ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: _DateStrip(
+                  days: days,
+                  selectedDay: effectiveSelectedDay,
+                  onSelect: (day) {
+                    setState(() {
+                      _selectedDay = day;
+                    });
+                  },
                 ),
               ),
               SliverToBoxAdapter(
@@ -47,74 +96,52 @@ class HomeScreen extends ConsumerWidget {
                   child: _ImportStatusPanel(report: importReport),
                 ),
               ),
-              _buildMatchSection(
-                context: context,
-                title: 'Live Now',
-                actionLabel: 'All',
-                matches: state.live,
-                emptyLabel: 'No live matches in local dataset.',
-                assetResolver: assetResolver,
-              ),
-              _buildMatchSection(
-                context: context,
-                title: 'Upcoming',
-                actionLabel: 'Calendar',
-                matches: state.upcoming,
-                emptyLabel: 'No upcoming fixtures in loaded range.',
-                assetResolver: assetResolver,
-              ),
-              _buildMatchSection(
-                context: context,
-                title: 'Recent',
-                actionLabel: 'Results',
-                matches: state.recent,
-                emptyLabel: 'No recent matches in loaded range.',
-                assetResolver: assetResolver,
-              ),
+              if (state.followed.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                    child: Text(
+                      'Following',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                ),
+                SliverList.list(
+                  children: state.followed
+                      .take(4)
+                      .map((item) => _buildMatchCard(context, item, assetResolver))
+                      .toList(growable: false),
+                ),
+              ],
+              if (grouped.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 22, 16, 8),
+                    child: Text(
+                      'No fixtures for ${DateFormat('EEE, MMM d').format(effectiveSelectedDay)} in loaded data.',
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ),
+                ),
+              for (final section in grouped) ...[
+                SliverToBoxAdapter(
+                  child: _CompetitionHeader(
+                    competitionId: section.competitionId,
+                    competitionName: section.competitionName,
+                    resolver: assetResolver,
+                  ),
+                ),
+                SliverList.list(
+                  children: section.matches
+                      .map((item) => _buildMatchCard(context, item, assetResolver))
+                      .toList(growable: false),
+                ),
+              ],
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
             ],
           );
         },
       ),
-    );
-  }
-
-  Widget _buildMatchSection({
-    required BuildContext context,
-    required String title,
-    required String actionLabel,
-    required List<HomeMatchView> matches,
-    required String emptyLabel,
-    required LocalAssetResolver assetResolver,
-  }) {
-    if (matches.isEmpty) {
-      return SliverList.list(
-        children: [
-          DenseSectionHeader(
-            title: title,
-            actionLabel: actionLabel,
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Text(
-              emptyLabel,
-              style: const TextStyle(color: AppColorTokens.textSecondary),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return SliverList.list(
-      children: [
-        DenseSectionHeader(
-          title: title,
-          actionLabel: actionLabel,
-        ),
-        ...matches
-            .take(6)
-            .map((item) => _buildMatchCard(context, item, assetResolver)),
-      ],
     );
   }
 
@@ -152,6 +179,51 @@ class HomeScreen extends ConsumerWidget {
       awayScore: item.match.awayScore,
     );
   }
+
+  List<DateTime> _windowDays() {
+    final anchor = _dayKey(DateTime.now());
+    return List<DateTime>.generate(
+      6,
+      (index) => anchor.add(Duration(days: index - 1)),
+      growable: false,
+    );
+  }
+
+  static bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  static DateTime _dayKey(DateTime source) {
+    return DateTime(source.year, source.month, source.day);
+  }
+
+  List<_CompetitionSection> _groupByCompetition(
+    List<HomeMatchView> matches,
+    Map<String, String> competitionNames,
+  ) {
+    final grouped = <String, List<HomeMatchView>>{};
+    for (final item in matches) {
+      grouped.putIfAbsent(item.match.competitionId, () => []).add(item);
+    }
+
+    final sections = grouped.entries
+        .map(
+          (entry) => _CompetitionSection(
+            competitionId: entry.key,
+            competitionName: competitionNames[entry.key] ?? 'League',
+            matches: entry.value,
+          ),
+        )
+        .toList(growable: false);
+
+    sections.sort(
+      (a, b) => a.matches.first.match.kickoffUtc.compareTo(
+        b.matches.first.match.kickoffUtc,
+      ),
+    );
+
+    return sections;
+  }
 }
 
 class _ImportStatusPanel extends StatelessWidget {
@@ -163,12 +235,13 @@ class _ImportStatusPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final isSuccess = report.status == 'success';
     final isPartial = report.status == 'partial_success';
+    final scheme = Theme.of(context).colorScheme;
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColorTokens.surface,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColorTokens.border),
+        border: Border.all(color: scheme.outline.withValues(alpha: 0.65)),
       ),
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -184,10 +257,10 @@ class _ImportStatusPanel extends StatelessWidget {
                         : Icons.error,
                 size: 16,
                 color: isSuccess
-                    ? AppColorTokens.success
+                  ? Colors.green
                     : isPartial
-                        ? AppColorTokens.warning
-                        : AppColorTokens.danger,
+                    ? Colors.orange
+                    : scheme.error,
               ),
               const SizedBox(width: 8),
               Text(
@@ -202,16 +275,113 @@ class _ImportStatusPanel extends StatelessWidget {
             style: Theme.of(context)
                 .textTheme
                 .bodyMedium
-                ?.copyWith(color: AppColorTokens.textSecondary),
+                ?.copyWith(
+                  color:
+                      Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
+                ),
           ),
           Text(
             'Discovered JSON files: ${report.jsonFileCount}',
             style: Theme.of(context)
                 .textTheme
                 .bodyMedium
-                ?.copyWith(color: AppColorTokens.textSecondary),
+                ?.copyWith(
+                  color:
+                      Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
+                ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CompetitionSection {
+  const _CompetitionSection({
+    required this.competitionId,
+    required this.competitionName,
+    required this.matches,
+  });
+
+  final String competitionId;
+  final String competitionName;
+  final List<HomeMatchView> matches;
+}
+
+class _DateStrip extends StatelessWidget {
+  const _DateStrip({
+    required this.days,
+    required this.selectedDay,
+    required this.onSelect,
+  });
+
+  final List<DateTime> days;
+  final DateTime selectedDay;
+  final ValueChanged<DateTime> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: days
+              .map(
+                (day) => Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(
+                      '${DateFormat('EEE').format(day)} ${DateFormat('d').format(day)}',
+                    ),
+                    selected: _HomeScreenState._isSameDay(day, selectedDay),
+                    onSelected: (_) => onSelect(day),
+                  ),
+                ),
+              )
+              .toList(growable: false),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompetitionHeader extends StatelessWidget {
+  const _CompetitionHeader({
+    required this.competitionId,
+    required this.competitionName,
+    required this.resolver,
+  });
+
+  final String competitionId;
+  final String competitionName;
+  final LocalAssetResolver resolver;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => context.push('/league/$competitionId'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+        child: Row(
+          children: [
+            EntityBadge(
+              entityId: competitionId,
+              type: SportsAssetType.leagues,
+              resolver: resolver,
+              size: 20,
+              isCircular: false,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                competitionName,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 18),
+          ],
+        ),
       ),
     );
   }

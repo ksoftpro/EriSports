@@ -1,4 +1,3 @@
-import 'package:eri_sports/app/theme/color_tokens.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:flutter/material.dart';
@@ -31,15 +30,17 @@ class MatchCardCompact extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
-          color: AppColorTokens.surface,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColorTokens.border),
+          border: Border.all(color: scheme.outline.withValues(alpha: 0.65)),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -54,14 +55,14 @@ class MatchCardCompact extends StatelessWidget {
                     Text(
                       status,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: AppColorTokens.textSecondary,
+                            color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.8),
                           ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       timeOrMinute,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: AppColorTokens.textPrimary,
+                            color: scheme.onSurface,
                           ),
                     ),
                   ],
@@ -71,7 +72,7 @@ class MatchCardCompact extends StatelessWidget {
                 child: Column(
                   children: [
                     _teamRow(context, homeTeam, homeScore, homeTeamId),
-                    const Divider(height: 12, color: AppColorTokens.border),
+                    Divider(height: 12, color: scheme.outline.withValues(alpha: 0.45)),
                     _teamRow(context, awayTeam, awayScore, awayTeamId),
                   ],
                 ),
@@ -99,7 +100,7 @@ class MatchCardCompact extends StatelessWidget {
                 width: 18,
                 height: 18,
                 decoration: BoxDecoration(
-                  color: AppColorTokens.surfaceAlt,
+                  color: Theme.of(context).colorScheme.secondary,
                   borderRadius: BorderRadius.circular(9),
                 ),
               ),

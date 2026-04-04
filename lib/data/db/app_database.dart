@@ -302,6 +302,39 @@ class AppDatabase extends _$AppDatabase {
     ])).get();
   }
 
+  Future<List<TeamRow>> readTeamsSorted({int? limit}) {
+    final query =
+        (select(teams)..orderBy([(tbl) => OrderingTerm.asc(tbl.name)]));
+    if (limit != null) {
+      query.limit(limit);
+    }
+    return query.get();
+  }
+
+  Future<List<PlayerRow>> readPlayersSorted({int? limit}) {
+    final query =
+        (select(players)..orderBy([(tbl) => OrderingTerm.asc(tbl.name)]));
+    if (limit != null) {
+      query.limit(limit);
+    }
+    return query.get();
+  }
+
+  Future<Map<String, CompetitionRow>> readCompetitionMapByIds(
+    Iterable<String> ids,
+  ) async {
+    final uniqueIds = ids.where((id) => id.trim().isNotEmpty).toSet();
+    if (uniqueIds.isEmpty) {
+      return const {};
+    }
+
+    final rows = await (select(competitions)
+          ..where((tbl) => tbl.id.isIn(uniqueIds.toList(growable: false))))
+        .get();
+
+    return {for (final row in rows) row.id: row};
+  }
+
   Future<TeamRow?> readTeamById(String teamId) {
     return (select(teams)
       ..where((tbl) => tbl.id.equals(teamId))).getSingleOrNull();
