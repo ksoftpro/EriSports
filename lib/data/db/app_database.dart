@@ -655,6 +655,34 @@ class AppDatabase extends _$AppDatabase {
         )
         .toList();
   }
+
+  Future<List<HomeMatchView>> readMatchesForCompetition(
+    String competitionId, {
+    int limit = 160,
+  }) async {
+    final homeTeam = alias(teams, 'league_fixture_home_team');
+    final awayTeam = alias(teams, 'league_fixture_away_team');
+
+    final query =
+        select(matches).join([
+            leftOuterJoin(homeTeam, homeTeam.id.equalsExp(matches.homeTeamId)),
+            leftOuterJoin(awayTeam, awayTeam.id.equalsExp(matches.awayTeamId)),
+          ])
+          ..where(matches.competitionId.equals(competitionId))
+          ..orderBy([OrderingTerm.desc(matches.kickoffUtc)])
+          ..limit(limit);
+
+    final rows = await query.get();
+    return rows
+        .map(
+          (row) => HomeMatchView(
+            match: row.readTable(matches),
+            homeTeamName: row.readTableOrNull(homeTeam)?.name ?? 'Unknown Team',
+            awayTeamName: row.readTableOrNull(awayTeam)?.name ?? 'Unknown Team',
+          ),
+        )
+        .toList(growable: false);
+  }
 }
 
 LazyDatabase _openConnection() {
