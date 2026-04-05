@@ -39,7 +39,7 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
     return DefaultTabController(
       length: 5,
       child: Scaffold(
-        backgroundColor: const Color(0xFFEDEFF6),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: overviewAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stackTrace) => const _LeagueErrorState(),
@@ -197,7 +197,9 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
   Future<void> _showSeasonSheet(List<String> seasons) async {
     final selected = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor:
+          Theme.of(context).bottomSheetTheme.backgroundColor ??
+          Theme.of(context).cardColor,
       builder: (context) {
         return SafeArea(
           child: ListView(
@@ -292,9 +294,11 @@ class _TableTab extends StatelessWidget {
           child: Container(
             margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFE),
+              color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFD9DEEA)),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.72),
+              ),
             ),
             child: Column(
               children: [
@@ -413,8 +417,12 @@ class _FixturesTab extends StatelessWidget {
                           padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
                           child: Text(
                             entry.label,
-                            style: const TextStyle(
-                              color: Color(0xFF5B657D),
+                            style: TextStyle(
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.color
+                                  ?.withValues(alpha: 0.82),
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -657,9 +665,14 @@ class _PlayerStatsTab extends ConsumerWidget {
                             () => context.push('/player/${item.stat.playerId}'),
                         child: Ink(
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF9FAFE),
+                            color: Theme.of(context).cardColor,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFD9DEEA)),
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outline
+                                  .withValues(alpha: 0.72),
+                            ),
                           ),
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -699,8 +712,12 @@ class _PlayerStatsTab extends ConsumerWidget {
                                         item.teamName ?? 'Unknown Team',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Color(0xFF6B7489),
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.color
+                                              ?.withValues(alpha: 0.82),
                                           fontSize: 12,
                                         ),
                                       ),
@@ -781,9 +798,14 @@ class _TeamStatsTab extends StatelessWidget {
                 onTap: () => context.push('/team/${item.teamId}'),
                 child: Ink(
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFE),
+                    color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFD9DEEA)),
+                    border: Border.all(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .outline
+                          .withValues(alpha: 0.72),
+                    ),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -822,8 +844,12 @@ class _TeamStatsTab extends StatelessWidget {
                             ),
                             Text(
                               item.secondary,
-                              style: const TextStyle(
-                                color: Color(0xFF6B7489),
+                              style: TextStyle(
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.color
+                                    ?.withValues(alpha: 0.82),
                                 fontSize: 12,
                               ),
                             ),
@@ -879,7 +905,13 @@ class _NewsTile extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       '${item.source} • $published',
-                      style: const TextStyle(color: Color(0xFF6B7489)),
+                      style: TextStyle(
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.color
+                            ?.withValues(alpha: 0.82),
+                      ),
                     ),
                   ],
                 ),
@@ -890,9 +922,11 @@ class _NewsTile extends StatelessWidget {
       },
       child: Ink(
         decoration: BoxDecoration(
-          color: const Color(0xFFF9FAFE),
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFD9DEEA)),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.72),
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -925,9 +959,9 @@ class _NewsTile extends StatelessWidget {
                   children: [
                     Text(
                       item.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF192033),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -935,16 +969,24 @@ class _NewsTile extends StatelessWidget {
                       item.excerpt,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF56617A),
+                      style: TextStyle(
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.color
+                            ?.withValues(alpha: 0.86),
                         height: 1.25,
                       ),
                     ),
                     const SizedBox(height: 5),
                     Text(
                       '$published • ${item.source}',
-                      style: const TextStyle(
-                        color: Color(0xFF6B7489),
+                      style: TextStyle(
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.color
+                            ?.withValues(alpha: 0.82),
                         fontSize: 12,
                       ),
                     ),
@@ -984,6 +1026,21 @@ class _FilterChipBar extends StatelessWidget {
                 child: ChoiceChip(
                   label: Text(labels[i]),
                   selected: selectedIndex == i,
+                  selectedColor: Theme.of(context).colorScheme.primary,
+                  backgroundColor: Theme.of(context).cardColor,
+                  side: BorderSide(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outline
+                        .withValues(alpha: 0.72),
+                  ),
+                  labelStyle: TextStyle(
+                    color:
+                        selectedIndex == i
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : Theme.of(context).colorScheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
                   onSelected: (_) => onSelected(i),
                 ),
               ),
@@ -1004,13 +1061,22 @@ class _InfoStrip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F5FB),
-        border: Border.all(color: const Color(0xFFD9DEEA)),
+        color: Theme.of(context).cardColor,
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.72),
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         text,
-        style: const TextStyle(color: Color(0xFF54607A), fontSize: 12),
+        style: TextStyle(
+          color: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.color
+              ?.withValues(alpha: 0.88),
+          fontSize: 12,
+        ),
       ),
     );
   }
@@ -1029,8 +1095,12 @@ class _EmptyTabState extends StatelessWidget {
         child: Text(
           message,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Color(0xFF4A546B),
+          style: TextStyle(
+            color: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.color
+                ?.withValues(alpha: 0.9),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1044,14 +1114,18 @@ class _LeagueErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Text(
           'Unable to load this league from local data. Re-scan your offline files and try again.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: Color(0xFF4A546B),
+            color: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.color
+                ?.withValues(alpha: 0.9),
             fontWeight: FontWeight.w600,
           ),
         ),

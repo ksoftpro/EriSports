@@ -213,9 +213,20 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     required bool selected,
     required VoidCallback onTap,
   }) {
+    final scheme = Theme.of(context).colorScheme;
+
     return ChoiceChip(
-      label: Text(label),
+      label: Text(
+        label,
+        style: TextStyle(
+          color: selected ? scheme.onPrimary : scheme.onSurface,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       selected: selected,
+      selectedColor: scheme.primary,
+      backgroundColor: Theme.of(context).cardColor,
+      side: BorderSide(color: scheme.outline.withValues(alpha: 0.72)),
       onSelected: (_) => onTap(),
     );
   }

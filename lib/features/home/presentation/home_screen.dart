@@ -321,6 +321,8 @@ class _DateStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
       child: SingleChildScrollView(
@@ -335,6 +337,15 @@ class _DateStrip extends StatelessWidget {
                       '${DateFormat('EEE').format(day)} ${DateFormat('d').format(day)}',
                     ),
                     selected: _HomeScreenState._isSameDay(day, selectedDay),
+                    selectedColor: scheme.primary,
+                    backgroundColor: Theme.of(context).cardColor,
+                    side: BorderSide(color: scheme.outline.withValues(alpha: 0.7)),
+                    labelStyle: TextStyle(
+                      color: _HomeScreenState._isSameDay(day, selectedDay)
+                          ? scheme.onPrimary
+                          : scheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
                     onSelected: (_) => onSelect(day),
                   ),
                 ),

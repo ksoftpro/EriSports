@@ -184,6 +184,8 @@ class LeagueSegmentedControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Row(
@@ -192,7 +194,7 @@ class LeagueSegmentedControls extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: const Color(0xFFE4E7F0),
+                color: scheme.secondary.withValues(alpha: 0.55),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Row(
@@ -237,25 +239,27 @@ class LeagueSegmentedControls extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFD1D7E5)),
+                border: Border.all(
+                  color: scheme.outline.withValues(alpha: 0.72),
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     _scopeLabel(selectedScope),
-                    style: const TextStyle(
-                      color: Color(0xFF1A2030),
+                    style: TextStyle(
+                      color: scheme.onSurface,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Icon(
+                  Icon(
                     Icons.keyboard_arrow_down_rounded,
                     size: 18,
-                    color: Color(0xFF1A2030),
+                    color: scheme.onSurface,
                   ),
                 ],
               ),
@@ -285,20 +289,20 @@ class LeagueStandingsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const style = TextStyle(
-      color: Color(0xFF717B93),
+    final style = TextStyle(
+      color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.84),
       fontWeight: FontWeight.w700,
       fontSize: 12,
     );
 
     final children = <Widget>[
       const SizedBox(width: 6),
-      const SizedBox(width: 22, child: Text('#', style: style)),
-      const Expanded(child: Text('Team', style: style)),
+      SizedBox(width: 22, child: Text('#', style: style)),
+      Expanded(child: Text('Team', style: style)),
     ];
 
     if (mode == LeagueTableMode.short) {
-      children.addAll(const [
+      children.addAll([
         SizedBox(
           width: 36,
           child: Text('Pl', style: style, textAlign: TextAlign.right),
@@ -313,7 +317,7 @@ class LeagueStandingsHeader extends StatelessWidget {
         ),
       ]);
     } else if (mode == LeagueTableMode.full) {
-      children.addAll(const [
+      children.addAll([
         SizedBox(
           width: 34,
           child: Text('Pl', style: style, textAlign: TextAlign.right),
@@ -348,7 +352,7 @@ class LeagueStandingsHeader extends StatelessWidget {
         ),
       ]);
     } else {
-      children.addAll(const [
+      children.addAll([
         SizedBox(
           width: 110,
           child: Text('Form', style: style, textAlign: TextAlign.center),
@@ -409,6 +413,8 @@ class LeagueStandingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     final children = <Widget>[
       Container(
         width: 4,
@@ -423,8 +429,8 @@ class LeagueStandingsRow extends StatelessWidget {
         width: 16,
         child: Text(
           '$position',
-          style: const TextStyle(
-            color: Color(0xFF2A3142),
+          style: TextStyle(
+            color: scheme.onSurface,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -445,8 +451,8 @@ class LeagueStandingsRow extends StatelessWidget {
                 teamName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF141A28),
+                style: TextStyle(
+                  color: scheme.onSurface,
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -503,7 +509,7 @@ class LeagueStandingsRow extends StatelessWidget {
         text,
         textAlign: TextAlign.right,
         style: TextStyle(
-          color: const Color(0xFF141A28),
+          color: const Color(0xFF1A2335),
           fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
         ),
       ),
@@ -538,10 +544,13 @@ class _FormBar extends StatelessWidget {
     final chars = normalized.split('').take(5).toList(growable: false);
 
     if (chars.isEmpty) {
-      return const Text(
+      return Text(
         'No form',
         textAlign: TextAlign.center,
-        style: TextStyle(color: Color(0xFF69738B), fontSize: 11),
+        style: TextStyle(
+          color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.84),
+          fontSize: 11,
+        ),
       );
     }
 
@@ -599,6 +608,8 @@ class _SegmentedOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Expanded(
       child: InkWell(
         onTap: onTap,
@@ -606,17 +617,14 @@ class _SegmentedOption extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
+            color: isSelected ? Theme.of(context).cardColor : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
           alignment: Alignment.center,
           child: Text(
             label,
             style: TextStyle(
-              color:
-                  isSelected
-                      ? const Color(0xFF151B28)
-                      : const Color(0xFF5E6881),
+              color: isSelected ? scheme.onSurface : scheme.onSurface.withValues(alpha: 0.72),
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),

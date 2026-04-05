@@ -19,6 +19,7 @@ class AppTheme {
     );
 
     return ThemeData(
+      useMaterial3: true,
       brightness: Brightness.light,
       scaffoldBackgroundColor: const Color(0xFFF2F5FC),
       colorScheme: scheme,
@@ -34,11 +35,54 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white,
+        hintStyle: TextStyle(color: scheme.onSurface.withValues(alpha: 0.62)),
+        labelStyle: TextStyle(color: scheme.onSurface.withValues(alpha: 0.8)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: scheme.outline.withValues(alpha: 0.7)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: scheme.primary, width: 1.25),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: scheme.primary,
+          foregroundColor: scheme.onPrimary,
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: scheme.onSurface,
+          side: BorderSide(color: scheme.outline.withValues(alpha: 0.82)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: scheme.primary,
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
       chipTheme: ChipThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: const Color(0xFFEFF3FC),
         selectedColor: const Color(0xFF0E6BFF),
         checkmarkColor: Colors.white,
-        labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+        labelStyle: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+        ),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: scheme.onSurface,
+        unselectedLabelColor: scheme.onSurface.withValues(alpha: 0.68),
+        indicatorColor: scheme.primary,
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: Colors.white,
@@ -52,6 +96,17 @@ class AppTheme {
           }
           return const IconThemeData(color: Color(0xFF6F7A92));
         }),
+      ),
+      listTileTheme: ListTileThemeData(
+        iconColor: scheme.onSurface.withValues(alpha: 0.84),
+        textColor: scheme.onSurface,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: Colors.white,
+        textStyle: TextStyle(color: scheme.onSurface),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.white,
       ),
     );
   }
@@ -70,6 +125,7 @@ class AppTheme {
     );
 
     return ThemeData(
+      useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppColorTokens.base,
       colorScheme: scheme,
@@ -85,11 +141,58 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFF151D28),
+        hintStyle: TextStyle(
+          color: AppColorTokens.textSecondary.withValues(alpha: 0.86),
+        ),
+        labelStyle: TextStyle(
+          color: AppColorTokens.textSecondary.withValues(alpha: 0.86),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: scheme.outline.withValues(alpha: 0.85)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: scheme.primary, width: 1.25),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFF1B5FCC),
+          foregroundColor: Colors.white,
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColorTokens.textPrimary,
+          side: BorderSide(color: scheme.outline.withValues(alpha: 0.9)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColorTokens.accent,
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
       chipTheme: ChipThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: const Color(0xFF202A38),
         selectedColor: const Color(0xFF1E4FA3),
         checkmarkColor: Colors.white,
-        labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+        labelStyle: const TextStyle(
+          fontWeight: FontWeight.w600,
+          color: AppColorTokens.textPrimary,
+        ),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: AppColorTokens.textPrimary,
+        unselectedLabelColor: AppColorTokens.textSecondary,
+        indicatorColor: AppColorTokens.accent,
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColorTokens.surface,
@@ -103,6 +206,16 @@ class AppTheme {
           }
           return const IconThemeData(color: AppColorTokens.textSecondary);
         }),
+      ),
+      listTileTheme: const ListTileThemeData(
+        iconColor: AppColorTokens.textSecondary,
+        textColor: AppColorTokens.textPrimary,
+      ),
+      popupMenuTheme: const PopupMenuThemeData(
+        color: AppColorTokens.surface,
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColorTokens.surface,
       ),
     );
   }

@@ -253,11 +253,22 @@ class _TopPanel extends StatelessWidget {
                   .map((competition) {
                     final isSelected =
                         competition.competitionId == selectedCompetitionId;
+                    final scheme = Theme.of(context).colorScheme;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: ChoiceChip(
                         label: Text(competition.competitionName),
                         selected: isSelected,
+                        selectedColor: scheme.primary,
+                        backgroundColor: Theme.of(context).cardColor,
+                        side: BorderSide(
+                          color: scheme.outline.withValues(alpha: 0.72),
+                        ),
+                        labelStyle: TextStyle(
+                          color:
+                              isSelected ? scheme.onPrimary : scheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
                         onSelected:
                             (_) =>
                                 onSelectCompetition(competition.competitionId),
@@ -306,6 +317,7 @@ class _CategoryStrip extends StatelessWidget {
               children: categories
                   .map((category) {
                     final isSelected = category.statType == selectedStatType;
+                    final scheme = Theme.of(context).colorScheme;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
@@ -313,6 +325,16 @@ class _CategoryStrip extends StatelessWidget {
                           '${statTypeLabel(category.statType)} (${category.entryCount})',
                         ),
                         selected: isSelected,
+                        selectedColor: scheme.primary,
+                        backgroundColor: Theme.of(context).cardColor,
+                        side: BorderSide(
+                          color: scheme.outline.withValues(alpha: 0.72),
+                        ),
+                        labelStyle: TextStyle(
+                          color:
+                              isSelected ? scheme.onPrimary : scheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
                         onSelected: (_) => onSelectCategory(category.statType),
                       ),
                     );
