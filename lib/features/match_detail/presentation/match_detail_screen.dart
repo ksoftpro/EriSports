@@ -1,5 +1,4 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
-import 'package:eri_sports/app/theme/color_tokens.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/features/match_detail/presentation/match_detail_providers.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
@@ -38,7 +37,11 @@ class MatchDetailScreen extends ConsumerWidget {
                 child: Text(
                   detail.competitionName,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: AppColorTokens.textSecondary,
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.color
+                        ?.withValues(alpha: 0.82),
                   ),
                 ),
               ),
@@ -142,7 +145,11 @@ class MatchDetailScreen extends ConsumerWidget {
                                   ],
                                 ),
                                 const SizedBox(height: 4),
-                                _statBar(item.homeValue, item.awayValue),
+                                _statBar(
+                                  context,
+                                  item.homeValue,
+                                  item.awayValue,
+                                ),
                               ],
                             ),
                           ),
@@ -282,7 +289,8 @@ class MatchDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _statBar(double homeValue, double awayValue) {
+  Widget _statBar(BuildContext context, double homeValue, double awayValue) {
+    final scheme = Theme.of(context).colorScheme;
     final total = (homeValue + awayValue).abs();
     final homeRatio = total == 0 ? 0.5 : (homeValue / total);
     final awayRatio = 1 - homeRatio;
@@ -291,11 +299,11 @@ class MatchDetailScreen extends ConsumerWidget {
       children: [
         Expanded(
           flex: (homeRatio * 100).round().clamp(1, 99),
-          child: Container(height: 5, color: AppColorTokens.accent),
+          child: Container(height: 5, color: scheme.primary),
         ),
         Expanded(
           flex: (awayRatio * 100).round().clamp(1, 99),
-          child: Container(height: 5, color: AppColorTokens.surfaceAlt),
+          child: Container(height: 5, color: scheme.secondary),
         ),
       ],
     );

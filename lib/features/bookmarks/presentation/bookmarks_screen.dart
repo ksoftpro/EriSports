@@ -44,7 +44,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen>
             child: Text(_isEditing ? 'Done' : 'Edit'),
           ),
           IconButton(
-            onPressed: () => _showAddSheet(context),
+            onPressed: _showAddSheet,
             icon: const Icon(Icons.add_circle_outline),
             tooltip: 'Add',
           ),
@@ -272,7 +272,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen>
     );
   }
 
-  Future<void> _showAddSheet(BuildContext context) async {
+  Future<void> _showAddSheet() async {
     final dashboard = await ref.read(followingDashboardProvider.future);
     if (!mounted) {
       return;

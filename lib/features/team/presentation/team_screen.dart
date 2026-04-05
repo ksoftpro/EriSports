@@ -202,36 +202,33 @@ class TeamScreen extends ConsumerWidget {
                   padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: Text('No player data imported for this team.'),
                 ),
-              ...groupedPlayers.entries.expand(
-                (entry) => [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                    child: Text(
-                      entry.key,
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
+              for (final entry in groupedPlayers.entries) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  child: Text(
+                    entry.key,
+                    style: Theme.of(context).textTheme.labelLarge,
                   ),
-                  ...entry.value.map(
-                    (player) => ListTile(
-                      dense: true,
-                      onTap: () => context.push('/player/${player.id}'),
-                      leading: EntityBadge(
-                        entityId: player.id,
-                        type: SportsAssetType.players,
-                        resolver: resolver,
-                        size: 26,
-                      ),
-                      title: Text(player.name),
-                      subtitle: Text(
-                        player.jerseyNumber == null
-                            ? 'No jersey number'
-                            : '#${player.jerseyNumber}',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
+                ),
+                for (final player in entry.value)
+                  ListTile(
+                    dense: true,
+                    onTap: () => context.push('/player/${player.id}'),
+                    leading: EntityBadge(
+                      entityId: player.id,
+                      type: SportsAssetType.players,
+                      resolver: resolver,
+                      size: 26,
                     ),
+                    title: Text(player.name),
+                    subtitle: Text(
+                      player.jerseyNumber == null
+                          ? 'No jersey number'
+                          : '#${player.jerseyNumber}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
                   ),
-                ],
-              ),
+              ],
             ],
           );
         },

@@ -1,5 +1,4 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
-import 'package:eri_sports/app/theme/color_tokens.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/features/standings/presentation/standings_providers.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
@@ -39,6 +38,7 @@ class StandingsScreen extends ConsumerWidget {
             ),
         data: (state) {
           final resolver = ref.read(appServicesProvider).assetResolver;
+          final scheme = Theme.of(context).colorScheme;
 
           if (state.rows.isEmpty) {
             return const Center(
@@ -59,15 +59,17 @@ class StandingsScreen extends ConsumerWidget {
                 ),
               ),
               const _StandingsHeader(),
-              const Divider(height: 1, color: AppColorTokens.border),
+              Divider(
+                height: 1,
+                color: scheme.outline.withValues(alpha: 0.7),
+              ),
               Expanded(
                 child: ListView.separated(
                   itemCount: state.rows.length,
-                  separatorBuilder:
-                      (_, __) => const Divider(
-                        height: 1,
-                        color: AppColorTokens.border,
-                      ),
+                  separatorBuilder: (_, __) => Divider(
+                    height: 1,
+                    color: scheme.outline.withValues(alpha: 0.7),
+                  ),
                   itemBuilder: (context, index) {
                     final item = state.rows[index];
                     return _StandingsRow(
@@ -101,7 +103,9 @@ class _StandingsHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = Theme.of(
       context,
-    ).textTheme.labelMedium?.copyWith(color: AppColorTokens.textSecondary);
+    ).textTheme.labelMedium?.copyWith(
+      color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
