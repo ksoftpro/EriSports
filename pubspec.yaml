@@ -74,6 +74,7 @@ flutter:
     - assets/placeholders/
     - assets/teams/
     - assets/players/
+    - assets/player/
     - assets/leagues/
     - assets/banners/
 

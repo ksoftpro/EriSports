@@ -217,6 +217,7 @@ class TeamScreen extends ConsumerWidget {
                     onTap: () => context.push('/player/${player.id}'),
                     leading: EntityBadge(
                       entityId: player.id,
+                      entityName: player.name,
                       type: SportsAssetType.players,
                       resolver: resolver,
                       size: 26,

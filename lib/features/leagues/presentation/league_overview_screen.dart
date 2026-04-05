@@ -689,6 +689,7 @@ class _PlayerStatsTab extends ConsumerWidget {
                                 ),
                                 EntityBadge(
                                   entityId: item.stat.playerId,
+                                  entityName: item.stat.playerName,
                                   type: SportsAssetType.players,
                                   resolver: resolver,
                                   size: 30,

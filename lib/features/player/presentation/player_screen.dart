@@ -50,6 +50,7 @@ class PlayerScreen extends ConsumerWidget {
                   children: [
                     EntityBadge(
                       entityId: state.player.id,
+                      entityName: state.player.name,
                       type: SportsAssetType.players,
                       resolver: resolver,
                       size: 96,

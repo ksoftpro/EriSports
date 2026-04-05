@@ -382,6 +382,7 @@ class _LeaderboardRow extends StatelessWidget {
               const SizedBox(width: 10),
               EntityBadge(
                 entityId: entry.stat.playerId,
+                entityName: entry.stat.playerName,
                 type: SportsAssetType.players,
                 resolver: resolver,
                 size: 34,

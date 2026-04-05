@@ -204,8 +204,38 @@ class MatchDetailScreen extends ConsumerWidget {
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                      if (event.event.playerName != null)
-                                        Text(event.event.playerName!),
+                                      if (event.event.playerName != null ||
+                                          event.event.playerId != null)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 4),
+                                          child: Row(
+                                            children: [
+                                              GestureDetector(
+                                                onTap: event.event.playerId == null
+                                                    ? null
+                                                    : () => context.push(
+                                                          '/player/${event.event.playerId}',
+                                                        ),
+                                                child: EntityBadge(
+                                                  entityId: event.event.playerId ?? '',
+                                                  entityName: event.event.playerName,
+                                                  type: SportsAssetType.players,
+                                                  resolver: resolver,
+                                                  size: 18,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  event.event.playerName ??
+                                                      'Unknown player',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       if (event.teamName != null)
                                         Text(
                                           event.teamName!,

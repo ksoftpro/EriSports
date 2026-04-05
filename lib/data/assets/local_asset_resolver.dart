@@ -37,6 +37,8 @@ class LocalAssetResolver {
   final Map<String, String> _teamBadgePathById = {};
   final Map<String, String> _bundledTeamBadgePathById = {};
   final Map<String, String> _bundledLeagueBadgePathById = {};
+  final Map<String, List<String>> _bundledPlayerPathsById = {};
+  final Map<String, List<String>> _localPlayerPathsById = {};
   final Map<String, ResolvedImageRef?> _resolvedCache = {};
 
   void invalidateCache() {
@@ -49,6 +51,8 @@ class LocalAssetResolver {
     _teamBadgePathById.clear();
     _bundledTeamBadgePathById.clear();
     _bundledLeagueBadgePathById.clear();
+    _bundledPlayerPathsById.clear();
+    _localPlayerPathsById.clear();
     _resolvedCache.clear();
   }
 
@@ -118,6 +122,30 @@ class LocalAssetResolver {
       }
     }
 
+    if (type == SportsAssetType.players) {
+      final localById = _bestPlayerPathById(
+        _localPlayerPathsById,
+        idCandidates,
+        normalizedName,
+      );
+      if (localById != null) {
+        final resolved = ResolvedImageRef.file(localById);
+        _resolvedCache[cacheKey] = resolved;
+        return resolved;
+      }
+
+      final bundledById = _bestPlayerPathById(
+        _bundledPlayerPathsById,
+        idCandidates,
+        normalizedName,
+      );
+      if (bundledById != null) {
+        final resolved = ResolvedImageRef.asset(bundledById);
+        _resolvedCache[cacheKey] = resolved;
+        return resolved;
+      }
+    }
+
     for (final candidateId in idCandidates) {
       final localMatch = _matchPath(
         _localFilesByType[type] ?? const [],
@@ -176,12 +204,17 @@ class LocalAssetResolver {
       final manifestMap = jsonDecode(manifestJson) as Map<String, dynamic>;
 
       for (final type in SportsAssetType.values) {
-        final folder = _folderNameFor(type);
-        final prefix = 'assets/$folder/';
+        final prefixes = _assetPrefixesFor(type);
         final paths = manifestMap.keys
-            .where((path) => path.startsWith(prefix))
-            .toList(growable: false);
+            .where((path) => prefixes.any(path.startsWith))
+            .toSet()
+            .toList(growable: false)
+          ..sort();
         _bundledAssetsByType[type] = paths;
+
+        if (type == SportsAssetType.players) {
+          _indexPlayerAssetPaths(paths, _bundledPlayerPathsById);
+        }
       }
     } catch (_) {
       for (final type in SportsAssetType.values) {
@@ -311,6 +344,10 @@ class LocalAssetResolver {
 
     _localFilesByType[type] = results;
 
+    if (type == SportsAssetType.players) {
+      _indexPlayerAssetPaths(results, _localPlayerPathsById);
+    }
+
     if (type == SportsAssetType.teams) {
       await _ensureTeamManifestLoaded(daylySportDir, results);
     }
@@ -330,6 +367,11 @@ class LocalAssetResolver {
       candidates.addAll([
         Directory(p.join(daylySportDir.path, 'club_badges')),
         Directory(p.join(daylySportDir.path, 'assets', 'club_badges')),
+      ]);
+    } else if (type == SportsAssetType.players) {
+      candidates.addAll([
+        Directory(p.join(daylySportDir.path, 'player')),
+        Directory(p.join(daylySportDir.path, 'assets', 'player')),
       ]);
     }
 
@@ -489,12 +531,117 @@ class LocalAssetResolver {
     return candidates.where((value) => value.trim().isNotEmpty).toList();
   }
 
+  String? _bestPlayerPathById(
+    Map<String, List<String>> indexedPaths,
+    List<String> idCandidates,
+    String normalizedName,
+  ) {
+    for (final candidateId in idCandidates) {
+      final paths = indexedPaths[candidateId];
+      if (paths == null || paths.isEmpty) {
+        continue;
+      }
+
+      final bestPath = _pickBestPlayerPath(paths, normalizedName);
+      if (bestPath != null) {
+        return bestPath;
+      }
+    }
+
+    return null;
+  }
+
+  void _indexPlayerAssetPaths(
+    List<String> paths,
+    Map<String, List<String>> output,
+  ) {
+    output.clear();
+
+    for (final path in paths) {
+      final playerId = _extractPlayerIdFromPath(path);
+      if (playerId == null || playerId.isEmpty) {
+        continue;
+      }
+      output.putIfAbsent(playerId, () => []).add(path);
+    }
+
+    for (final entry in output.entries) {
+      entry.value.sort();
+    }
+  }
+
+  String? _extractPlayerIdFromPath(String path) {
+    final basename = p.basenameWithoutExtension(path).toLowerCase();
+    final trailingDigits = RegExp(r'(\d+)$').firstMatch(basename)?.group(1);
+    if (trailingDigits != null && trailingDigits.isNotEmpty) {
+      return trailingDigits;
+    }
+
+    final matches = RegExp(r'\d+').allMatches(basename).toList(growable: false);
+    if (matches.isEmpty) {
+      return null;
+    }
+
+    // Pick the longest digit token, then the right-most one when lengths tie.
+    matches.sort((a, b) {
+      final lenCompare = b.group(0)!.length.compareTo(a.group(0)!.length);
+      if (lenCompare != 0) {
+        return lenCompare;
+      }
+      return b.start.compareTo(a.start);
+    });
+
+    return matches.first.group(0);
+  }
+
+  String _normalizedPlayerNameFromPath(String path) {
+    final basename = p.basenameWithoutExtension(path);
+    var stem = basename;
+
+    final lowerStem = stem.toLowerCase();
+    if (lowerStem.startsWith('player_')) {
+      stem = stem.substring('player_'.length);
+    } else if (lowerStem.startsWith('players_')) {
+      stem = stem.substring('players_'.length);
+    }
+
+    stem = stem.replaceFirst(RegExp(r'[_-]?\d+$'), '');
+    return _normalizeLookup(stem);
+  }
+
+  String? _pickBestPlayerPath(List<String> paths, String normalizedName) {
+    if (paths.isEmpty) {
+      return null;
+    }
+
+    if (normalizedName.isNotEmpty) {
+      for (final path in paths) {
+        final candidateName = _normalizedPlayerNameFromPath(path);
+        if (candidateName.contains(normalizedName) ||
+            normalizedName.contains(candidateName)) {
+          return path;
+        }
+      }
+    }
+
+    return paths.first;
+  }
+
   String _normalizeLookup(String value) {
     return value
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
         .trim()
         .replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  List<String> _assetPrefixesFor(SportsAssetType type) {
+    final folderName = _folderNameFor(type);
+    final prefixes = <String>{'assets/$folderName/'};
+    if (type == SportsAssetType.players) {
+      prefixes.add('assets/player/');
+    }
+    return prefixes.toList(growable: false);
   }
 
   String _folderNameFor(SportsAssetType type) {

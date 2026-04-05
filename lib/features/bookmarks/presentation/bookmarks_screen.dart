@@ -209,6 +209,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen>
                               children: [
                                 EntityBadge(
                                   entityId: item.player.id,
+                                  entityName: item.player.name,
                                   type: SportsAssetType.players,
                                   resolver: resolver,
                                   size: 34,
@@ -368,6 +369,13 @@ class _AddFollowingSheet extends ConsumerWidget {
                             .contains(player.id);
                         return ListTile(
                           dense: true,
+                          leading: EntityBadge(
+                            entityId: player.id,
+                            entityName: player.name,
+                            type: SportsAssetType.players,
+                            resolver: ref.watch(assetResolverProvider),
+                            size: 22,
+                          ),
                           title: Text(player.name),
                           trailing: Checkbox(
                             value: selected,
