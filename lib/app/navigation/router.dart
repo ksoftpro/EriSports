@@ -35,22 +35,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/leagues',
-                name: 'leagues',
+                path: '/search',
+                name: 'search',
                 pageBuilder:
                     (context, state) =>
-                        const NoTransitionPage(child: LeaguesScreen()),
+                        const NoTransitionPage(child: SearchScreen()),
               ),
             ],
           ),
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/search',
-                name: 'search',
+                path: '/leagues',
+                name: 'leagues',
                 pageBuilder:
                     (context, state) =>
-                        const NoTransitionPage(child: SearchScreen()),
+                        const NoTransitionPage(child: LeaguesScreen()),
               ),
             ],
           ),

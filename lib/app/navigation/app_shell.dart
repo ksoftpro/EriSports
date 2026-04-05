@@ -32,11 +32,14 @@ class AppShell extends StatelessWidget {
           selectedIndex: navigationShell.currentIndex,
           onDestinationSelected: _onDestinationSelected,
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.sports_soccer), label: 'Home'),
+            NavigationDestination(
+              icon: Icon(Icons.confirmation_num_outlined),
+              label: 'Matches',
+            ),
+            NavigationDestination(icon: Icon(Icons.article_outlined), label: 'News'),
             NavigationDestination(icon: Icon(Icons.emoji_events), label: 'Leagues'),
-            NavigationDestination(icon: Icon(Icons.search), label: 'Search'),
             NavigationDestination(icon: Icon(Icons.star_border), label: 'Following'),
-            NavigationDestination(icon: Icon(Icons.tune), label: 'Settings'),
+            NavigationDestination(icon: Icon(Icons.menu), label: 'More'),
           ],
         ),
       ),

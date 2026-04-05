@@ -84,6 +84,7 @@ class PlayerScreen extends ConsumerWidget {
                         onPressed: () => context.push('/team/${state.team!.id}'),
                         icon: EntityBadge(
                           entityId: state.team!.id,
+                          entityName: state.team!.name,
                           type: SportsAssetType.teams,
                           resolver: resolver,
                           size: 20,

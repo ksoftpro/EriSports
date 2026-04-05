@@ -101,6 +101,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen>
                                     children: [
                                       EntityBadge(
                                         entityId: item.team.id,
+                                        entityName: item.team.name,
                                         type: SportsAssetType.teams,
                                         resolver: resolver,
                                         size: 28,
@@ -230,6 +231,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen>
                                           if (item.team != null) ...[
                                             EntityBadge(
                                               entityId: item.team!.id,
+                                              entityName: item.team!.name,
                                               type: SportsAssetType.teams,
                                               resolver: resolver,
                                               size: 14,

@@ -265,6 +265,7 @@ class MatchDetailScreen extends ConsumerWidget {
           children: [
             EntityBadge(
               entityId: teamId,
+              entityName: teamName,
               type: SportsAssetType.teams,
               resolver: resolver,
               size: 44,

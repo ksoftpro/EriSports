@@ -407,6 +407,7 @@ class _LeaderboardRow extends StatelessWidget {
                             onTap: () => context.push('/team/$teamId'),
                             child: EntityBadge(
                               entityId: teamId,
+                              entityName: entry.teamName,
                               type: SportsAssetType.teams,
                               resolver: resolver,
                               size: 16,

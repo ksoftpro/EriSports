@@ -97,6 +97,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           onTap: () => context.push('/team/${team.id}'),
                           leading: EntityBadge(
                             entityId: team.id,
+                            entityName: team.name,
                             type: SportsAssetType.teams,
                             resolver: resolver,
                             size: 22,

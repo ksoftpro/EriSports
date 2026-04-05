@@ -820,6 +820,7 @@ class _TeamStatsTab extends StatelessWidget {
                         ),
                         EntityBadge(
                           entityId: item.teamId,
+                          entityName: item.teamName,
                           type: SportsAssetType.teams,
                           resolver: resolver,
                           size: 24,

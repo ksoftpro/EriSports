@@ -30,47 +30,139 @@ class LocalAssetResolver {
 
   bool _bundleLoaded = false;
   bool _teamManifestLoaded = false;
+  bool _bundleManifestLoaded = false;
+  bool _localScanDisabled = false;
   final Map<SportsAssetType, List<String>> _bundledAssetsByType = {};
   final Map<SportsAssetType, List<String>> _localFilesByType = {};
   final Map<String, String> _teamBadgePathById = {};
+  final Map<String, String> _bundledTeamBadgePathById = {};
+  final Map<String, String> _bundledLeagueBadgePathById = {};
+  final Map<String, ResolvedImageRef?> _resolvedCache = {};
 
   void invalidateCache() {
     _bundleLoaded = false;
     _teamManifestLoaded = false;
+    _bundleManifestLoaded = false;
+    _localScanDisabled = false;
     _bundledAssetsByType.clear();
     _localFilesByType.clear();
     _teamBadgePathById.clear();
+    _bundledTeamBadgePathById.clear();
+    _bundledLeagueBadgePathById.clear();
+    _resolvedCache.clear();
   }
 
   Future<ResolvedImageRef?> resolveByEntityId({
     required SportsAssetType type,
     required String entityId,
   }) async {
+    return resolve(type: type, entityId: entityId);
+  }
+
+  Future<ResolvedImageRef?> resolve({
+    required SportsAssetType type,
+    required String entityId,
+    String? entityName,
+  }) async {
     final id = entityId.trim().toLowerCase();
-    if (id.isEmpty) {
+    final normalizedName = _normalizeLookup(entityName ?? '');
+    if (id.isEmpty && normalizedName.isEmpty) {
       return null;
     }
 
-    await _ensureBundledAssetsLoaded();
-    await _ensureLocalFilesLoaded(type);
+    final cacheKey = '${type.name}|$id|$normalizedName';
+    if (_resolvedCache.containsKey(cacheKey)) {
+      return _resolvedCache[cacheKey];
+    }
 
-    if (type == SportsAssetType.teams) {
-      final manifestPath = _teamBadgePathById[id];
-      if (manifestPath != null && await File(manifestPath).exists()) {
-        return ResolvedImageRef.file(manifestPath);
+    await _ensureBundledAssetsLoaded();
+    await _ensureBundledManifestLoaded();
+    if (!_localScanDisabled) {
+      try {
+        await _ensureLocalFilesLoaded(type);
+      } catch (_) {
+        // If local external storage is unavailable/denied, fall back to bundled assets.
+        _localScanDisabled = true;
+        _localFilesByType[type] = const [];
       }
     }
 
-    final localMatch = _matchPath(_localFilesByType[type] ?? const [], id);
-    if (localMatch != null) {
-      return ResolvedImageRef.file(localMatch);
+    final idCandidates = id.isEmpty ? const <String>[] : _idCandidates(id);
+
+    if (type == SportsAssetType.teams) {
+      for (final candidateId in idCandidates) {
+        final manifestPath = _teamBadgePathById[candidateId];
+        if (manifestPath != null && await File(manifestPath).exists()) {
+          final resolved = ResolvedImageRef.file(manifestPath);
+          _resolvedCache[cacheKey] = resolved;
+          return resolved;
+        }
+
+        final bundledPath = _bundledTeamBadgePathById[candidateId];
+        if (bundledPath != null) {
+          final resolved = ResolvedImageRef.asset(bundledPath);
+          _resolvedCache[cacheKey] = resolved;
+          return resolved;
+        }
+      }
     }
 
-    final bundledMatch = _matchPath(_bundledAssetsByType[type] ?? const [], id);
-    if (bundledMatch != null) {
-      return ResolvedImageRef.asset(bundledMatch);
+    if (type == SportsAssetType.leagues) {
+      for (final candidateId in idCandidates) {
+        final bundledPath = _bundledLeagueBadgePathById[candidateId];
+        if (bundledPath != null) {
+          final resolved = ResolvedImageRef.asset(bundledPath);
+          _resolvedCache[cacheKey] = resolved;
+          return resolved;
+        }
+      }
     }
 
+    for (final candidateId in idCandidates) {
+      final localMatch = _matchPath(
+        _localFilesByType[type] ?? const [],
+        candidateId,
+      );
+      if (localMatch != null) {
+        final resolved = ResolvedImageRef.file(localMatch);
+        _resolvedCache[cacheKey] = resolved;
+        return resolved;
+      }
+
+      final bundledMatch = _matchPath(
+        _bundledAssetsByType[type] ?? const [],
+        candidateId,
+      );
+      if (bundledMatch != null) {
+        final resolved = ResolvedImageRef.asset(bundledMatch);
+        _resolvedCache[cacheKey] = resolved;
+        return resolved;
+      }
+    }
+
+    if (normalizedName.isNotEmpty) {
+      final localByName = _matchPathByName(
+        _localFilesByType[type] ?? const [],
+        normalizedName,
+      );
+      if (localByName != null) {
+        final resolved = ResolvedImageRef.file(localByName);
+        _resolvedCache[cacheKey] = resolved;
+        return resolved;
+      }
+
+      final bundledByName = _matchPathByName(
+        _bundledAssetsByType[type] ?? const [],
+        normalizedName,
+      );
+      if (bundledByName != null) {
+        final resolved = ResolvedImageRef.asset(bundledByName);
+        _resolvedCache[cacheKey] = resolved;
+        return resolved;
+      }
+    }
+
+    _resolvedCache[cacheKey] = null;
     return null;
   }
 
@@ -98,6 +190,90 @@ class LocalAssetResolver {
     }
 
     _bundleLoaded = true;
+  }
+
+  Future<void> _ensureBundledManifestLoaded() async {
+    if (_bundleManifestLoaded) {
+      return;
+    }
+
+    final teamAssets = _bundledAssetsByType[SportsAssetType.teams] ?? const [];
+    final leagueAssets =
+        _bundledAssetsByType[SportsAssetType.leagues] ?? const [];
+    final teamPathByBase = {
+      for (final path in teamAssets) p.basename(path).toLowerCase(): path,
+    };
+
+    try {
+      final raw = await rootBundle.loadString(
+        'assets/manifest/fotmob_assets_manifest.json',
+      );
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        _bundleManifestLoaded = true;
+        return;
+      }
+
+      final leagues = decoded['leagues'];
+      if (leagues is! Map<String, dynamic>) {
+        _bundleManifestLoaded = true;
+        return;
+      }
+
+      for (final entry in leagues.entries) {
+        final leagueData = entry.value;
+        if (leagueData is! Map<String, dynamic>) {
+          continue;
+        }
+
+        final meta = leagueData['meta'];
+        if (meta is Map<String, dynamic>) {
+          final leagueId = _stringValue(meta['leagueId']);
+          if (leagueId != null) {
+            final mapped = _matchPath(leagueAssets, leagueId.toLowerCase());
+            if (mapped != null) {
+              _bundledLeagueBadgePathById[leagueId.toLowerCase()] = mapped;
+            }
+          }
+        }
+
+        final teams = leagueData['teams'];
+        if (teams is! List) {
+          continue;
+        }
+
+        for (final rawTeam in teams) {
+          if (rawTeam is! Map<String, dynamic>) {
+            continue;
+          }
+
+          final teamId = _stringValue(rawTeam['teamId'])?.toLowerCase();
+          if (teamId == null || teamId.isEmpty) {
+            continue;
+          }
+
+          String? mappedPath;
+          final badge = rawTeam['badge'];
+          if (badge is Map<String, dynamic>) {
+            final fileName = _stringValue(
+              badge['fileName'] ?? badge['filename'],
+            )?.toLowerCase();
+            if (fileName != null) {
+              mappedPath = teamPathByBase[fileName];
+            }
+          }
+
+          mappedPath ??= _matchPath(teamAssets, teamId);
+          if (mappedPath != null) {
+            _bundledTeamBadgePathById[teamId] = mappedPath;
+          }
+        }
+      }
+    } catch (_) {
+      // Ignore malformed/unavailable bundled manifest.
+    }
+
+    _bundleManifestLoaded = true;
   }
 
   Future<void> _ensureLocalFilesLoaded(SportsAssetType type) async {
@@ -269,8 +445,9 @@ class LocalAssetResolver {
       return null;
     }
 
+    final escaped = RegExp.escape(entityIdLower);
     final tokenRegex = RegExp(
-      '(^|_)${RegExp.escape(entityIdLower)}(_|\\.)',
+      '(^|[_-])$escaped([_-]|\\.)',
       caseSensitive: false,
     );
     final exactNames = {
@@ -288,6 +465,36 @@ class LocalAssetResolver {
     }
 
     return null;
+  }
+
+  String? _matchPathByName(List<String> candidates, String normalizedName) {
+    if (candidates.isEmpty || normalizedName.isEmpty) {
+      return null;
+    }
+
+    for (final path in candidates) {
+      final basename = _normalizeLookup(p.basenameWithoutExtension(path));
+      if (basename.contains(normalizedName)) {
+        return path;
+      }
+    }
+
+    return null;
+  }
+
+  List<String> _idCandidates(String rawId) {
+    final candidates = <String>{rawId};
+    final digits = RegExp(r'\d+').allMatches(rawId).map((m) => m.group(0)!);
+    candidates.addAll(digits);
+    return candidates.where((value) => value.trim().isNotEmpty).toList();
+  }
+
+  String _normalizeLookup(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ');
   }
 
   String _folderNameFor(SportsAssetType type) {

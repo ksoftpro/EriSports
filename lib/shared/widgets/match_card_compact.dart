@@ -92,6 +92,7 @@ class MatchCardCompact extends StatelessWidget {
         canResolveBadge
             ? EntityBadge(
                 entityId: teamId,
+                entityName: name,
                 type: SportsAssetType.teams,
                 resolver: assetResolver!,
                 size: 18,
