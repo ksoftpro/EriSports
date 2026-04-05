@@ -13,6 +13,7 @@ const List<String> referenceLeagueOrder = [
   'uefa super cup',
   'fifa world cup',
   'laliga',
+  'saudi pro league',
   'fa cup',
 ];
 
@@ -104,6 +105,12 @@ String canonicalLeagueName(String leagueName) {
   }
   if (normalized == 'laliga' || normalized == 'la liga') {
     return 'laliga';
+  }
+  if (normalized == 'saudi pro league' ||
+      normalized == 'saudi professional league' ||
+      normalized == 'roshn saudi league' ||
+      normalized.contains('saudi pro league')) {
+    return 'saudi pro league';
   }
   if (normalized == 'fa cup' || normalized.contains('english fa cup')) {
     return 'fa cup';
