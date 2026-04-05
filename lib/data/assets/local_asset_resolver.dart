@@ -36,6 +36,8 @@ class LocalAssetResolver {
   final Map<SportsAssetType, List<String>> _localFilesByType = {};
   final Map<String, String> _teamBadgePathById = {};
   final Map<String, String> _bundledTeamBadgePathById = {};
+  final Map<String, List<String>> _bundledTeamPathsById = {};
+  final Map<String, List<String>> _localTeamPathsById = {};
   final Map<String, String> _bundledLeagueBadgePathById = {};
   final Map<String, List<String>> _bundledPlayerPathsById = {};
   final Map<String, List<String>> _localPlayerPathsById = {};
@@ -50,6 +52,8 @@ class LocalAssetResolver {
     _localFilesByType.clear();
     _teamBadgePathById.clear();
     _bundledTeamBadgePathById.clear();
+    _bundledTeamPathsById.clear();
+    _localTeamPathsById.clear();
     _bundledLeagueBadgePathById.clear();
     _bundledPlayerPathsById.clear();
     _localPlayerPathsById.clear();
@@ -95,19 +99,43 @@ class LocalAssetResolver {
 
     if (type == SportsAssetType.teams) {
       for (final candidateId in idCandidates) {
-        final manifestPath = _teamBadgePathById[candidateId];
-        if (manifestPath != null && await File(manifestPath).exists()) {
-          final resolved = ResolvedImageRef.file(manifestPath);
-          _resolvedCache[cacheKey] = resolved;
-          return resolved;
-        }
-
         final bundledPath = _bundledTeamBadgePathById[candidateId];
         if (bundledPath != null) {
           final resolved = ResolvedImageRef.asset(bundledPath);
           _resolvedCache[cacheKey] = resolved;
           return resolved;
         }
+      }
+
+      final bundledById = _bestTeamPathById(
+        _bundledTeamPathsById,
+        idCandidates,
+        normalizedName,
+      );
+      if (bundledById != null) {
+        final resolved = ResolvedImageRef.asset(bundledById);
+        _resolvedCache[cacheKey] = resolved;
+        return resolved;
+      }
+
+      for (final candidateId in idCandidates) {
+        final manifestPath = _teamBadgePathById[candidateId];
+        if (manifestPath != null && await File(manifestPath).exists()) {
+          final resolved = ResolvedImageRef.file(manifestPath);
+          _resolvedCache[cacheKey] = resolved;
+          return resolved;
+        }
+      }
+
+      final localById = _bestTeamPathById(
+        _localTeamPathsById,
+        idCandidates,
+        normalizedName,
+      );
+      if (localById != null) {
+        final resolved = ResolvedImageRef.file(localById);
+        _resolvedCache[cacheKey] = resolved;
+        return resolved;
       }
     }
 
@@ -211,6 +239,10 @@ class LocalAssetResolver {
             .toList(growable: false)
           ..sort();
         _bundledAssetsByType[type] = paths;
+
+        if (type == SportsAssetType.teams) {
+          _indexTeamAssetPaths(paths, _bundledTeamPathsById);
+        }
 
         if (type == SportsAssetType.players) {
           _indexPlayerAssetPaths(paths, _bundledPlayerPathsById);
@@ -349,6 +381,7 @@ class LocalAssetResolver {
     }
 
     if (type == SportsAssetType.teams) {
+      _indexTeamAssetPaths(results, _localTeamPathsById);
       await _ensureTeamManifestLoaded(daylySportDir, results);
     }
   }
@@ -529,6 +562,104 @@ class LocalAssetResolver {
     final digits = RegExp(r'\d+').allMatches(rawId).map((m) => m.group(0)!);
     candidates.addAll(digits);
     return candidates.where((value) => value.trim().isNotEmpty).toList();
+  }
+
+  String? _bestTeamPathById(
+    Map<String, List<String>> indexedPaths,
+    List<String> idCandidates,
+    String normalizedName,
+  ) {
+    for (final candidateId in idCandidates) {
+      final paths = indexedPaths[candidateId];
+      if (paths == null || paths.isEmpty) {
+        continue;
+      }
+
+      final bestPath = _pickBestTeamPath(paths, normalizedName);
+      if (bestPath != null) {
+        return bestPath;
+      }
+    }
+
+    return null;
+  }
+
+  void _indexTeamAssetPaths(
+    List<String> paths,
+    Map<String, List<String>> output,
+  ) {
+    output.clear();
+
+    for (final path in paths) {
+      final teamId = _extractTeamIdFromPath(path);
+      if (teamId == null || teamId.isEmpty) {
+        continue;
+      }
+      output.putIfAbsent(teamId, () => []).add(path);
+    }
+
+    for (final entry in output.entries) {
+      entry.value.sort();
+    }
+  }
+
+  String? _extractTeamIdFromPath(String path) {
+    final basename = p.basenameWithoutExtension(path).toLowerCase();
+    final trailingDigits =
+        RegExp(r'(\d+)(?:[_-]badge)?$').firstMatch(basename)?.group(1);
+    if (trailingDigits != null && trailingDigits.isNotEmpty) {
+      return trailingDigits;
+    }
+
+    final matches = RegExp(r'\d+').allMatches(basename).toList(growable: false);
+    if (matches.isEmpty) {
+      return null;
+    }
+
+    // Pick the longest digit token, then the right-most one when lengths tie.
+    matches.sort((a, b) {
+      final lenCompare = b.group(0)!.length.compareTo(a.group(0)!.length);
+      if (lenCompare != 0) {
+        return lenCompare;
+      }
+      return b.start.compareTo(a.start);
+    });
+
+    return matches.first.group(0);
+  }
+
+  String _normalizedTeamNameFromPath(String path) {
+    final basename = p.basenameWithoutExtension(path);
+    var stem = basename;
+
+    final lowerStem = stem.toLowerCase();
+    if (lowerStem.startsWith('team_')) {
+      stem = stem.substring('team_'.length);
+    } else if (lowerStem.startsWith('club_')) {
+      stem = stem.substring('club_'.length);
+    }
+
+    stem = stem.replaceFirst(RegExp(r'[_-]?badge$', caseSensitive: false), '');
+    stem = stem.replaceFirst(RegExp(r'[_-]?\d+$'), '');
+    return _normalizeLookup(stem);
+  }
+
+  String? _pickBestTeamPath(List<String> paths, String normalizedName) {
+    if (paths.isEmpty) {
+      return null;
+    }
+
+    if (normalizedName.isNotEmpty) {
+      for (final path in paths) {
+        final candidateName = _normalizedTeamNameFromPath(path);
+        if (candidateName.contains(normalizedName) ||
+            normalizedName.contains(candidateName)) {
+          return path;
+        }
+      }
+    }
+
+    return paths.first;
   }
 
   String? _bestPlayerPathById(

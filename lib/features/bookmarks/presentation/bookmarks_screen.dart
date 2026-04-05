@@ -347,6 +347,13 @@ class _AddFollowingSheet extends ConsumerWidget {
                             .contains(team.id);
                         return ListTile(
                           dense: true,
+                          leading: EntityBadge(
+                            entityId: team.id,
+                            entityName: team.name,
+                            type: SportsAssetType.teams,
+                            resolver: ref.watch(assetResolverProvider),
+                            size: 22,
+                          ),
                           title: Text(team.name),
                           trailing: Checkbox(
                             value: selected,

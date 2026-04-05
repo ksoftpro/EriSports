@@ -236,13 +236,39 @@ class MatchDetailScreen extends ConsumerWidget {
                                             ],
                                           ),
                                         ),
-                                      if (event.teamName != null)
-                                        Text(
-                                          event.teamName!,
-                                          style:
-                                              Theme.of(
-                                                context,
-                                              ).textTheme.labelMedium,
+                                      if (event.teamName != null ||
+                                          event.event.teamId != null)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: Row(
+                                            children: [
+                                              GestureDetector(
+                                                onTap: event.event.teamId == null
+                                                    ? null
+                                                    : () => context.push(
+                                                          '/team/${event.event.teamId}',
+                                                        ),
+                                                child: EntityBadge(
+                                                  entityId: event.event.teamId ?? '',
+                                                  entityName: event.teamName,
+                                                  type: SportsAssetType.teams,
+                                                  resolver: resolver,
+                                                  size: 16,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  event.teamName ?? 'Unknown team',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelMedium,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       if (event.event.detail != null)
                                         Text(
