@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:eri_sports/app/app.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/bootstrap/startup_controller.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/core/log/app_logger.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
@@ -12,7 +13,6 @@ import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
-import 'package:eri_sports/shared/widgets/match_card_compact.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,10 +28,10 @@ void main() {
       final harness = await _WidgetHarness.create(tester);
       addTearDown(() => harness.dispose(tester));
 
-      expect(find.textContaining('Local data import: success'), findsOneWidget);
       expect(find.text('Arsenal'), findsWidgets);
+      expect(find.text('Liverpool'), findsWidgets);
 
-      await tester.tap(find.byType(MatchCardCompact).first.hitTestable());
+      await tester.tap(find.text('2 - 1').first.hitTestable());
       await _pumpForStability(tester);
 
       expect(find.text('Match Detail'), findsOneWidget);
@@ -156,7 +156,9 @@ class _WidgetHarness {
         overrides: [
           appServicesProvider.overrideWithValue(services),
           sharedPreferencesProvider.overrideWithValue(preferences),
-          startupImportReportProvider.overrideWithValue(startupReport),
+          startupControllerProvider.overrideWith(
+            () => _SeededStartupController(startupReport),
+          ),
         ],
         child: const EriSportsApp(),
       ),
@@ -470,6 +472,28 @@ class _WidgetHarness {
     await writeJson('players_2026_04_03.json', playersJson);
     await writeJson('match_detail_1001.json', matchDetailJson);
   }
+}
+
+class _SeededStartupController extends StartupController {
+  _SeededStartupController(this._report);
+
+  final ImportRunReport _report;
+
+  @override
+  StartupState build() {
+    return StartupState(
+      phase: StartupPhase.ready,
+      hasCachedData: true,
+      statusText: 'Offline data ready',
+      latestReport: _report,
+    );
+  }
+
+  @override
+  Future<void> ensureStarted() async {}
+
+  @override
+  Future<void> retry() async {}
 }
 
 Future<void> _pumpForStability(WidgetTester tester) async {

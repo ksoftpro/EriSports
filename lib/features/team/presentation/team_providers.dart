@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/bootstrap/startup_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -16,17 +17,21 @@ class TeamDetailState {
   final List<PlayerRow> players;
 }
 
-final teamDetailProvider =
-    FutureProvider.family<TeamDetailState, String>((ref, teamId) async {
+final teamDetailProvider = FutureProvider.family<TeamDetailState, String>((
+  ref,
+  teamId,
+) async {
+  ref.watch(dataRefreshTokenProvider);
   final services = ref.read(appServicesProvider);
   final team = await services.database.readTeamById(teamId);
   if (team == null) {
     throw StateError('Team not found: $teamId');
   }
 
-  final competition = team.competitionId == null
-      ? null
-      : await services.database.readCompetitionById(team.competitionId!);
+  final competition =
+      team.competitionId == null
+          ? null
+          : await services.database.readCompetitionById(team.competitionId!);
   final matches = await services.database.readTeamMatches(teamId);
   final players = await services.database.readPlayersByTeam(teamId);
 

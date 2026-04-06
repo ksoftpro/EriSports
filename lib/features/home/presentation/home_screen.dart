@@ -2,6 +2,7 @@ import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/home/presentation/home_providers.dart';
+import 'package:eri_sports/shared/formatters/team_display_name_formatter.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
@@ -626,7 +627,7 @@ class _TeamInline extends StatelessWidget {
     );
     final name = Expanded(
       child: Text(
-        teamName,
+        TeamDisplayNameFormatter.compactMatchName(teamName),
         maxLines: 2,
         textAlign: alignEnd ? TextAlign.right : TextAlign.left,
         overflow: TextOverflow.ellipsis,

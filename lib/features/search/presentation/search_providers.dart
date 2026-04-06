@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/bootstrap/startup_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -16,8 +17,11 @@ class SearchResults {
   final List<CompetitionRow> competitions;
 }
 
-final searchResultsProvider =
-    FutureProvider.family<SearchResults, String>((ref, query) async {
+final searchResultsProvider = FutureProvider.family<SearchResults, String>((
+  ref,
+  query,
+) async {
+  ref.watch(dataRefreshTokenProvider);
   final normalized = query.trim();
   if (normalized.isEmpty) {
     return const SearchResults(
@@ -31,8 +35,9 @@ final searchResultsProvider =
   final services = ref.read(appServicesProvider);
   final teams = await services.database.searchTeamsByName(normalized);
   final players = await services.database.searchPlayersByName(normalized);
-  final competitions =
-      await services.database.searchCompetitionsByName(normalized);
+  final competitions = await services.database.searchCompetitionsByName(
+    normalized,
+  );
 
   return SearchResults(
     query: normalized,

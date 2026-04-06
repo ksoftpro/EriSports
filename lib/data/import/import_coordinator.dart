@@ -71,7 +71,16 @@ class ImportCoordinator {
     try {
       final daylySportDir =
           await daylySportLocator.getOrCreateDaylySportDirectory();
-      final snapshots = await scanner.scanJsonFiles(daylySportDir);
+      final preferCachedPaths = triggerType == 'startup';
+      final knownRelativePaths =
+          preferCachedPaths
+              ? await _latestKnownRelativePaths()
+              : const <String>[];
+      final snapshots = await scanner.scanJsonFiles(
+        daylySportDir,
+        preferredRelativePaths: knownRelativePaths,
+        preferCachedPaths: preferCachedPaths,
+      );
 
       final latestChecksums = await _latestChecksumsByPath();
       var importedFileCount = 0;
@@ -193,6 +202,25 @@ class ImportCoordinator {
     }
 
     return checksumsByPath;
+  }
+
+  Future<List<String>> _latestKnownRelativePaths() async {
+    final rows =
+        await (database.select(database.importFiles)
+          ..orderBy([(tbl) => OrderingTerm.desc(tbl.id)])).get();
+
+    final relativePaths = <String>[];
+    final seen = <String>{};
+    for (final row in rows) {
+      if (row.relativePath.trim().isEmpty || seen.contains(row.relativePath)) {
+        continue;
+      }
+      seen.add(row.relativePath);
+      relativePaths.add(row.relativePath);
+    }
+
+    relativePaths.sort();
+    return relativePaths;
   }
 
   Future<void> _markImportFileStatus(

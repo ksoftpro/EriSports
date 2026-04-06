@@ -102,7 +102,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen>
                                       teamName: item.team.name,
                                       resolver: resolver,
                                       source: 'following.team-grid',
-                                      size: 28,
+                                      size: 40,
                                     ),
                                     const Spacer(),
                                     if (_isEditing)
@@ -208,7 +208,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen>
                                 entityName: item.player.name,
                                 type: SportsAssetType.players,
                                 resolver: resolver,
-                                size: 34,
+                                size: 40,
                               ),
                               const SizedBox(width: 10),
                               Expanded(
@@ -230,7 +230,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen>
                                             teamName: item.team!.name,
                                             resolver: resolver,
                                             source: 'following.player-team',
-                                            size: 14,
+                                            size: 16,
                                           ),
                                           const SizedBox(width: 5),
                                         ],

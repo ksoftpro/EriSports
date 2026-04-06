@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/bootstrap/startup_controller.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
@@ -33,7 +34,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     final report = await services.importCoordinator.runLocalImport(
       triggerType: 'manual',
     );
-    services.assetResolver.invalidateCache();
+    services.assetResolver.invalidateCache(clearPersistent: true);
+    services.leagueStandingsSource.invalidateCache(clearPersistent: true);
+    ref.read(dataRefreshTokenProvider.notifier).state++;
 
     if (!mounted) {
       return;
@@ -55,7 +58,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     });
 
     final services = ref.read(appServicesProvider);
-    services.assetResolver.invalidateCache();
+    services.assetResolver.invalidateCache(clearPersistent: true);
 
     final teams = await services.database.readTeamsSorted();
     final teamIds = teams.map((team) => team.id).toList(growable: false);
@@ -120,6 +123,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
   @override
   Widget build(BuildContext context) {
     final startupReport = ref.watch(startupImportReportProvider);
+    final startupState = ref.watch(startupControllerProvider);
     final themeMode = ref.watch(themeModeProvider);
 
     return SafeArea(
@@ -203,7 +207,18 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          _ReportCard(title: 'Startup import', report: startupReport),
+          if (startupReport != null)
+            _ReportCard(title: 'Startup import', report: startupReport),
+          if (startupState.isBackgroundRefreshing)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(startupState.statusText),
+                ),
+              ),
+            ),
           if (_manualReport != null)
             Padding(
               padding: const EdgeInsets.only(top: 12),

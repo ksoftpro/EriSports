@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/bootstrap/startup_controller.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:flutter/foundation.dart';
@@ -9,12 +10,18 @@ const _followedPlayersKey = 'followed_player_ids';
 
 @immutable
 class FollowingSelectionState {
-  const FollowingSelectionState({required this.teamIds, required this.playerIds});
+  const FollowingSelectionState({
+    required this.teamIds,
+    required this.playerIds,
+  });
 
   final Set<String> teamIds;
   final Set<String> playerIds;
 
-  FollowingSelectionState copyWith({Set<String>? teamIds, Set<String>? playerIds}) {
+  FollowingSelectionState copyWith({
+    Set<String>? teamIds,
+    Set<String>? playerIds,
+  }) {
     return FollowingSelectionState(
       teamIds: teamIds ?? this.teamIds,
       playerIds: playerIds ?? this.playerIds,
@@ -105,10 +112,7 @@ class FollowedTeamCardData {
 }
 
 class FollowedPlayerCardData {
-  const FollowedPlayerCardData({
-    required this.player,
-    required this.team,
-  });
+  const FollowedPlayerCardData({required this.player, required this.team});
 
   final PlayerRow player;
   final TeamRow? team;
@@ -128,7 +132,10 @@ class FollowingDashboardState {
   final List<PlayerRow> availablePlayers;
 }
 
-final followingDashboardProvider = FutureProvider<FollowingDashboardState>((ref) async {
+final followingDashboardProvider = FutureProvider<FollowingDashboardState>((
+  ref,
+) async {
+  ref.watch(dataRefreshTokenProvider);
   final services = ref.read(appServicesProvider);
 
   final availableTeams = await services.database.readTeamsSorted(limit: 40);
@@ -139,9 +146,14 @@ final followingDashboardProvider = FutureProvider<FollowingDashboardState>((ref)
   await ref
       .read(followingSelectionProvider.notifier)
       .seedDefaults(
-        defaultTeamIds: availableTeams.take(8).map((t) => t.id).toList(growable: false),
-        defaultPlayerIds:
-            availablePlayers.take(8).map((p) => p.id).toList(growable: false),
+        defaultTeamIds: availableTeams
+            .take(8)
+            .map((t) => t.id)
+            .toList(growable: false),
+        defaultPlayerIds: availablePlayers
+            .take(8)
+            .map((p) => p.id)
+            .toList(growable: false),
       );
 
   final latestSelection = ref.read(followingSelectionProvider);
@@ -153,9 +165,10 @@ final followingDashboardProvider = FutureProvider<FollowingDashboardState>((ref)
       continue;
     }
 
-    final competition = team.competitionId == null
-        ? null
-        : await services.database.readCompetitionById(team.competitionId!);
+    final competition =
+        team.competitionId == null
+            ? null
+            : await services.database.readCompetitionById(team.competitionId!);
     final matches = await services.database.readTeamMatches(teamId, limit: 30);
     final now = DateTime.now().toUtc();
     HomeMatchView? next;
@@ -168,9 +181,10 @@ final followingDashboardProvider = FutureProvider<FollowingDashboardState>((ref)
       }
 
       next = match;
-      opponent = match.match.homeTeamId == teamId
-          ? match.awayTeamName
-          : match.homeTeamName;
+      opponent =
+          match.match.homeTeamId == teamId
+              ? match.awayTeamName
+              : match.homeTeamName;
       break;
     }
 
@@ -191,9 +205,10 @@ final followingDashboardProvider = FutureProvider<FollowingDashboardState>((ref)
       continue;
     }
 
-    final team = player.teamId == null
-        ? null
-        : await services.database.readTeamById(player.teamId!);
+    final team =
+        player.teamId == null
+            ? null
+            : await services.database.readTeamById(player.teamId!);
     followedPlayers.add(FollowedPlayerCardData(player: player, team: team));
   }
 

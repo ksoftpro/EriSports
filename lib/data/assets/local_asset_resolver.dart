@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:eri_sports/core/log/app_logger.dart';
+import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -27,11 +29,14 @@ class LocalAssetResolver {
   LocalAssetResolver({
     required DaylySportLocator daylySportLocator,
     AppLogger? logger,
+    DaylySportCacheStore? cacheStore,
   }) : _daylySportLocator = daylySportLocator,
-       _logger = logger;
+       _logger = logger,
+       _cacheStore = cacheStore;
 
   final DaylySportLocator _daylySportLocator;
   final AppLogger? _logger;
+  final DaylySportCacheStore? _cacheStore;
 
   bool _bundleLoaded = false;
   bool _teamManifestLoaded = false;
@@ -48,7 +53,7 @@ class LocalAssetResolver {
   final Map<String, List<String>> _localPlayerPathsById = {};
   final Map<String, ResolvedImageRef?> _resolvedCache = {};
 
-  void invalidateCache() {
+  void invalidateCache({bool clearPersistent = false}) {
     _bundleLoaded = false;
     _teamManifestLoaded = false;
     _bundleManifestLoaded = false;
@@ -63,6 +68,22 @@ class LocalAssetResolver {
     _bundledPlayerPathsById.clear();
     _localPlayerPathsById.clear();
     _resolvedCache.clear();
+
+    if (clearPersistent) {
+      unawaited(
+        _daylySportLocator
+            .getOrCreateDaylySportDirectory()
+            .then((root) async {
+              for (final type in SportsAssetType.values) {
+                await _cacheStore?.removePathList(
+                  root.path,
+                  'asset_paths_${type.name}',
+                );
+              }
+            })
+            .catchError((_) {}),
+      );
+    }
   }
 
   Future<ResolvedImageRef?> resolveByEntityId({
@@ -509,6 +530,32 @@ class LocalAssetResolver {
 
     final daylySportDir =
         await _daylySportLocator.getOrCreateDaylySportDirectory();
+    final cachedPaths = _cacheStore?.readPathList(
+      daylySportDir.path,
+      'asset_paths_${type.name}',
+    );
+
+    if (cachedPaths != null && cachedPaths.isNotEmpty) {
+      final existing = <String>[];
+      for (final path in cachedPaths) {
+        if (await File(path).exists()) {
+          existing.add(path);
+        }
+      }
+
+      if (existing.isNotEmpty) {
+        _localFilesByType[type] = existing;
+        if (type == SportsAssetType.players) {
+          _indexPlayerAssetPaths(existing, _localPlayerPathsById);
+        }
+        if (type == SportsAssetType.teams) {
+          _indexTeamAssetPaths(existing, _localTeamPathsById);
+          await _ensureTeamManifestLoaded(daylySportDir, existing);
+        }
+        return;
+      }
+    }
+
     final candidateDirs = _candidateDirsForType(type, daylySportDir);
 
     final results = <String>[];
@@ -536,6 +583,11 @@ class LocalAssetResolver {
     }
 
     _localFilesByType[type] = results;
+    await _cacheStore?.writePathList(
+      daylySportDir.path,
+      'asset_paths_${type.name}',
+      results,
+    );
 
     if (type == SportsAssetType.players) {
       _indexPlayerAssetPaths(results, _localPlayerPathsById);

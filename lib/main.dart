@@ -9,16 +9,15 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final sharedPreferences = await SharedPreferences.getInstance();
-  final services = await AppServices.create();
-  final startupReport =
-      await services.importCoordinator.runLocalImport(triggerType: 'startup');
+  final services = await AppServices.create(
+    sharedPreferences: sharedPreferences,
+  );
 
   runApp(
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(sharedPreferences),
         appServicesProvider.overrideWithValue(services),
-        startupImportReportProvider.overrideWithValue(startupReport),
       ],
       child: const EriSportsApp(),
     ),

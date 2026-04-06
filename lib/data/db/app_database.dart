@@ -302,9 +302,32 @@ class AppDatabase extends _$AppDatabase {
     ])).get();
   }
 
+  Future<bool> hasBootstrapData() async {
+    final competitionCountExpression = competitions.id.count();
+    final competitionQuery = selectOnly(competitions)
+      ..addColumns([competitionCountExpression]);
+    final competitionCount =
+        await competitionQuery.map((row) {
+          return row.read(competitionCountExpression) ?? 0;
+        }).getSingle();
+
+    if (competitionCount > 0) {
+      return true;
+    }
+
+    final matchCountExpression = matches.id.count();
+    final matchQuery = selectOnly(matches)..addColumns([matchCountExpression]);
+    final matchCount =
+        await matchQuery.map((row) {
+          return row.read(matchCountExpression) ?? 0;
+        }).getSingle();
+
+    return matchCount > 0;
+  }
+
   Future<List<TeamRow>> readTeamsSorted({int? limit}) {
-    final query =
-        (select(teams)..orderBy([(tbl) => OrderingTerm.asc(tbl.name)]));
+    final query = (select(teams)
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.name)]));
     if (limit != null) {
       query.limit(limit);
     }
@@ -312,8 +335,8 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<List<PlayerRow>> readPlayersSorted({int? limit}) {
-    final query =
-        (select(players)..orderBy([(tbl) => OrderingTerm.asc(tbl.name)]));
+    final query = (select(players)
+      ..orderBy([(tbl) => OrderingTerm.asc(tbl.name)]));
     if (limit != null) {
       query.limit(limit);
     }
@@ -328,9 +351,10 @@ class AppDatabase extends _$AppDatabase {
       return const {};
     }
 
-    final rows = await (select(competitions)
-          ..where((tbl) => tbl.id.isIn(uniqueIds.toList(growable: false))))
-        .get();
+    final rows =
+        await (select(competitions)..where(
+          (tbl) => tbl.id.isIn(uniqueIds.toList(growable: false)),
+        )).get();
 
     return {for (final row in rows) row.id: row};
   }

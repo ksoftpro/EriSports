@@ -1,10 +1,12 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/bootstrap/startup_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final topStatsCompetitionsProvider =
     FutureProvider<List<TopStatsCompetitionView>>((ref) async {
+      ref.watch(dataRefreshTokenProvider);
       final services = ref.read(appServicesProvider);
       return services.database.readTopStatsCompetitions();
     });
@@ -14,6 +16,7 @@ final topStatCategoriesProvider =
       ref,
       competitionId,
     ) async {
+      ref.watch(dataRefreshTokenProvider);
       final services = ref.read(appServicesProvider);
       return services.database.readTopStatCategories(competitionId);
     });
@@ -45,6 +48,7 @@ class TopPlayersQuery {
 final topPlayersLeaderboardProvider =
     FutureProvider.family<List<TopPlayerLeaderboardEntryView>, TopPlayersQuery>(
       (ref, query) async {
+        ref.watch(dataRefreshTokenProvider);
         final services = ref.read(appServicesProvider);
         return services.database.readTopPlayersForCategory(
           query.competitionId,

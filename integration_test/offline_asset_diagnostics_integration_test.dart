@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:eri_sports/app/app.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/bootstrap/startup_controller.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/core/log/app_logger.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
@@ -96,7 +97,9 @@ class _TestHarness {
         overrides: [
           appServicesProvider.overrideWithValue(services),
           sharedPreferencesProvider.overrideWithValue(preferences),
-          startupImportReportProvider.overrideWithValue(startupReport),
+          startupControllerProvider.overrideWith(
+            () => _SeededStartupController(startupReport),
+          ),
         ],
         child: const EriSportsApp(),
       ),
@@ -169,6 +172,28 @@ class _TestHarness {
     await writeBadge('teams/premier_league/team_Arsenal_9825_badge.png');
     await writeBadge('teams/premier_league/team_Liverpool_8650_badge.png');
   }
+}
+
+class _SeededStartupController extends StartupController {
+  _SeededStartupController(this._report);
+
+  final ImportRunReport _report;
+
+  @override
+  StartupState build() {
+    return StartupState(
+      phase: StartupPhase.ready,
+      hasCachedData: true,
+      statusText: 'Offline data ready',
+      latestReport: _report,
+    );
+  }
+
+  @override
+  Future<void> ensureStarted() async {}
+
+  @override
+  Future<void> retry() async {}
 }
 
 class _TestDaylySportLocator extends DaylySportLocator {

@@ -337,7 +337,7 @@ class MatchDetailScreen extends ConsumerWidget {
               teamName: teamName,
               resolver: resolver,
               source: 'match-detail.header',
-              size: 44,
+              size: 52,
             ),
             const SizedBox(height: 8),
             Text(

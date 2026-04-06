@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 
 const List<String> kPreferredStandingsModeOrder = [
@@ -46,10 +48,12 @@ String standingsModeLabel(String modeKey) {
 class LeagueStandingsSource {
   LeagueStandingsSource({
     required DaylySportLocator daylySportLocator,
+    this.cacheStore,
     this.filePrefix = 'top_standings_full_data',
   }) : _daylySportLocator = daylySportLocator;
 
   final DaylySportLocator _daylySportLocator;
+  final DaylySportCacheStore? cacheStore;
   final String filePrefix;
 
   LeagueStandingsBundle? _cachedBundle;
@@ -99,6 +103,24 @@ class LeagueStandingsSource {
         return null;
       }
 
+      final cached = cacheStore?.readLocatedFile(root.path, filePrefix);
+      if (cached != null) {
+        final cachedFile = File(cached.path);
+        if (await cachedFile.exists()) {
+          final stat = await cachedFile.stat();
+          if (stat.modified.toUtc().millisecondsSinceEpoch ==
+              cached.modifiedAtEpochMs) {
+            return cachedFile;
+          }
+        }
+      }
+
+      final directCandidate = await _findInKnownLocations(root);
+      if (directCandidate != null) {
+        await _cacheLocatedFile(root.path, directCandidate);
+        return directCandidate;
+      }
+
       final matches = <File>[];
       await for (final entity in root.list(
         recursive: true,
@@ -123,10 +145,70 @@ class LeagueStandingsSource {
         final bTime = b.statSync().modified;
         return bTime.compareTo(aTime);
       });
-      return matches.first;
+      final resolved = matches.first;
+      await _cacheLocatedFile(root.path, resolved);
+      return resolved;
     } catch (_) {
       return null;
     }
+  }
+
+  Future<File?> _findInKnownLocations(Directory root) async {
+    final candidateDirs = [
+      root,
+      Directory('${root.path}${Platform.pathSeparator}assets'),
+      Directory('${root.path}${Platform.pathSeparator}standings'),
+      Directory('${root.path}${Platform.pathSeparator}json'),
+    ];
+
+    final matches = <File>[];
+    for (final directory in candidateDirs) {
+      if (!await directory.exists()) {
+        continue;
+      }
+
+      await for (final entity in directory.list(
+        recursive: false,
+        followLinks: false,
+      )) {
+        if (entity is! File) {
+          continue;
+        }
+
+        final lowerName = _filename(entity.path).toLowerCase();
+        if (lowerName.startsWith(filePrefix.toLowerCase()) &&
+            lowerName.endsWith('.json')) {
+          matches.add(entity);
+        }
+      }
+    }
+
+    if (matches.isEmpty) {
+      return null;
+    }
+
+    matches.sort((a, b) {
+      final aTime = a.statSync().modified;
+      final bTime = b.statSync().modified;
+      return bTime.compareTo(aTime);
+    });
+    return matches.first;
+  }
+
+  Future<void> _cacheLocatedFile(String scope, File file) async {
+    if (cacheStore == null) {
+      return;
+    }
+
+    final stat = await file.stat();
+    await cacheStore!.writeLocatedFile(
+      scope,
+      filePrefix,
+      CachedLocatedFile(
+        path: file.path,
+        modifiedAtEpochMs: stat.modified.toUtc().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   String _filename(String path) {
@@ -142,10 +224,20 @@ class LeagueStandingsSource {
     return bundle.resolveLeague(competitionId);
   }
 
-  void invalidateCache() {
+  void invalidateCache({bool clearPersistent = false}) {
     _cachedBundle = null;
     _cachedSourcePath = null;
     _cachedModifiedAtUtc = null;
+    if (clearPersistent) {
+      unawaited(
+        _daylySportLocator
+            .getOrCreateDaylySportDirectory()
+            .then((root) {
+              return cacheStore?.writeLocatedFile(root.path, filePrefix, null);
+            })
+            .catchError((_) {}),
+      );
+    }
   }
 }
 
@@ -240,35 +332,9 @@ class LeagueStandingsLeague {
       return null;
     }
 
-    final table = standings['table'];
-    if (table is! Map<String, dynamic>) {
+    final parsedModes = _extractModes(standings);
+    if (parsedModes.isEmpty) {
       return null;
-    }
-
-    final parsedModes = <String, LeagueStandingsModeData>{};
-
-    for (final entry in table.entries) {
-      final modeKey = _normalizeKey(entry.key);
-      final rawRows = entry.value;
-      if (rawRows is! List) {
-        continue;
-      }
-
-      final rows = <LeagueStandingsRow>[];
-      for (var i = 0; i < rawRows.length; i++) {
-        final rawRow = rawRows[i];
-        if (rawRow is! Map<String, dynamic>) {
-          continue;
-        }
-
-        rows.add(LeagueStandingsRow.fromJson(rawRow, fallbackPosition: i + 1));
-      }
-
-      parsedModes[modeKey] = LeagueStandingsModeData(
-        key: modeKey,
-        label: standingsModeLabel(modeKey),
-        rows: List.unmodifiable(rows),
-      );
     }
 
     return LeagueStandingsLeague(
@@ -335,6 +401,76 @@ class LeagueStandingsLeague {
     }
     return defaultMode;
   }
+}
+
+Map<String, LeagueStandingsModeData> _extractModes(
+  Map<String, dynamic> standings,
+) {
+  final parsedModes = <String, LeagueStandingsModeData>{};
+
+  void addMode(String modeKey, List<dynamic> rawRows) {
+    final normalizedMode = _normalizeKey(modeKey);
+    if (normalizedMode.isEmpty) {
+      return;
+    }
+
+    final rows = <LeagueStandingsRow>[];
+    for (var i = 0; i < rawRows.length; i++) {
+      final rawRow = rawRows[i];
+      if (rawRow is! Map<String, dynamic>) {
+        continue;
+      }
+      rows.add(LeagueStandingsRow.fromJson(rawRow, fallbackPosition: i + 1));
+    }
+
+    if (rows.isEmpty) {
+      return;
+    }
+
+    parsedModes[normalizedMode] = LeagueStandingsModeData(
+      key: normalizedMode,
+      label: standingsModeLabel(normalizedMode),
+      rows: List.unmodifiable(rows),
+    );
+  }
+
+  final table = standings['table'];
+  if (table is Map<String, dynamic>) {
+    for (final entry in table.entries) {
+      if (entry.value is List) {
+        addMode(entry.key, entry.value as List<dynamic>);
+      }
+    }
+  }
+
+  final tables = standings['tables'];
+  if (tables is List) {
+    for (var i = 0; i < tables.length; i++) {
+      final rawTable = tables[i];
+      if (rawTable is! Map<String, dynamic>) {
+        continue;
+      }
+
+      final rows = rawTable['table'];
+      if (rows is! List) {
+        continue;
+      }
+
+      final modeKey =
+          _stringValue(rawTable['name']) ??
+          _stringValue(rawTable['key']) ??
+          _stringValue(rawTable['type']) ??
+          'all';
+      addMode(modeKey, rows.cast<dynamic>());
+    }
+  }
+
+  final flatTable = standings['flatTable'];
+  if (flatTable is List && flatTable.isNotEmpty) {
+    addMode('all', flatTable.cast<dynamic>());
+  }
+
+  return parsedModes;
 }
 
 class LeagueStandingsMeta {

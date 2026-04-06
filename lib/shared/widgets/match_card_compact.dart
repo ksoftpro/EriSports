@@ -1,4 +1,5 @@
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
+import 'package:eri_sports/shared/formatters/team_display_name_formatter.dart';
 import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
 
@@ -120,7 +121,7 @@ class MatchCardCompact extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            name,
+            TeamDisplayNameFormatter.compactMatchName(name),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyLarge,

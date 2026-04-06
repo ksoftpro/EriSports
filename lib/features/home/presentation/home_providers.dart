@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/bootstrap/startup_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/bookmarks/presentation/bookmarks_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +23,7 @@ class HomeFeedState {
 }
 
 final homeFeedProvider = FutureProvider<HomeFeedState>((ref) async {
+  ref.watch(dataRefreshTokenProvider);
   final services = ref.read(appServicesProvider);
   final following = ref.watch(followingSelectionProvider);
   final now = DateTime.now().toUtc();
@@ -51,7 +53,8 @@ final homeFeedProvider = FutureProvider<HomeFeedState>((ref) async {
       recent.add(item);
     }
 
-    final isFollowedTeam = following.teamIds.contains(item.match.homeTeamId) ||
+    final isFollowedTeam =
+        following.teamIds.contains(item.match.homeTeamId) ||
         following.teamIds.contains(item.match.awayTeamId);
     if (isFollowedTeam) {
       followed.add(item);
@@ -73,12 +76,6 @@ final homeFeedProvider = FutureProvider<HomeFeedState>((ref) async {
 });
 
 bool _isLiveStatus(String status) {
-  const liveTokens = {
-    'live',
-    'inplay',
-    'in_play',
-    'playing',
-    'ht',
-  };
+  const liveTokens = {'live', 'inplay', 'in_play', 'playing', 'ht'};
   return liveTokens.contains(status);
 }

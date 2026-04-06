@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/bootstrap/startup_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,8 +15,11 @@ class MatchCenterState {
   final List<MatchTeamStatComparison> stats;
 }
 
-final matchDetailProvider =
-    FutureProvider.family<MatchCenterState, String>((ref, matchId) async {
+final matchDetailProvider = FutureProvider.family<MatchCenterState, String>((
+  ref,
+  matchId,
+) async {
+  ref.watch(dataRefreshTokenProvider);
   final services = ref.read(appServicesProvider);
   final detail = await services.database.readMatchDetailById(matchId);
   if (detail == null) {
@@ -25,9 +29,5 @@ final matchDetailProvider =
   final events = await services.database.readMatchEventsByMatchId(matchId);
   final stats = await services.database.readMatchStatComparisons(matchId);
 
-  return MatchCenterState(
-    detail: detail,
-    events: events,
-    stats: stats,
-  );
+  return MatchCenterState(detail: detail, events: events, stats: stats);
 });
