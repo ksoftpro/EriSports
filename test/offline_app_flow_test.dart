@@ -10,6 +10,7 @@ import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
+import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/shared/widgets/match_card_compact.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,26 +20,29 @@ import 'package:path/path.dart' as p;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('offline startup imports and match center renders timeline/stats',
-      (tester) async {
-    final harness = await _WidgetHarness.create(tester);
-    addTearDown(harness.dispose);
+  testWidgets(
+    'offline startup imports and match center renders timeline/stats',
+    (tester) async {
+      final harness = await _WidgetHarness.create(tester);
+      addTearDown(harness.dispose);
 
-    expect(find.textContaining('Local data import: success'), findsOneWidget);
-    expect(find.text('Arsenal'), findsWidgets);
+      expect(find.textContaining('Local data import: success'), findsOneWidget);
+      expect(find.text('Arsenal'), findsWidgets);
 
-    await tester.tap(find.byType(MatchCardCompact).first.hitTestable());
-    await _pumpForStability(tester);
+      await tester.tap(find.byType(MatchCardCompact).first.hitTestable());
+      await _pumpForStability(tester);
 
-    expect(find.text('Match Detail'), findsOneWidget);
-    expect(find.text('Timeline'), findsOneWidget);
-    expect(find.text('Stats'), findsOneWidget);
-    expect(find.textContaining('Goal'), findsWidgets);
-    expect(find.text('Possession'), findsOneWidget);
-  });
+      expect(find.text('Match Detail'), findsOneWidget);
+      expect(find.text('Timeline'), findsOneWidget);
+      expect(find.text('Stats'), findsOneWidget);
+      expect(find.textContaining('Goal'), findsWidgets);
+      expect(find.text('Possession'), findsOneWidget);
+    },
+  );
 
-  testWidgets('offline leagues, team, player, and search navigation works',
-      (tester) async {
+  testWidgets('offline leagues, team, player, and search navigation works', (
+    tester,
+  ) async {
     final harness = await _WidgetHarness.create(tester);
     addTearDown(harness.dispose);
 
@@ -88,10 +92,7 @@ void main() {
 }
 
 class _WidgetHarness {
-  _WidgetHarness({
-    required this.database,
-    required this.tempRoot,
-  });
+  _WidgetHarness({required this.database, required this.tempRoot});
 
   final AppDatabase database;
   final Directory tempRoot;
@@ -122,11 +123,13 @@ class _WidgetHarness {
       database: database,
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
+      leagueStandingsSource: LeagueStandingsSource(),
       logger: logger,
     );
 
-    final startupReport =
-        await services.importCoordinator.runLocalImport(triggerType: 'startup');
+    final startupReport = await services.importCoordinator.runLocalImport(
+      triggerType: 'startup',
+    );
 
     await tester.pumpWidget(
       ProviderScope(
@@ -139,10 +142,7 @@ class _WidgetHarness {
     );
     await _pumpForStability(tester);
 
-    return _WidgetHarness(
-      database: database,
-      tempRoot: tempRoot,
-    );
+    return _WidgetHarness(database: database, tempRoot: tempRoot);
   }
 
   Future<void> dispose() async {
@@ -251,16 +251,8 @@ class _WidgetHarness {
         },
       ],
       'teamStats': {
-        'home': {
-          'possession': 56,
-          'shots_on_target': 7,
-          'corners': 5,
-        },
-        'away': {
-          'possession': 44,
-          'shots_on_target': 4,
-          'corners': 2,
-        },
+        'home': {'possession': 56, 'shots_on_target': 7, 'corners': 5},
+        'away': {'possession': 44, 'shots_on_target': 4, 'corners': 2},
       },
     };
 

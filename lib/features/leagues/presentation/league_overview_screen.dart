@@ -1,8 +1,10 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
+import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/leagues/presentation/league_overview_providers.dart';
-import 'package:eri_sports/features/leagues/presentation/widgets/league_overview_widgets.dart';
+import 'package:eri_sports/features/leagues/presentation/widgets/league_overview_widgets.dart'
+    show LeagueHeader, LeagueTopTabs;
 import 'package:eri_sports/features/player_stats/presentation/player_stats_providers.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:eri_sports/shared/widgets/match_card_compact.dart';
@@ -10,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'dart:math' as math;
 
 class LeagueOverviewScreen extends ConsumerStatefulWidget {
   const LeagueOverviewScreen({required this.competitionId, super.key});
@@ -22,8 +25,7 @@ class LeagueOverviewScreen extends ConsumerStatefulWidget {
 }
 
 class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
-  LeagueTableMode _tableMode = LeagueTableMode.short;
-  LeagueScopeMode _scopeMode = LeagueScopeMode.overall;
+  String _selectedStandingsModeKey = 'all';
   LeagueFixtureFilter _fixtureFilter = LeagueFixtureFilter.all;
   LeagueNewsFilter _newsFilter = LeagueNewsFilter.all;
   LeagueTeamStatMetric _teamMetric = LeagueTeamStatMetric.points;
@@ -97,18 +99,13 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
                   child: TabBarView(
                     children: [
                       _TableTab(
-                        mode: _tableMode,
-                        scopeMode: _scopeMode,
-                        rows: state.standingsRows,
+                        standings: state.standings,
+                        overallRows: state.overallStandingsRows,
+                        selectedModeKey: _selectedStandingsModeKey,
                         resolver: resolver,
-                        onModeChanged: (mode) {
+                        onModeChanged: (modeKey) {
                           setState(() {
-                            _tableMode = mode;
-                          });
-                        },
-                        onScopeChanged: (scope) {
-                          setState(() {
-                            _scopeMode = scope;
+                            _selectedStandingsModeKey = modeKey;
                           });
                         },
                       ),
@@ -145,7 +142,7 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
                         resolver: resolver,
                       ),
                       _TeamStatsTab(
-                        rows: state.standingsRows,
+                        rows: state.overallStandingsRows,
                         metric: _teamMetric,
                         resolver: resolver,
                         onMetricChanged: (metric) {
@@ -242,52 +239,76 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
 
 class _TableTab extends StatelessWidget {
   const _TableTab({
-    required this.mode,
-    required this.scopeMode,
-    required this.rows,
+    required this.standings,
+    required this.overallRows,
+    required this.selectedModeKey,
     required this.resolver,
     required this.onModeChanged,
-    required this.onScopeChanged,
   });
 
-  final LeagueTableMode mode;
-  final LeagueScopeMode scopeMode;
-  final List<StandingsTableView> rows;
+  final LeagueStandingsLeague? standings;
+  final List<LeagueStandingsRow> overallRows;
+  final String selectedModeKey;
   final LocalAssetResolver resolver;
-  final ValueChanged<LeagueTableMode> onModeChanged;
-  final ValueChanged<LeagueScopeMode> onScopeChanged;
+  final ValueChanged<String> onModeChanged;
 
   @override
   Widget build(BuildContext context) {
+    final modeKeys = standings?.orderedModeKeys ?? const <String>['all'];
+    final preferredModeKeys = modeKeys
+        .where((modeKey) {
+          final rows = standings?.mode(modeKey)?.rows;
+          return rows != null && rows.isNotEmpty;
+        })
+        .toList(growable: false);
+
+    final availableModeKeys =
+        preferredModeKeys.isNotEmpty
+            ? preferredModeKeys
+            : const <String>['all'];
+
+    final activeModeKey =
+        availableModeKeys.contains(selectedModeKey)
+            ? selectedModeKey
+            : availableModeKeys.first;
+
+    final modeData = standings?.mode(activeModeKey);
+    final rows =
+        modeData != null && modeData.rows.isNotEmpty
+            ? modeData.rows
+            : overallRows;
+
     if (rows.isEmpty) {
       return const _EmptyTabState(
         message: 'No standings imported for this league yet.',
       );
     }
 
-    final scopedRows = List<StandingsTableView>.from(rows);
-    if (scopeMode != LeagueScopeMode.overall) {
-      scopedRows.sort((a, b) {
-        final pointsA = a.row.won * 3 + a.row.draw;
-        final pointsB = b.row.won * 3 + b.row.draw;
-        return pointsB.compareTo(pointsA);
-      });
-    }
+    final hasXgColumns =
+        activeModeKey.toLowerCase() == 'xg' ||
+        (modeData?.hasXgColumns ?? false);
+    final isFormMode = activeModeKey.toLowerCase() == 'form';
+    final modeLabels = availableModeKeys
+        .map((modeKey) => standingsModeLabel(modeKey))
+        .toList(growable: false);
+    final minTableWidth = _tableMinWidth(
+      hasXgColumns: hasXgColumns,
+      isFormMode: isFormMode,
+    );
 
-    final content = Column(
+    return Column(
       children: [
-        LeagueSegmentedControls(
-          selectedMode: mode,
-          selectedScope: scopeMode,
-          onModeChanged: onModeChanged,
-          onScopeChanged: onScopeChanged,
-        ),
-        if (scopeMode != LeagueScopeMode.overall)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(12, 0, 12, 8),
+        if (availableModeKeys.length > 1)
+          _FilterChipBar(
+            labels: modeLabels,
+            selectedIndex: availableModeKeys.indexOf(activeModeKey),
+            onSelected: (index) => onModeChanged(availableModeKeys[index]),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
             child: _InfoStrip(
-              text:
-                  'Home/Away split tables are not included in this offline data pack. Rankings are derived from available match totals.',
+              text: 'Mode: ${standingsModeLabel(activeModeKey)}',
             ),
           ),
         Expanded(
@@ -297,60 +318,364 @@ class _TableTab extends StatelessWidget {
               color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.72),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.72),
               ),
             ),
-            child: Column(
-              children: [
-                LeagueStandingsHeader(mode: mode),
-                Expanded(
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    itemCount: scopedRows.length,
-                    itemBuilder: (context, index) {
-                      final item = scopedRows[index];
-                      return LeagueStandingsRow(
-                        mode: mode,
-                        position: item.row.position,
-                        teamId: item.teamId,
-                        teamName: item.teamName,
-                        played: item.row.played,
-                        won: item.row.won,
-                        draw: item.row.draw,
-                        lost: item.row.lost,
-                        goalsFor: item.row.goalsFor,
-                        goalsAgainst: item.row.goalsAgainst,
-                        goalDiff: item.row.goalDiff,
-                        points: item.row.points,
-                        form: item.row.form,
-                        rowCount: scopedRows.length,
-                        resolver: resolver,
-                        onTap: () => context.push('/team/${item.teamId}'),
-                      );
-                    },
-                  ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: math.max(
+                  minTableWidth,
+                  MediaQuery.of(context).size.width - 20,
                 ),
-              ],
+                child: Column(
+                  children: [
+                    _StandingsTableHeader(
+                      hasXgColumns: hasXgColumns,
+                      isFormMode: isFormMode,
+                    ),
+                    Divider(
+                      height: 1,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.outline.withValues(alpha: 0.72),
+                    ),
+                    Expanded(
+                      child: ListView.separated(
+                        padding: EdgeInsets.zero,
+                        itemCount: rows.length,
+                        separatorBuilder:
+                            (_, __) => Divider(
+                              height: 1,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outline.withValues(alpha: 0.24),
+                            ),
+                        itemBuilder: (context, index) {
+                          final row = rows[index];
+                          return _StandingsTableRow(
+                            row: row,
+                            resolver: resolver,
+                            hasXgColumns: hasXgColumns,
+                            isFormMode: isFormMode,
+                            onTap: () => context.push('/team/${row.teamId}'),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
       ],
     );
+  }
 
-    if (mode == LeagueTableMode.full) {
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SizedBox(
-          width:
-              MediaQuery.of(context).size.width < 620
-                  ? 620
-                  : MediaQuery.of(context).size.width,
-          child: content,
+  double _tableMinWidth({
+    required bool hasXgColumns,
+    required bool isFormMode,
+  }) {
+    if (hasXgColumns) {
+      return 820;
+    }
+    if (isFormMode) {
+      return 780;
+    }
+    return 760;
+  }
+}
+
+class _StandingsTableHeader extends StatelessWidget {
+  const _StandingsTableHeader({
+    required this.hasXgColumns,
+    required this.isFormMode,
+  });
+
+  final bool hasXgColumns;
+  final bool isFormMode;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.78),
+      fontWeight: FontWeight.w700,
+    );
+
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
+      alignment: Alignment.center,
+      child: Row(
+        children: [
+          const SizedBox(width: 4),
+          const SizedBox(width: 8),
+          SizedBox(width: 22, child: Text('#', style: style)),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Team', style: style)),
+          _headerCell('Pl', width: 34, style: style),
+          _headerCell('W', width: 32, style: style),
+          _headerCell('D', width: 32, style: style),
+          _headerCell('L', width: 32, style: style),
+          if (hasXgColumns) ...[
+            _headerCell('xG', width: 54, style: style),
+            _headerCell('xGA', width: 54, style: style),
+            _headerCell('xPts', width: 58, style: style),
+          ] else if (isFormMode) ...[
+            SizedBox(
+              width: 110,
+              child: Text('Form', textAlign: TextAlign.center, style: style),
+            ),
+          ] else ...[
+            _headerCell('GF-GA', width: 64, style: style),
+            _headerCell('GD', width: 38, style: style),
+          ],
+          _headerCell('Pts', width: 40, style: style),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerCell(String text, {required double width, TextStyle? style}) {
+    return SizedBox(
+      width: width,
+      child: Text(text, textAlign: TextAlign.right, style: style),
+    );
+  }
+}
+
+class _StandingsTableRow extends StatelessWidget {
+  const _StandingsTableRow({
+    required this.row,
+    required this.resolver,
+    required this.hasXgColumns,
+    required this.isFormMode,
+    required this.onTap,
+  });
+
+  final LeagueStandingsRow row;
+  final LocalAssetResolver resolver;
+  final bool hasXgColumns;
+  final bool isFormMode;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final qualColor = _qualColorFromHex(row.qualColor);
+
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        height: 46,
+        padding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
+        alignment: Alignment.center,
+        child: Row(
+          children: [
+            Container(
+              width: 4,
+              height: 28,
+              decoration: BoxDecoration(
+                color: qualColor,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 22,
+              child: Text(
+                '${row.position}',
+                style: TextStyle(
+                  color: scheme.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Row(
+                children: [
+                  EntityBadge(
+                    entityId: row.teamId,
+                    entityName: row.teamName,
+                    type: SportsAssetType.teams,
+                    resolver: resolver,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      row.displayTeamName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: scheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _metricCell('${row.played}', width: 34, color: scheme.onSurface),
+            _metricCell('${row.wins}', width: 32, color: scheme.onSurface),
+            _metricCell('${row.draws}', width: 32, color: scheme.onSurface),
+            _metricCell('${row.losses}', width: 32, color: scheme.onSurface),
+            if (hasXgColumns) ...[
+              _metricCell(
+                _formatDecimal(row.xg),
+                width: 54,
+                color: scheme.onSurface,
+              ),
+              _metricCell(
+                _formatDecimal(row.xgConceded),
+                width: 54,
+                color: scheme.onSurface,
+              ),
+              _metricCell(
+                _formatDecimal(row.xPoints),
+                width: 58,
+                color: scheme.onSurface,
+              ),
+            ] else if (isFormMode) ...[
+              SizedBox(width: 110, child: _CompactFormPills(form: row.form)),
+            ] else ...[
+              _metricCell(row.scoresStr, width: 64, color: scheme.onSurface),
+              _metricCell(
+                _goalDiffLabel(row.goalConDiff),
+                width: 38,
+                color: scheme.onSurface,
+              ),
+            ],
+            _metricCell(
+              '${row.points}',
+              width: 40,
+              bold: true,
+              color: scheme.onSurface,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _metricCell(
+    String text, {
+    required double width,
+    required Color color,
+    bool bold = false,
+  }) {
+    return SizedBox(
+      width: width,
+      child: Text(
+        text,
+        textAlign: TextAlign.right,
+        style: TextStyle(
+          color: color,
+          fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+          fontSize: 12.5,
+        ),
+      ),
+    );
+  }
+
+  Color _qualColorFromHex(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return Colors.transparent;
+    }
+
+    var hex = value.trim().replaceFirst('#', '');
+    if (hex.length == 6) {
+      hex = 'FF$hex';
+    }
+    if (hex.length != 8) {
+      return Colors.transparent;
+    }
+
+    final parsed = int.tryParse(hex, radix: 16);
+    if (parsed == null) {
+      return Colors.transparent;
+    }
+    return Color(parsed);
+  }
+
+  String _goalDiffLabel(int value) => value > 0 ? '+$value' : '$value';
+
+  String _formatDecimal(double? value) {
+    if (value == null) {
+      return '-';
+    }
+    return value.toStringAsFixed(1);
+  }
+}
+
+class _CompactFormPills extends StatelessWidget {
+  const _CompactFormPills({required this.form});
+
+  final String? form;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = (form ?? '')
+        .toUpperCase()
+        .replaceAll(RegExp('[^WDL]'), '')
+        .split('');
+
+    if (tokens.isEmpty || (tokens.length == 1 && tokens.first.isEmpty)) {
+      return Text(
+        '-',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Theme.of(
+            context,
+          ).colorScheme.onSurface.withValues(alpha: 0.72),
+          fontWeight: FontWeight.w600,
         ),
       );
     }
 
-    return content;
+    final clipped = tokens.where((token) => token.isNotEmpty).take(5).toList();
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: clipped
+          .map(
+            (token) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1.5),
+              child: Container(
+                width: 18,
+                height: 18,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _tokenColor(token),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  token,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  Color _tokenColor(String token) {
+    switch (token) {
+      case 'W':
+        return const Color(0xFF1FA463);
+      case 'D':
+        return const Color(0xFF9BA5BD);
+      default:
+        return const Color(0xFFE14E67);
+    }
   }
 }
 
@@ -668,10 +993,9 @@ class _PlayerStatsTab extends ConsumerWidget {
                             color: Theme.of(context).cardColor,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .outline
-                                  .withValues(alpha: 0.72),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outline.withValues(alpha: 0.72),
                             ),
                           ),
                           child: Padding(
@@ -757,7 +1081,7 @@ class _TeamStatsTab extends StatelessWidget {
     required this.onMetricChanged,
   });
 
-  final List<StandingsTableView> rows;
+  final List<LeagueStandingsRow> rows;
   final LeagueTeamStatMetric metric;
   final LocalAssetResolver resolver;
   final ValueChanged<LeagueTeamStatMetric> onMetricChanged;
@@ -802,10 +1126,9 @@ class _TeamStatsTab extends StatelessWidget {
                     color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .outline
-                          .withValues(alpha: 0.72),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.outline.withValues(alpha: 0.72),
                     ),
                   ),
                   child: Padding(
@@ -908,11 +1231,9 @@ class _NewsTile extends StatelessWidget {
                     Text(
                       '${item.source} • $published',
                       style: TextStyle(
-                        color: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.color
-                            ?.withValues(alpha: 0.82),
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
                       ),
                     ),
                   ],
@@ -927,7 +1248,9 @@ class _NewsTile extends StatelessWidget {
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.72),
+            color: Theme.of(
+              context,
+            ).colorScheme.outline.withValues(alpha: 0.72),
           ),
         ),
         child: Padding(
@@ -972,11 +1295,9 @@ class _NewsTile extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.color
-                            ?.withValues(alpha: 0.86),
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.color?.withValues(alpha: 0.86),
                         height: 1.25,
                       ),
                     ),
@@ -984,11 +1305,9 @@ class _NewsTile extends StatelessWidget {
                     Text(
                       '$published • ${item.source}',
                       style: TextStyle(
-                        color: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.color
-                            ?.withValues(alpha: 0.82),
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
                         fontSize: 12,
                       ),
                     ),
@@ -1031,10 +1350,9 @@ class _FilterChipBar extends StatelessWidget {
                   selectedColor: Theme.of(context).colorScheme.primary,
                   backgroundColor: Theme.of(context).cardColor,
                   side: BorderSide(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .outline
-                        .withValues(alpha: 0.72),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outline.withValues(alpha: 0.72),
                   ),
                   labelStyle: TextStyle(
                     color:
@@ -1072,11 +1390,9 @@ class _InfoStrip extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          color: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.color
-              ?.withValues(alpha: 0.88),
+          color: Theme.of(
+            context,
+          ).textTheme.bodySmall?.color?.withValues(alpha: 0.88),
           fontSize: 12,
         ),
       ),
@@ -1098,11 +1414,9 @@ class _EmptyTabState extends StatelessWidget {
           message,
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.color
-                ?.withValues(alpha: 0.9),
+            color: Theme.of(
+              context,
+            ).textTheme.bodySmall?.color?.withValues(alpha: 0.9),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1123,11 +1437,9 @@ class _LeagueErrorState extends StatelessWidget {
           'Unable to load this league from local data. Re-scan your offline files and try again.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.color
-                ?.withValues(alpha: 0.9),
+            color: Theme.of(
+              context,
+            ).textTheme.bodySmall?.color?.withValues(alpha: 0.9),
             fontWeight: FontWeight.w600,
           ),
         ),

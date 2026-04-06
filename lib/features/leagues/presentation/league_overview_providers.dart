@@ -1,5 +1,6 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/data/db/app_database.dart';
+import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/leagues/presentation/league_theme_resolver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -87,7 +88,8 @@ class LeagueOverviewState {
     required this.countryLabel,
     required this.availableSeasonLabels,
     required this.visualTheme,
-    required this.standingsRows,
+    required this.standings,
+    required this.overallStandingsRows,
     required this.fixtureRows,
     required this.newsItems,
   });
@@ -97,7 +99,8 @@ class LeagueOverviewState {
   final String countryLabel;
   final List<String> availableSeasonLabels;
   final LeagueVisualTheme visualTheme;
-  final List<StandingsTableView> standingsRows;
+  final LeagueStandingsLeague? standings;
+  final List<LeagueStandingsRow> overallStandingsRows;
   final List<HomeMatchView> fixtureRows;
   final List<LeagueNewsItem> newsItems;
 }
@@ -111,8 +114,13 @@ final leagueOverviewProvider =
       final competition = await services.database.readCompetitionById(
         competitionId,
       );
-      final standingsRows = await services.database.readStandingsTableView(
-        competitionId,
+      final standings = await services.leagueStandingsSource
+          .readLeagueByCompetitionId(competitionId);
+      final fallbackStandingsRows = await services.database
+          .readStandingsTableView(competitionId);
+      final overallRows = _resolveOverallStandingsRows(
+        standings,
+        fallbackStandingsRows,
       );
       final fixtureRows = await services.database.readMatchesForCompetition(
         competitionId,
@@ -124,17 +132,21 @@ final leagueOverviewProvider =
         limit: 3,
       );
 
-      final competitionName = competition?.name ?? 'League';
+      final competitionName =
+          competition?.name ?? standings?.displayName ?? 'League';
       final country = competition?.country;
       final visualTheme = LeagueThemeResolver.resolve(
         competitionId: competitionId,
         competitionName: competitionName,
       );
 
-      final seasonLabels = _deriveSeasonLabels(fixtureRows);
+      final seasonLabels = _deriveSeasonLabels(
+        fixtureRows,
+        explicitSeason: standings?.meta.season,
+      );
       final newsItems = _buildLeagueNews(
         competitionName: competitionName,
-        standingsRows: standingsRows,
+        standingsRows: overallRows,
         fixtures: fixtureRows,
         goalLeaders: goalLeaders,
       );
@@ -145,7 +157,8 @@ final leagueOverviewProvider =
         countryLabel: _countryLabel(country, competitionName),
         availableSeasonLabels: seasonLabels,
         visualTheme: visualTheme,
-        standingsRows: standingsRows,
+        standings: standings,
+        overallStandingsRows: overallRows,
         fixtureRows: fixtureRows,
         newsItems: newsItems,
       );
@@ -197,31 +210,29 @@ final leaguePlayerLeadersProvider = FutureProvider.family<
 });
 
 List<LeagueTeamStatRow> buildTeamStatRows(
-  List<StandingsTableView> rows,
+  List<LeagueStandingsRow> rows,
   LeagueTeamStatMetric metric,
 ) {
-  final items = List<StandingsTableView>.from(rows);
+  final items = List<LeagueStandingsRow>.from(rows);
 
   switch (metric) {
     case LeagueTeamStatMetric.points:
-      items.sort((a, b) => b.row.points.compareTo(a.row.points));
+      items.sort((a, b) => b.points.compareTo(a.points));
       break;
     case LeagueTeamStatMetric.goalsFor:
-      items.sort((a, b) => b.row.goalsFor.compareTo(a.row.goalsFor));
+      items.sort((a, b) => b.goalsFor.compareTo(a.goalsFor));
       break;
     case LeagueTeamStatMetric.goalDiff:
-      items.sort((a, b) => b.row.goalDiff.compareTo(a.row.goalDiff));
+      items.sort((a, b) => b.goalConDiff.compareTo(a.goalConDiff));
       break;
     case LeagueTeamStatMetric.bestDefence:
-      items.sort((a, b) => a.row.goalsAgainst.compareTo(b.row.goalsAgainst));
+      items.sort((a, b) => a.goalsAgainst.compareTo(b.goalsAgainst));
       break;
     case LeagueTeamStatMetric.wins:
-      items.sort((a, b) => b.row.won.compareTo(a.row.won));
+      items.sort((a, b) => b.wins.compareTo(a.wins));
       break;
     case LeagueTeamStatMetric.form:
-      items.sort(
-        (a, b) => _formPoints(b.row.form).compareTo(_formPoints(a.row.form)),
-      );
+      items.sort((a, b) => _formPoints(b.form).compareTo(_formPoints(a.form)));
       break;
   }
 
@@ -230,48 +241,48 @@ List<LeagueTeamStatRow> buildTeamStatRows(
       LeagueTeamStatRow(
         rank: i + 1,
         teamId: items[i].teamId,
-        teamName: items[i].teamName,
+        teamName: items[i].displayTeamName,
         primary: _primaryTeamMetric(items[i], metric),
         secondary: _secondaryTeamMetric(items[i], metric),
       ),
   ];
 }
 
-String _primaryTeamMetric(StandingsTableView row, LeagueTeamStatMetric metric) {
+String _primaryTeamMetric(LeagueStandingsRow row, LeagueTeamStatMetric metric) {
   switch (metric) {
     case LeagueTeamStatMetric.points:
-      return '${row.row.points} pts';
+      return '${row.points} pts';
     case LeagueTeamStatMetric.goalsFor:
-      return '${row.row.goalsFor} GF';
+      return '${row.goalsFor} GF';
     case LeagueTeamStatMetric.goalDiff:
-      final gd = row.row.goalDiff;
+      final gd = row.goalConDiff;
       return gd > 0 ? '+$gd GD' : '$gd GD';
     case LeagueTeamStatMetric.bestDefence:
-      return '${row.row.goalsAgainst} GA';
+      return '${row.goalsAgainst} GA';
     case LeagueTeamStatMetric.wins:
-      return '${row.row.won} wins';
+      return '${row.wins} wins';
     case LeagueTeamStatMetric.form:
-      return '${_formPoints(row.row.form)} pts';
+      return '${_formPoints(row.form)} pts';
   }
 }
 
 String _secondaryTeamMetric(
-  StandingsTableView row,
+  LeagueStandingsRow row,
   LeagueTeamStatMetric metric,
 ) {
   switch (metric) {
     case LeagueTeamStatMetric.points:
-      return 'W${row.row.won} D${row.row.draw} L${row.row.lost}';
+      return 'W${row.wins} D${row.draws} L${row.losses}';
     case LeagueTeamStatMetric.goalsFor:
-      return 'Matches ${row.row.played}';
+      return 'Matches ${row.played}';
     case LeagueTeamStatMetric.goalDiff:
-      return '${row.row.goalsFor}:${row.row.goalsAgainst}';
+      return '${row.goalsFor}:${row.goalsAgainst}';
     case LeagueTeamStatMetric.bestDefence:
-      return '${row.row.goalDiff > 0 ? '+' : ''}${row.row.goalDiff} GD';
+      return '${row.goalConDiff > 0 ? '+' : ''}${row.goalConDiff} GD';
     case LeagueTeamStatMetric.wins:
-      return '${row.row.points} points';
+      return '${row.points} points';
     case LeagueTeamStatMetric.form:
-      return row.row.form ?? 'No form';
+      return row.form ?? 'No form';
   }
 }
 
@@ -300,7 +311,15 @@ String _countryLabel(String? country, String competitionName) {
   return 'Competition';
 }
 
-List<String> _deriveSeasonLabels(List<HomeMatchView> fixtures) {
+List<String> _deriveSeasonLabels(
+  List<HomeMatchView> fixtures, {
+  String? explicitSeason,
+}) {
+  final labels = <String>{};
+  if (explicitSeason != null && explicitSeason.trim().isNotEmpty) {
+    labels.add(explicitSeason.trim());
+  }
+
   final seasons = <int>{};
   for (final fixture in fixtures) {
     final date = fixture.match.kickoffUtc;
@@ -312,7 +331,8 @@ List<String> _deriveSeasonLabels(List<HomeMatchView> fixtures) {
   seasons.add(now.month >= 7 ? now.year : now.year - 1);
 
   final ordered = seasons.toList()..sort((a, b) => b.compareTo(a));
-  return ordered.map((year) => '$year/${year + 1}').toList(growable: false);
+  labels.addAll(ordered.map((year) => '$year/${year + 1}'));
+  return labels.toList(growable: false);
 }
 
 int _formPoints(String? form) {
@@ -335,7 +355,7 @@ int _formPoints(String? form) {
 
 List<LeagueNewsItem> _buildLeagueNews({
   required String competitionName,
-  required List<StandingsTableView> standingsRows,
+  required List<LeagueStandingsRow> standingsRows,
   required List<HomeMatchView> fixtures,
   required List<TopPlayerLeaderboardEntryView> goalLeaders,
 }) {
@@ -347,9 +367,9 @@ List<LeagueNewsItem> _buildLeagueNews({
     items.add(
       LeagueNewsItem(
         id: 'table-top-${top.teamId}',
-        title: '${top.teamName} lead the $competitionName table',
+        title: '${top.displayTeamName} lead the $competitionName table',
         excerpt:
-            '${top.teamName} are on ${top.row.points} points after ${top.row.played} matches.',
+            '${top.displayTeamName} are on ${top.points} points after ${top.played} matches.',
         source: 'Offline Desk',
         publishedAtUtc: now,
         isInsight: true,
@@ -417,4 +437,37 @@ List<LeagueNewsItem> _buildLeagueNews({
 
   items.sort((a, b) => b.publishedAtUtc.compareTo(a.publishedAtUtc));
   return items;
+}
+
+List<LeagueStandingsRow> _resolveOverallStandingsRows(
+  LeagueStandingsLeague? standings,
+  List<StandingsTableView> fallbackRows,
+) {
+  final fromAll = standings?.overallMode?.rows;
+  if (fromAll != null && fromAll.isNotEmpty) {
+    return fromAll;
+  }
+
+  final converted = fallbackRows
+    .map(
+      (item) => LeagueStandingsRow(
+        teamId: item.teamId,
+        teamName: item.teamName,
+        shortName: item.teamName,
+        position: item.row.position,
+        played: item.row.played,
+        wins: item.row.won,
+        draws: item.row.draw,
+        losses: item.row.lost,
+        scoresStr: '${item.row.goalsFor}-${item.row.goalsAgainst}',
+        goalsFor: item.row.goalsFor,
+        goalsAgainst: item.row.goalsAgainst,
+        goalConDiff: item.row.goalDiff,
+        points: item.row.points,
+        form: item.row.form,
+      ),
+    )
+    .toList(growable: false)..sort((a, b) => a.position.compareTo(b.position));
+
+  return converted;
 }
