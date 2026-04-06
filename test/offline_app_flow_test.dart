@@ -26,7 +26,7 @@ void main() {
     'offline startup imports and match center renders timeline/stats',
     (tester) async {
       final harness = await _WidgetHarness.create(tester);
-      addTearDown(harness.dispose);
+      addTearDown(() => harness.dispose(tester));
 
       expect(find.textContaining('Local data import: success'), findsOneWidget);
       expect(find.text('Arsenal'), findsWidgets);
@@ -46,7 +46,7 @@ void main() {
     tester,
   ) async {
     final harness = await _WidgetHarness.create(tester);
-    addTearDown(harness.dispose);
+    addTearDown(() => harness.dispose(tester));
 
     await tester.tap(find.text('Leagues').first.hitTestable());
     await _pumpForStability(tester);
@@ -166,7 +166,11 @@ class _WidgetHarness {
     return _WidgetHarness(database: database, tempRoot: tempRoot);
   }
 
-  Future<void> dispose() async {
+  Future<void> dispose(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
     await database.close();
     if (await tempRoot.exists()) {
       await tempRoot.delete(recursive: true);
