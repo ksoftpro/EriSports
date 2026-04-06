@@ -8,6 +8,7 @@ import 'package:eri_sports/features/more/presentation/more_screen.dart';
 import 'package:eri_sports/features/player/presentation/player_screen.dart';
 import 'package:eri_sports/features/player_stats/presentation/player_stats_screen.dart';
 import 'package:eri_sports/features/search/presentation/search_screen.dart';
+import 'package:eri_sports/features/sync/presentation/daylysport_sync_screen.dart';
 import 'package:eri_sports/features/team/presentation/team_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -117,6 +118,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               initialCompetitionId: state.uri.queryParameters['competitionId'],
               initialStatType: state.uri.queryParameters['statType'],
             ),
+      ),
+      GoRoute(
+        path: '/sync',
+        builder: (context, state) => const DaylysportSyncScreen(),
       ),
     ],
   );

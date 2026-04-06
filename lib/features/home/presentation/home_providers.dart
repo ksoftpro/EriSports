@@ -1,6 +1,7 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
-import 'package:eri_sports/app/bootstrap/startup_controller.dart';
+import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
+import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:eri_sports/features/bookmarks/presentation/bookmarks_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,7 +24,8 @@ class HomeFeedState {
 }
 
 final homeFeedProvider = FutureProvider<HomeFeedState>((ref) async {
-  ref.watch(dataRefreshTokenProvider);
+  ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.matches));
+  ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.catalog));
   final services = ref.read(appServicesProvider);
   final following = ref.watch(followingSelectionProvider);
   final now = DateTime.now().toUtc();

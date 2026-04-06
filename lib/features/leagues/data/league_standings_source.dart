@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
+import 'package:flutter/foundation.dart';
 
 const List<String> kPreferredStandingsModeOrder = [
   'all',
@@ -81,7 +82,7 @@ class LeagueStandingsSource {
 
     try {
       final raw = await sourceFile.readAsString();
-      final decoded = jsonDecode(raw);
+      final decoded = await compute(jsonDecode, raw);
       final parsed = LeagueStandingsBundle.fromJson(decoded);
       _cachedBundle = parsed;
       _cachedSourcePath = sourceFile.path;

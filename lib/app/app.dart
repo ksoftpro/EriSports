@@ -1,5 +1,6 @@
 import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/app/bootstrap/startup_controller.dart';
+import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/app/theme/app_theme.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:flutter/material.dart';
@@ -16,10 +17,29 @@ class _EriSportsAppState extends ConsumerState<EriSportsApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
     Future.microtask(() {
       ref.read(startupControllerProvider.notifier).ensureStarted();
+      if (ref.read(daylysportAutoMonitoringEnabledProvider)) {
+        ref.read(daylysportSyncControllerProvider.notifier).ensureMonitoringStarted();
+      }
     });
   }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
+    super.dispose();
+  }
+
+  late final WidgetsBindingObserver _lifecycleObserver =
+      _DaylysportLifecycleObserver(
+        onResume: () {
+          if (ref.read(daylysportAutoMonitoringEnabledProvider)) {
+            ref.read(daylysportSyncControllerProvider.notifier).runResumeSyncIfNeeded();
+          }
+        },
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +76,19 @@ class _EriSportsAppState extends ConsumerState<EriSportsApp> {
         );
       },
     );
+  }
+}
+
+class _DaylysportLifecycleObserver extends WidgetsBindingObserver {
+  _DaylysportLifecycleObserver({required this.onResume});
+
+  final VoidCallback onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      onResume();
+    }
   }
 }
 

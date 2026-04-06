@@ -10,7 +10,9 @@ import 'package:eri_sports/data/import/parsers/players_parser.dart';
 import 'package:eri_sports/data/import/parsers/standings_parser.dart';
 import 'package:eri_sports/data/import/parsers/teams_parser.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
+import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
+import 'package:flutter/foundation.dart';
 
 class ImportRunReport {
   const ImportRunReport({
@@ -20,7 +22,15 @@ class ImportRunReport {
     required this.finishedAtUtc,
     required this.sourcePath,
     required this.jsonFileCount,
+    required this.processedFileCount,
     required this.status,
+    required this.importedFileCount,
+    required this.skippedFileCount,
+    required this.failedFileCount,
+    required this.importedRelativePaths,
+    required this.skippedRelativePaths,
+    required this.failedRelativePaths,
+    required this.affectedDomains,
     this.errorMessage,
   });
 
@@ -30,8 +40,36 @@ class ImportRunReport {
   final DateTime finishedAtUtc;
   final String sourcePath;
   final int jsonFileCount;
+  final int processedFileCount;
   final String status;
+  final int importedFileCount;
+  final int skippedFileCount;
+  final int failedFileCount;
+  final List<String> importedRelativePaths;
+  final List<String> skippedRelativePaths;
+  final List<String> failedRelativePaths;
+  final Set<DaylysportDataDomain> affectedDomains;
   final String? errorMessage;
+}
+
+class ImportProgressUpdate {
+  const ImportProgressUpdate({
+    required this.stage,
+    required this.totalFiles,
+    required this.processedFiles,
+    required this.importedFiles,
+    required this.skippedFiles,
+    required this.failedFiles,
+    this.currentRelativePath,
+  });
+
+  final String stage;
+  final int totalFiles;
+  final int processedFiles;
+  final int importedFiles;
+  final int skippedFiles;
+  final int failedFiles;
+  final String? currentRelativePath;
 }
 
 class ImportCoordinator {
@@ -56,7 +94,12 @@ class ImportCoordinator {
   final PlayersParser _playersParser;
   final MatchDetailParser _matchDetailParser;
 
-  Future<ImportRunReport> runLocalImport({required String triggerType}) async {
+  Future<ImportRunReport> runLocalImport({
+    required String triggerType,
+    List<LocalJsonFileSnapshot>? snapshots,
+    Set<String>? onlyRelativePaths,
+    void Function(ImportProgressUpdate update)? onProgress,
+  }) async {
     final startedAtUtc = DateTime.now().toUtc();
     final runId = await database
         .into(database.importRuns)
@@ -71,23 +114,47 @@ class ImportCoordinator {
     try {
       final daylySportDir =
           await daylySportLocator.getOrCreateDaylySportDirectory();
-      final preferCachedPaths = triggerType == 'startup';
-      final knownRelativePaths =
-          preferCachedPaths
-              ? await _latestKnownRelativePaths()
-              : const <String>[];
-      final snapshots = await scanner.scanJsonFiles(
-        daylySportDir,
-        preferredRelativePaths: knownRelativePaths,
-        preferCachedPaths: preferCachedPaths,
-      );
+      final discoveredSnapshots =
+          snapshots ??
+          await scanner.scanJsonFiles(
+            daylySportDir,
+            preferredRelativePaths:
+                triggerType == 'startup'
+                    ? await _latestKnownRelativePaths()
+                    : const <String>[],
+            preferCachedPaths: triggerType == 'startup',
+          );
+      final queuedSnapshots =
+          onlyRelativePaths == null
+              ? discoveredSnapshots
+              : discoveredSnapshots
+                  .where(
+                    (snapshot) => onlyRelativePaths.contains(snapshot.relativePath),
+                  )
+                  .toList(growable: false);
 
       final latestChecksums = await _latestChecksumsByPath();
       var importedFileCount = 0;
       var skippedFileCount = 0;
       var failedFileCount = 0;
+      var processedFileCount = 0;
+      final importedRelativePaths = <String>[];
+      final skippedRelativePaths = <String>[];
+      final failedRelativePaths = <String>[];
+      final affectedDomains = <DaylysportDataDomain>{};
 
-      for (final snapshot in snapshots) {
+      onProgress?.call(
+        ImportProgressUpdate(
+          stage: 'queued',
+          totalFiles: queuedSnapshots.length,
+          processedFiles: 0,
+          importedFiles: 0,
+          skippedFiles: 0,
+          failedFiles: 0,
+        ),
+      );
+
+      for (final snapshot in queuedSnapshots) {
         final importFileId = await database
             .into(database.importFiles)
             .insert(
@@ -102,41 +169,85 @@ class ImportCoordinator {
 
         final previousChecksum = latestChecksums[snapshot.relativePath];
         if (previousChecksum != null && previousChecksum == snapshot.checksum) {
+          processedFileCount++;
           skippedFileCount++;
+          skippedRelativePaths.add(snapshot.relativePath);
           await _markImportFileStatus(
             importFileId,
             status: 'skipped_unchanged',
+          );
+          onProgress?.call(
+            ImportProgressUpdate(
+              stage: 'skipped',
+              totalFiles: queuedSnapshots.length,
+              processedFiles: processedFileCount,
+              importedFiles: importedFileCount,
+              skippedFiles: skippedFileCount,
+              failedFiles: failedFileCount,
+              currentRelativePath: snapshot.relativePath,
+            ),
           );
           continue;
         }
 
         try {
           final wasImported = await _importSnapshot(snapshot);
+          processedFileCount++;
+          affectedDomains.addAll(
+            classifyDaylysportDomains(snapshot.relativePath),
+          );
           if (wasImported) {
             importedFileCount++;
+            importedRelativePaths.add(snapshot.relativePath);
             await _markImportFileStatus(importFileId, status: 'imported');
           } else {
             skippedFileCount++;
+            skippedRelativePaths.add(snapshot.relativePath);
             await _markImportFileStatus(
               importFileId,
               status: 'skipped_unsupported',
             );
           }
+          onProgress?.call(
+            ImportProgressUpdate(
+              stage: wasImported ? 'imported' : 'skipped',
+              totalFiles: queuedSnapshots.length,
+              processedFiles: processedFileCount,
+              importedFiles: importedFileCount,
+              skippedFiles: skippedFileCount,
+              failedFiles: failedFileCount,
+              currentRelativePath: snapshot.relativePath,
+            ),
+          );
         } catch (error) {
+          processedFileCount++;
           failedFileCount++;
+          failedRelativePaths.add(snapshot.relativePath);
           await _markImportFileStatus(
             importFileId,
             status: 'failed',
             errorMessage: error.toString(),
           );
           logger.warn('Failed to import ${snapshot.relativePath}: $error');
+          onProgress?.call(
+            ImportProgressUpdate(
+              stage: 'failed',
+              totalFiles: queuedSnapshots.length,
+              processedFiles: processedFileCount,
+              importedFiles: importedFileCount,
+              skippedFiles: skippedFileCount,
+              failedFiles: failedFileCount,
+              currentRelativePath: snapshot.relativePath,
+            ),
+          );
         }
       }
 
       final finishedAtUtc = DateTime.now().toUtc();
       final runStatus = failedFileCount == 0 ? 'success' : 'partial_success';
       final summary = {
-        'files_scanned': snapshots.length,
+        'files_scanned': discoveredSnapshots.length,
+        'files_processed': queuedSnapshots.length,
         'files_imported': importedFileCount,
         'files_skipped': skippedFileCount,
         'files_failed': failedFileCount,
@@ -162,8 +273,16 @@ class ImportCoordinator {
         startedAtUtc: startedAtUtc,
         finishedAtUtc: finishedAtUtc,
         sourcePath: daylySportDir.path,
-        jsonFileCount: snapshots.length,
+        jsonFileCount: discoveredSnapshots.length,
+        processedFileCount: queuedSnapshots.length,
         status: runStatus,
+        importedFileCount: importedFileCount,
+        skippedFileCount: skippedFileCount,
+        failedFileCount: failedFileCount,
+        importedRelativePaths: importedRelativePaths,
+        skippedRelativePaths: skippedRelativePaths,
+        failedRelativePaths: failedRelativePaths,
+        affectedDomains: affectedDomains,
       );
     } catch (error) {
       final finishedAtUtc = DateTime.now().toUtc();
@@ -185,7 +304,15 @@ class ImportCoordinator {
         finishedAtUtc: finishedAtUtc,
         sourcePath: '',
         jsonFileCount: 0,
+        processedFileCount: 0,
         status: 'failed',
+        importedFileCount: 0,
+        skippedFileCount: 0,
+        failedFileCount: 0,
+        importedRelativePaths: const [],
+        skippedRelativePaths: const [],
+        failedRelativePaths: const [],
+        affectedDomains: const {},
         errorMessage: error.toString(),
       );
     }
@@ -320,7 +447,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importFotmobLeaguesCompleteFile(File file) async {
-    final decoded = jsonDecode(await file.readAsString());
+    final decoded = await _decodeJsonFile(file);
     if (decoded is! Map<String, dynamic>) {
       return;
     }
@@ -416,7 +543,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importFotmobMatchesFile(File file) async {
-    final decoded = jsonDecode(await file.readAsString());
+    final decoded = await _decodeJsonFile(file);
     if (decoded is! Map<String, dynamic>) {
       return;
     }
@@ -445,7 +572,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importFotmobTeamsFile(File file) async {
-    final decoded = jsonDecode(await file.readAsString());
+    final decoded = await _decodeJsonFile(file);
     if (decoded is! Map<String, dynamic>) {
       return;
     }
@@ -509,7 +636,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importFotmobStandingsFile(File file) async {
-    final decoded = jsonDecode(await file.readAsString());
+    final decoded = await _decodeJsonFile(file);
     if (decoded is! Map<String, dynamic>) {
       return;
     }
@@ -533,7 +660,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importFotmobMatchDetailsSummaryFile(File file) async {
-    final decoded = jsonDecode(await file.readAsString());
+    final decoded = await _decodeJsonFile(file);
     if (decoded is! Map<String, dynamic>) {
       return;
     }
@@ -659,7 +786,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importFixturesFullFile(File file) async {
-    final decoded = jsonDecode(await file.readAsString());
+    final decoded = await _decodeJsonFile(file);
     if (decoded is! Map<String, dynamic>) {
       return;
     }
@@ -705,7 +832,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importTopStandingsFullFile(File file) async {
-    final decoded = jsonDecode(await file.readAsString());
+    final decoded = await _decodeJsonFile(file);
     if (decoded is! Map<String, dynamic>) {
       return;
     }
@@ -741,7 +868,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importTopScoreDataFile(File file) async {
-    final decoded = jsonDecode(await file.readAsString());
+    final decoded = await _decodeJsonFile(file);
     if (decoded is! Map<String, dynamic>) {
       return;
     }
@@ -826,7 +953,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importFotmobFullPlayerStatsFile(File file) async {
-    final decoded = jsonDecode(await file.readAsString());
+    final decoded = await _decodeJsonFile(file);
     if (decoded is! Map<String, dynamic>) {
       return;
     }
@@ -1620,4 +1747,9 @@ class ImportCoordinator {
           ),
         );
   }
+}
+
+Future<dynamic> _decodeJsonFile(File file) async {
+  final raw = await file.readAsString();
+  return compute(jsonDecode, raw);
 }

@@ -1,12 +1,14 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
-import 'package:eri_sports/app/bootstrap/startup_controller.dart';
+import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
+import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final topStatsCompetitionsProvider =
     FutureProvider<List<TopStatsCompetitionView>>((ref) async {
-      ref.watch(dataRefreshTokenProvider);
+      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
+      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.catalog));
       final services = ref.read(appServicesProvider);
       return services.database.readTopStatsCompetitions();
     });
@@ -16,7 +18,7 @@ final topStatCategoriesProvider =
       ref,
       competitionId,
     ) async {
-      ref.watch(dataRefreshTokenProvider);
+      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
       final services = ref.read(appServicesProvider);
       return services.database.readTopStatCategories(competitionId);
     });
@@ -48,7 +50,7 @@ class TopPlayersQuery {
 final topPlayersLeaderboardProvider =
     FutureProvider.family<List<TopPlayerLeaderboardEntryView>, TopPlayersQuery>(
       (ref, query) async {
-        ref.watch(dataRefreshTokenProvider);
+        ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
         final services = ref.read(appServicesProvider);
         return services.database.readTopPlayersForCategory(
           query.competitionId,

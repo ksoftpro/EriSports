@@ -5,13 +5,18 @@ import 'package:drift/native.dart';
 import 'package:eri_sports/app/app.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/app/bootstrap/startup_controller.dart';
+import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/core/log/app_logger.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
+import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
+import 'package:eri_sports/data/local_files/daylysport_file_discovery_service.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
+import 'package:eri_sports/data/local_files/json_data_version_tracker.dart';
+import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -119,23 +124,42 @@ class _TestHarness {
     final logger = AppLogger();
     final scanner = FileInventoryScanner();
     final database = AppDatabase.forTesting(NativeDatabase.memory());
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final cacheStore = DaylySportCacheStore(sharedPreferences: preferences);
+    final versionTracker = JsonDataVersionTracker(cacheStore: cacheStore);
     final importCoordinator = ImportCoordinator(
       database: database,
       daylySportLocator: locator,
       scanner: scanner,
       logger: logger,
     );
-    final assetResolver = LocalAssetResolver(daylySportLocator: locator);
+    final assetResolver = LocalAssetResolver(
+      daylySportLocator: locator,
+      cacheStore: cacheStore,
+    );
+    final leagueStandingsSource = LeagueStandingsSource(
+      daylySportLocator: locator,
+      cacheStore: cacheStore,
+    );
+    final syncCoordinator = DaylysportSyncCoordinator(
+      discoveryService: DaylysportFileDiscoveryService(
+        daylySportLocator: locator,
+        scanner: scanner,
+        versionTracker: versionTracker,
+      ),
+      versionTracker: versionTracker,
+      importCoordinator: importCoordinator,
+    );
 
     final services = AppServices(
       database: database,
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
-      leagueStandingsSource: LeagueStandingsSource(daylySportLocator: locator),
+      leagueStandingsSource: leagueStandingsSource,
+      daylysportSyncCoordinator: syncCoordinator,
       logger: logger,
     );
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-    final preferences = await SharedPreferences.getInstance();
 
     final startupReport = await services.importCoordinator.runLocalImport(
       triggerType: 'startup',
@@ -145,6 +169,7 @@ class _TestHarness {
       ProviderScope(
         overrides: [
           appServicesProvider.overrideWithValue(services),
+          daylysportAutoMonitoringEnabledProvider.overrideWithValue(false),
           sharedPreferencesProvider.overrideWithValue(preferences),
           startupControllerProvider.overrideWith(
             () => _SeededStartupController(startupReport),

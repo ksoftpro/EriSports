@@ -1,6 +1,7 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
-import 'package:eri_sports/app/bootstrap/startup_controller.dart';
+import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
+import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/leagues/presentation/league_theme_resolver.dart';
 import 'package:flutter/foundation.dart';
@@ -111,7 +112,10 @@ final leagueOverviewProvider =
       ref,
       competitionId,
     ) async {
-      ref.watch(dataRefreshTokenProvider);
+      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.catalog));
+      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.standings));
+      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.matches));
+      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
       final services = ref.read(appServicesProvider);
       final competition = await services.database.readCompetitionById(
         competitionId,
@@ -171,7 +175,7 @@ final leaguePlayerStatCategoriesProvider =
       ref,
       competitionId,
     ) async {
-      ref.watch(dataRefreshTokenProvider);
+      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
       final services = ref.read(appServicesProvider);
       return services.database.readTopStatCategories(competitionId);
     });
@@ -204,7 +208,7 @@ final leaguePlayerLeadersProvider = FutureProvider.family<
   List<TopPlayerLeaderboardEntryView>,
   LeaguePlayerLeadersQuery
 >((ref, query) async {
-  ref.watch(dataRefreshTokenProvider);
+  ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
   final services = ref.read(appServicesProvider);
   return services.database.readTopPlayersForCategory(
     query.competitionId,

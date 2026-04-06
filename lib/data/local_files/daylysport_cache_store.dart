@@ -72,6 +72,38 @@ class DaylySportCacheStore {
     );
   }
 
+  List<Map<String, dynamic>> readJsonObjectList(String scope, String key) {
+    final raw = _sharedPreferences.getString(_scopedKey('json::$key', scope));
+    if (raw == null || raw.isEmpty) {
+      return const [];
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        return const [];
+      }
+
+      return decoded
+          .whereType<Map>()
+          .map((entry) => entry.map((key, value) => MapEntry('$key', value)))
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> writeJsonObjectList(
+    String scope,
+    String key,
+    List<Map<String, dynamic>> entries,
+  ) {
+    return _sharedPreferences.setString(
+      _scopedKey('json::$key', scope),
+      jsonEncode(entries),
+    );
+  }
+
   List<String> readPathList(String scope, String key) {
     return _sharedPreferences.getStringList(_scopedKey('paths::$key', scope)) ??
         const [];

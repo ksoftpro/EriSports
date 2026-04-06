@@ -1,5 +1,6 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/app/bootstrap/startup_controller.dart';
+import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
@@ -16,37 +17,8 @@ class MoreScreen extends ConsumerStatefulWidget {
 }
 
 class _MoreScreenState extends ConsumerState<MoreScreen> {
-  bool _isRefreshing = false;
   bool _isDiagnosingAssets = false;
-  ImportRunReport? _manualReport;
   AssetDiagnosticsReport? _assetDiagnostics;
-
-  Future<void> _runManualImport() async {
-    if (_isRefreshing) {
-      return;
-    }
-
-    setState(() {
-      _isRefreshing = true;
-    });
-
-    final services = ref.read(appServicesProvider);
-    final report = await services.importCoordinator.runLocalImport(
-      triggerType: 'manual',
-    );
-    services.assetResolver.invalidateCache(clearPersistent: true);
-    services.leagueStandingsSource.invalidateCache(clearPersistent: true);
-    ref.read(dataRefreshTokenProvider.notifier).state++;
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _manualReport = report;
-      _isRefreshing = false;
-    });
-  }
 
   Future<void> _runAssetDiagnostics() async {
     if (_isDiagnosingAssets) {
@@ -125,6 +97,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     final startupReport = ref.watch(startupImportReportProvider);
     final startupState = ref.watch(startupControllerProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final syncState = ref.watch(daylysportSyncControllerProvider);
 
     return SafeArea(
       child: ListView(
@@ -188,13 +161,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
           ),
           const SizedBox(height: 10),
           FilledButton.icon(
-            onPressed: _isRefreshing ? null : _runManualImport,
+            onPressed: () => context.push('/sync'),
             icon: const Icon(Icons.sync),
-            label: Text(
-              _isRefreshing
-                  ? 'Scanning local files...'
-                  : 'Re-scan daylySport folder',
-            ),
+            label: const Text('Open Synchronize Data'),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
@@ -219,12 +188,12 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 ),
               ),
             ),
-          if (_manualReport != null)
+          if (syncState.lastResult?.importReport != null)
             Padding(
               padding: const EdgeInsets.only(top: 12),
               child: _ReportCard(
-                title: 'Manual import',
-                report: _manualReport!,
+                title: 'Latest synchronization',
+                report: syncState.lastResult!.importReport!,
               ),
             ),
           if (_assetDiagnostics != null)
@@ -358,6 +327,10 @@ class _ReportCard extends StatelessWidget {
             Text('Status: ${report.status}'),
             Text('Run ID: ${report.runId}'),
             Text('JSON files discovered: ${report.jsonFileCount}'),
+            Text('Changed files processed: ${report.processedFileCount}'),
+            Text('Imported files: ${report.importedFileCount}'),
+            Text('Skipped files: ${report.skippedFileCount}'),
+            Text('Failed files: ${report.failedFileCount}'),
             Text('Started: ${formatter.format(report.startedAtUtc.toLocal())}'),
             Text(
               'Finished: ${formatter.format(report.finishedAtUtc.toLocal())}',

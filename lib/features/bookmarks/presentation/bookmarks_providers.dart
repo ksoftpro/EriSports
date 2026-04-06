@@ -1,7 +1,8 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
-import 'package:eri_sports/app/bootstrap/startup_controller.dart';
+import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
+import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -135,7 +136,9 @@ class FollowingDashboardState {
 final followingDashboardProvider = FutureProvider<FollowingDashboardState>((
   ref,
 ) async {
-  ref.watch(dataRefreshTokenProvider);
+  ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.catalog));
+  ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.matches));
+  ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
   final services = ref.read(appServicesProvider);
 
   final availableTeams = await services.database.readTeamsSorted(limit: 40);

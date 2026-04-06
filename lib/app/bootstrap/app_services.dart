@@ -3,8 +3,11 @@ import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
+import 'package:eri_sports/data/local_files/daylysport_file_discovery_service.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
+import 'package:eri_sports/data/local_files/json_data_version_tracker.dart';
+import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,6 +18,7 @@ class AppServices {
     required this.importCoordinator,
     required this.assetResolver,
     required this.leagueStandingsSource,
+    required this.daylysportSyncCoordinator,
     required this.logger,
   });
 
@@ -22,6 +26,7 @@ class AppServices {
   final ImportCoordinator importCoordinator;
   final LocalAssetResolver assetResolver;
   final LeagueStandingsSource leagueStandingsSource;
+  final DaylysportSyncCoordinator daylysportSyncCoordinator;
   final AppLogger logger;
 
   static Future<AppServices> create({
@@ -34,6 +39,7 @@ class AppServices {
       sharedPreferences: sharedPreferences,
     );
     final scanner = FileInventoryScanner(cacheStore: cacheStore);
+    final versionTracker = JsonDataVersionTracker(cacheStore: cacheStore);
     final assetResolver = LocalAssetResolver(
       daylySportLocator: daylySportLocator,
       logger: logger,
@@ -49,12 +55,23 @@ class AppServices {
       daylySportLocator: daylySportLocator,
       cacheStore: cacheStore,
     );
+    final discoveryService = DaylysportFileDiscoveryService(
+      daylySportLocator: daylySportLocator,
+      scanner: scanner,
+      versionTracker: versionTracker,
+    );
+    final daylysportSyncCoordinator = DaylysportSyncCoordinator(
+      discoveryService: discoveryService,
+      versionTracker: versionTracker,
+      importCoordinator: importCoordinator,
+    );
 
     return AppServices(
       database: database,
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
       leagueStandingsSource: leagueStandingsSource,
+      daylysportSyncCoordinator: daylysportSyncCoordinator,
       logger: logger,
     );
   }

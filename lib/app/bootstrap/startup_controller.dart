@@ -1,10 +1,8 @@
 import 'dart:async';
 
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
-import 'package:eri_sports/features/bookmarks/presentation/bookmarks_providers.dart';
-import 'package:eri_sports/features/home/presentation/home_providers.dart';
-import 'package:eri_sports/features/leagues/presentation/leagues_providers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -57,8 +55,6 @@ class StartupState {
     );
   }
 }
-
-final dataRefreshTokenProvider = StateProvider<int>((ref) => 0);
 
 final startupControllerProvider =
     NotifierProvider<StartupController, StartupState>(StartupController.new);
@@ -120,22 +116,18 @@ class StartupController extends Notifier<StartupState> {
     required bool blocking,
   }) async {
     try {
-      final report = await services.importCoordinator.runLocalImport(
-        triggerType: 'startup',
-      );
-
-      services.assetResolver.invalidateCache(clearPersistent: true);
-      services.leagueStandingsSource.invalidateCache(clearPersistent: true);
-
-      ref.read(dataRefreshTokenProvider.notifier).state++;
-      ref.invalidate(homeFeedProvider);
-      ref.invalidate(followingDashboardProvider);
-      ref.invalidate(leaguesProvider);
+      final result = await ref
+          .read(daylysportSyncControllerProvider.notifier)
+          .runStartupSync();
+      final report = result.importReport;
 
       state = state.copyWith(
         phase: StartupPhase.ready,
         hasCachedData: true,
-        statusText: blocking ? 'Offline data ready' : 'Offline data refreshed',
+        statusText:
+            blocking
+                ? 'Offline data ready'
+                : 'Offline data refreshed in the background',
         latestReport: report,
         clearError: true,
       );
