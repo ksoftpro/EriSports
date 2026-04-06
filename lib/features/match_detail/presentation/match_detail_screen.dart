@@ -2,6 +2,7 @@ import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/features/match_detail/presentation/match_detail_providers.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
+import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -37,11 +38,9 @@ class MatchDetailScreen extends ConsumerWidget {
                 child: Text(
                   detail.competitionName,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.color
-                        ?.withValues(alpha: 0.82),
+                    color: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
                   ),
                 ),
               ),
@@ -207,18 +206,24 @@ class MatchDetailScreen extends ConsumerWidget {
                                       if (event.event.playerName != null ||
                                           event.event.playerId != null)
                                         Padding(
-                                          padding: const EdgeInsets.only(top: 4),
+                                          padding: const EdgeInsets.only(
+                                            top: 4,
+                                          ),
                                           child: Row(
                                             children: [
                                               GestureDetector(
-                                                onTap: event.event.playerId == null
-                                                    ? null
-                                                    : () => context.push(
+                                                onTap:
+                                                    event.event.playerId == null
+                                                        ? null
+                                                        : () => context.push(
                                                           '/player/${event.event.playerId}',
                                                         ),
                                                 child: EntityBadge(
-                                                  entityId: event.event.playerId ?? '',
-                                                  entityName: event.event.playerName,
+                                                  entityId:
+                                                      event.event.playerId ??
+                                                      '',
+                                                  entityName:
+                                                      event.event.playerName,
                                                   type: SportsAssetType.players,
                                                   resolver: resolver,
                                                   size: 18,
@@ -230,7 +235,8 @@ class MatchDetailScreen extends ConsumerWidget {
                                                   event.event.playerName ??
                                                       'Unknown player',
                                                   maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               ),
                                             ],
@@ -239,32 +245,39 @@ class MatchDetailScreen extends ConsumerWidget {
                                       if (event.teamName != null ||
                                           event.event.teamId != null)
                                         Padding(
-                                          padding: const EdgeInsets.only(top: 2),
+                                          padding: const EdgeInsets.only(
+                                            top: 2,
+                                          ),
                                           child: Row(
                                             children: [
                                               GestureDetector(
-                                                onTap: event.event.teamId == null
-                                                    ? null
-                                                    : () => context.push(
+                                                onTap:
+                                                    event.event.teamId == null
+                                                        ? null
+                                                        : () => context.push(
                                                           '/team/${event.event.teamId}',
                                                         ),
-                                                child: EntityBadge(
-                                                  entityId: event.event.teamId ?? '',
-                                                  entityName: event.teamName,
-                                                  type: SportsAssetType.teams,
+                                                child: TeamBadge(
+                                                  teamId: event.event.teamId,
+                                                  teamName: event.teamName,
                                                   resolver: resolver,
+                                                  source:
+                                                      'match-detail.timeline',
                                                   size: 16,
                                                 ),
                                               ),
                                               const SizedBox(width: 6),
                                               Expanded(
                                                 child: Text(
-                                                  event.teamName ?? 'Unknown team',
+                                                  event.teamName ??
+                                                      'Unknown team',
                                                   maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .labelMedium,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style:
+                                                      Theme.of(
+                                                        context,
+                                                      ).textTheme.labelMedium,
                                                 ),
                                               ),
                                             ],
@@ -319,11 +332,11 @@ class MatchDetailScreen extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
         child: Column(
           children: [
-            EntityBadge(
-              entityId: teamId,
-              entityName: teamName,
-              type: SportsAssetType.teams,
+            TeamBadge(
+              teamId: teamId,
+              teamName: teamName,
               resolver: resolver,
+              source: 'match-detail.header',
               size: 44,
             ),
             const SizedBox(height: 8),

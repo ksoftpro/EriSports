@@ -9,6 +9,7 @@ class EntityBadge extends StatelessWidget {
     required this.type,
     required this.resolver,
     this.entityName,
+    this.resolutionSource,
     this.size = 18,
     this.isCircular = true,
     super.key,
@@ -18,17 +19,25 @@ class EntityBadge extends StatelessWidget {
   final SportsAssetType type;
   final LocalAssetResolver resolver;
   final String? entityName;
+  final String? resolutionSource;
   final double size;
   final bool isCircular;
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<ResolvedImageRef?>(
-      future: resolver.resolve(
-        type: type,
-        entityId: entityId,
-        entityName: entityName,
-      ),
+      future:
+          type == SportsAssetType.teams
+              ? resolver.resolveTeamBadge(
+                teamId: entityId,
+                teamName: entityName,
+                source: resolutionSource,
+              )
+              : resolver.resolve(
+                type: type,
+                entityId: entityId,
+                entityName: entityName,
+              ),
       builder: (context, snapshot) {
         final imageRef = snapshot.data;
 
@@ -36,19 +45,22 @@ class EntityBadge extends StatelessWidget {
           return _fallback(context);
         }
 
-        final imageWidget = imageRef.isFile
-            ? Image.file(
-                File(imageRef.path),
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-              )
-            : Image.asset(
-                imageRef.path,
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-              );
+        final imageWidget =
+            imageRef.isFile
+                ? Image.file(
+                  File(imageRef.path),
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _fallback(context),
+                )
+                : Image.asset(
+                  imageRef.path,
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _fallback(context),
+                );
 
         if (isCircular) {
           return ClipOval(child: imageWidget);
@@ -88,9 +100,7 @@ class EntityBadge extends StatelessWidget {
   }
 
   String _fallbackLabel(String raw) {
-    final cleaned = raw
-        .replaceAll(RegExp(r'[_\-]+'), ' ')
-        .trim();
+    final cleaned = raw.replaceAll(RegExp(r'[_\-]+'), ' ').trim();
     if (cleaned.isEmpty) {
       return '?';
     }

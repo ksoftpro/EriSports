@@ -3,6 +3,7 @@ import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/home/presentation/home_providers.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
+import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,9 +26,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final homeFeed = ref.watch(homeFeedProvider);
     final days = _windowDays();
-    final effectiveDay = days.any((item) => _isSameDay(item, _selectedDay))
-        ? _selectedDay
-        : _dayKey(DateTime.now());
+    final effectiveDay =
+        days.any((item) => _isSameDay(item, _selectedDay))
+            ? _selectedDay
+            : _dayKey(DateTime.now());
 
     return SafeArea(
       child: homeFeed.when(
@@ -36,13 +38,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         data: (state) {
           final resolver = ref.read(appServicesProvider).assetResolver;
           final dayMatches = state.all
-              .where((item) => _isSameDay(item.match.kickoffUtc.toLocal(), effectiveDay))
+              .where(
+                (item) =>
+                    _isSameDay(item.match.kickoffUtc.toLocal(), effectiveDay),
+              )
               .toList(growable: false)
             ..sort((a, b) => a.match.kickoffUtc.compareTo(b.match.kickoffUtc));
 
-          final sections = _groupByCompetition(dayMatches, state.competitionNamesById);
+          final sections = _groupByCompetition(
+            dayMatches,
+            state.competitionNamesById,
+          );
           final followingMatches = state.followed
-              .where((item) => _isSameDay(item.match.kickoffUtc.toLocal(), effectiveDay))
+              .where(
+                (item) =>
+                    _isSameDay(item.match.kickoffUtc.toLocal(), effectiveDay),
+              )
               .take(2)
               .toList(growable: false);
 
@@ -149,17 +160,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                         collapsed:
                             _hideAllCompetitions ||
-                            _collapsedCompetitionIds.contains(section.competitionId),
+                            _collapsedCompetitionIds.contains(
+                              section.competitionId,
+                            ),
                         onToggleCollapse: () {
                           setState(() {
-                            if (_collapsedCompetitionIds.contains(section.competitionId)) {
-                              _collapsedCompetitionIds.remove(section.competitionId);
+                            if (_collapsedCompetitionIds.contains(
+                              section.competitionId,
+                            )) {
+                              _collapsedCompetitionIds.remove(
+                                section.competitionId,
+                              );
                             } else {
-                              _collapsedCompetitionIds.add(section.competitionId);
+                              _collapsedCompetitionIds.add(
+                                section.competitionId,
+                              );
                             }
                           });
                         },
-                        onTapHeader: () => context.push('/league/${section.competitionId}'),
+                        onTapHeader:
+                            () => context.push(
+                              '/league/${section.competitionId}',
+                            ),
                         children: section.matches
                             .map(
                               (fixture) => _FixtureRow(
@@ -295,11 +317,9 @@ class _DayTabStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final inactiveColor = Theme.of(context)
-        .textTheme
-        .bodySmall
-        ?.color
-        ?.withValues(alpha: 0.66);
+    final inactiveColor = Theme.of(
+      context,
+    ).textTheme.bodySmall?.color?.withValues(alpha: 0.66);
 
     return Container(
       height: 46,
@@ -317,13 +337,17 @@ class _DayTabStrip extends StatelessWidget {
                         _labelForDay(day),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: _isSameDay(day, selectedDay)
-                              ? Theme.of(context).colorScheme.onSurface
-                              : inactiveColor,
-                          fontWeight: _isSameDay(day, selectedDay)
-                              ? FontWeight.w700
-                              : FontWeight.w500,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleMedium?.copyWith(
+                          color:
+                              _isSameDay(day, selectedDay)
+                                  ? Theme.of(context).colorScheme.onSurface
+                                  : inactiveColor,
+                          fontWeight:
+                              _isSameDay(day, selectedDay)
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -332,9 +356,10 @@ class _DayTabStrip extends StatelessWidget {
                         height: 2.4,
                         width: 54,
                         decoration: BoxDecoration(
-                          color: _isSameDay(day, selectedDay)
-                              ? Theme.of(context).colorScheme.onSurface
-                              : Colors.transparent,
+                          color:
+                              _isSameDay(day, selectedDay)
+                                  ? Theme.of(context).colorScheme.onSurface
+                                  : Colors.transparent,
                           borderRadius: BorderRadius.circular(99),
                         ),
                       ),
@@ -441,7 +466,9 @@ class _FixtureGroupCard extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                     onPressed: onToggleCollapse,
                     icon: Icon(
-                      collapsed ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                      collapsed
+                          ? Icons.keyboard_arrow_down
+                          : Icons.keyboard_arrow_up,
                     ),
                   ),
                 ],
@@ -483,7 +510,12 @@ class _FixtureRow extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
         child: Row(
           children: [
-            _StatusChip(label: _statusLabel(fixture.match.status, fixture.match.kickoffUtc)),
+            _StatusChip(
+              label: _statusLabel(
+                fixture.match.status,
+                fixture.match.kickoffUtc,
+              ),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Row(
@@ -585,11 +617,11 @@ class _TeamInline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badge = EntityBadge(
-      entityId: teamId,
-      entityName: teamName,
-      type: SportsAssetType.teams,
+    final teamBadge = TeamBadge(
+      teamId: teamId,
+      teamName: teamName,
       resolver: resolver,
+      source: 'home.fixture-row',
       size: 20,
     );
     final name = Expanded(
@@ -606,21 +638,9 @@ class _TeamInline extends StatelessWidget {
     );
 
     if (alignEnd) {
-      return Row(
-        children: [
-          name,
-          const SizedBox(width: 6),
-          badge,
-        ],
-      );
+      return Row(children: [name, const SizedBox(width: 6), teamBadge]);
     }
 
-    return Row(
-      children: [
-        badge,
-        const SizedBox(width: 6),
-        name,
-      ],
-    );
+    return Row(children: [teamBadge, const SizedBox(width: 6), name]);
   }
 }

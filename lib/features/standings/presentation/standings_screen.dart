@@ -1,7 +1,7 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/features/standings/presentation/standings_providers.dart';
-import 'package:eri_sports/shared/widgets/entity_badge.dart';
+import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -59,17 +59,15 @@ class StandingsScreen extends ConsumerWidget {
                 ),
               ),
               const _StandingsHeader(),
-              Divider(
-                height: 1,
-                color: scheme.outline.withValues(alpha: 0.7),
-              ),
+              Divider(height: 1, color: scheme.outline.withValues(alpha: 0.7)),
               Expanded(
                 child: ListView.separated(
                   itemCount: state.rows.length,
-                  separatorBuilder: (_, __) => Divider(
-                    height: 1,
-                    color: scheme.outline.withValues(alpha: 0.7),
-                  ),
+                  separatorBuilder:
+                      (_, __) => Divider(
+                        height: 1,
+                        color: scheme.outline.withValues(alpha: 0.7),
+                      ),
                   itemBuilder: (context, index) {
                     final item = state.rows[index];
                     return _StandingsRow(
@@ -101,10 +99,10 @@ class _StandingsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(
-      context,
-    ).textTheme.labelMedium?.copyWith(
-      color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
+    final style = Theme.of(context).textTheme.labelMedium?.copyWith(
+      color: Theme.of(
+        context,
+      ).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
     );
 
     return Padding(
@@ -185,11 +183,11 @@ class _StandingsRow extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                  EntityBadge(
-                    entityId: teamId,
-                    entityName: teamName,
-                    type: SportsAssetType.teams,
+                  TeamBadge(
+                    teamId: teamId,
+                    teamName: teamName,
                     resolver: resolver,
+                    source: 'standings.row',
                     size: 18,
                   ),
                   const SizedBox(width: 8),

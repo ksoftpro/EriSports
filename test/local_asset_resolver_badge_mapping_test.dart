@@ -27,6 +27,12 @@ void main() {
     await File(
       p.join(teamsDir.path, 'team_Brighton_&_Hove_Albion_10204_badge.png'),
     ).writeAsBytes(<int>[137, 80, 78, 71]);
+    await File(
+      p.join(teamsDir.path, 'team_Fenerbahçe_8695_badge.png'),
+    ).writeAsBytes(<int>[137, 80, 78, 71]);
+    await File(
+      p.join(teamsDir.path, 'team_1._FC_Köln_8722_badge.png'),
+    ).writeAsBytes(<int>[137, 80, 78, 71]);
 
     resolver = LocalAssetResolver(
       daylySportLocator: _TestDaylySportLocator(daylySportDir),
@@ -70,6 +76,34 @@ void main() {
       expect(resolved.path, contains('daylySport'));
       expect(resolved.path, contains('teams'));
       expect(resolved.path, contains('10204'));
+    },
+  );
+
+  test(
+    'resolves local team badge by name when id is missing and name uses ASCII fallback',
+    () async {
+      final resolved = await resolver.resolveTeamBadge(
+        teamName: 'Fenerbahce',
+        source: 'test.name-only-ascii',
+      );
+
+      expect(resolved, isNotNull);
+      expect(resolved!.isFile, isTrue);
+      expect(resolved.path, contains('8695'));
+    },
+  );
+
+  test(
+    'resolves local team badge by name when punctuation and diacritics differ',
+    () async {
+      final resolved = await resolver.resolveTeamBadge(
+        teamName: '1. FC Koln',
+        source: 'test.name-only-punctuation',
+      );
+
+      expect(resolved, isNotNull);
+      expect(resolved!.isFile, isTrue);
+      expect(resolved.path, contains('8722'));
     },
   );
 }

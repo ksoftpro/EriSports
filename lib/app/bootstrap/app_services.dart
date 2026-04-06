@@ -29,6 +29,7 @@ class AppServices {
     final scanner = FileInventoryScanner();
     final assetResolver = LocalAssetResolver(
       daylySportLocator: daylySportLocator,
+      logger: logger,
     );
     final importCoordinator = ImportCoordinator(
       database: database,

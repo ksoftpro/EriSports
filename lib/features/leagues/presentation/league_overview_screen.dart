@@ -7,6 +7,7 @@ import 'package:eri_sports/features/leagues/presentation/widgets/league_overview
     show LeagueHeader, LeagueTopTabs;
 import 'package:eri_sports/features/player_stats/presentation/player_stats_providers.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
+import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:eri_sports/shared/widgets/match_card_compact.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -498,11 +499,11 @@ class _StandingsTableRow extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                  EntityBadge(
-                    entityId: row.teamId,
-                    entityName: row.teamName,
-                    type: SportsAssetType.teams,
+                  TeamBadge(
+                    teamId: row.teamId,
+                    teamName: row.teamName,
                     resolver: resolver,
+                    source: 'league.table-row',
                     size: 20,
                   ),
                   const SizedBox(width: 8),
@@ -769,6 +770,7 @@ class _FixturesTab extends StatelessWidget {
                         homeTeamId: item.match.homeTeamId,
                         awayTeamId: item.match.awayTeamId,
                         assetResolver: resolver,
+                        badgeSource: 'league.fixtures',
                         onTap: () => context.push('/match/${item.match.id}'),
                         homeScore: item.match.homeScore,
                         awayScore: item.match.awayScore,
@@ -1142,11 +1144,11 @@ class _TeamStatsTab extends StatelessWidget {
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                         ),
-                        EntityBadge(
-                          entityId: item.teamId,
-                          entityName: item.teamName,
-                          type: SportsAssetType.teams,
+                        TeamBadge(
+                          teamId: item.teamId,
+                          teamName: item.teamName,
                           resolver: resolver,
+                          source: 'league.team-stats',
                           size: 24,
                         ),
                         const SizedBox(width: 8),

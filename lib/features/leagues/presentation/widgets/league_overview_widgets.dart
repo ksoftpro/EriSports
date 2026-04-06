@@ -2,6 +2,7 @@ import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/features/leagues/presentation/league_overview_providers.dart';
 import 'package:eri_sports/features/leagues/presentation/league_theme_resolver.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
+import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
 
 class LeagueHeader extends StatelessWidget {
@@ -290,7 +291,9 @@ class LeagueStandingsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = TextStyle(
-      color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.84),
+      color: Theme.of(
+        context,
+      ).textTheme.bodySmall?.color?.withValues(alpha: 0.84),
       fontWeight: FontWeight.w700,
       fontSize: 12,
     );
@@ -439,11 +442,11 @@ class LeagueStandingsRow extends StatelessWidget {
       Expanded(
         child: Row(
           children: [
-            EntityBadge(
-              entityId: teamId,
-              entityName: teamName,
-              type: SportsAssetType.teams,
+            TeamBadge(
+              teamId: teamId,
+              teamName: teamName,
               resolver: resolver,
+              source: 'league.widgets.standings-row',
               size: 18,
             ),
             const SizedBox(width: 8),
@@ -549,7 +552,9 @@ class _FormBar extends StatelessWidget {
         'No form',
         textAlign: TextAlign.center,
         style: TextStyle(
-          color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.84),
+          color: Theme.of(
+            context,
+          ).textTheme.bodySmall?.color?.withValues(alpha: 0.84),
           fontSize: 11,
         ),
       );
@@ -618,14 +623,18 @@ class _SegmentedOption extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? Theme.of(context).cardColor : Colors.transparent,
+            color:
+                isSelected ? Theme.of(context).cardColor : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
           alignment: Alignment.center,
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected ? scheme.onSurface : scheme.onSurface.withValues(alpha: 0.72),
+              color:
+                  isSelected
+                      ? scheme.onSurface
+                      : scheme.onSurface.withValues(alpha: 0.72),
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),

@@ -1,5 +1,5 @@
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
-import 'package:eri_sports/shared/widgets/entity_badge.dart';
+import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
 
 class MatchCardCompact extends StatelessWidget {
@@ -11,6 +11,7 @@ class MatchCardCompact extends StatelessWidget {
     this.homeTeamId,
     this.awayTeamId,
     this.assetResolver,
+    this.badgeSource = 'shared.match-card',
     this.onTap,
     required this.homeScore,
     required this.awayScore,
@@ -24,6 +25,7 @@ class MatchCardCompact extends StatelessWidget {
   final String? homeTeamId;
   final String? awayTeamId;
   final LocalAssetResolver? assetResolver;
+  final String badgeSource;
   final VoidCallback? onTap;
   final int homeScore;
   final int awayScore;
@@ -55,15 +57,17 @@ class MatchCardCompact extends StatelessWidget {
                     Text(
                       status,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.8),
-                          ),
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.color?.withValues(alpha: 0.8),
+                      ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       timeOrMinute,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: scheme.onSurface,
-                          ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelLarge?.copyWith(color: scheme.onSurface),
                     ),
                   ],
                 ),
@@ -72,7 +76,10 @@ class MatchCardCompact extends StatelessWidget {
                 child: Column(
                   children: [
                     _teamRow(context, homeTeam, homeScore, homeTeamId),
-                    Divider(height: 12, color: scheme.outline.withValues(alpha: 0.45)),
+                    Divider(
+                      height: 12,
+                      color: scheme.outline.withValues(alpha: 0.45),
+                    ),
                     _teamRow(context, awayTeam, awayScore, awayTeamId),
                   ],
                 ),
@@ -84,27 +91,32 @@ class MatchCardCompact extends StatelessWidget {
     );
   }
 
-  Widget _teamRow(BuildContext context, String name, int score, [String? teamId]) {
-    final canResolveBadge = assetResolver != null && teamId != null && teamId.isNotEmpty;
+  Widget _teamRow(
+    BuildContext context,
+    String name,
+    int score, [
+    String? teamId,
+  ]) {
+    final canResolveBadge = assetResolver != null;
 
     return Row(
       children: [
         canResolveBadge
-            ? EntityBadge(
-                entityId: teamId,
-                entityName: name,
-                type: SportsAssetType.teams,
-                resolver: assetResolver!,
-                size: 18,
-              )
+            ? TeamBadge(
+              teamId: teamId,
+              teamName: name,
+              resolver: assetResolver!,
+              source: badgeSource,
+              size: 18,
+            )
             : Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.secondary,
-                  borderRadius: BorderRadius.circular(9),
-                ),
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondary,
+                borderRadius: BorderRadius.circular(9),
               ),
+            ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -114,10 +126,7 @@ class MatchCardCompact extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyLarge,
           ),
         ),
-        Text(
-          '$score',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        Text('$score', style: Theme.of(context).textTheme.titleMedium),
       ],
     );
   }

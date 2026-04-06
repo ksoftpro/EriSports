@@ -5,6 +5,7 @@ import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/features/search/presentation/search_providers.dart';
 import 'package:eri_sports/shared/widgets/dense_section_header.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
+import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -95,11 +96,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         (team) => ListTile(
                           dense: true,
                           onTap: () => context.push('/team/${team.id}'),
-                          leading: EntityBadge(
-                            entityId: team.id,
-                            entityName: team.name,
-                            type: SportsAssetType.teams,
+                          leading: TeamBadge(
+                            teamId: team.id,
+                            teamName: team.name,
                             resolver: resolver,
+                            source: 'search.team-result',
                             size: 22,
                           ),
                           title: Text(team.name),

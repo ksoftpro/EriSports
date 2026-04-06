@@ -64,10 +64,10 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
 
     final missingTeamIds = <String>[];
     for (final team in teams) {
-      final resolved = await services.assetResolver.resolve(
-        type: SportsAssetType.teams,
-        entityId: team.id,
-        entityName: team.shortName ?? team.name,
+      final resolved = await services.assetResolver.resolveTeamBadge(
+        teamId: team.id,
+        teamName: team.shortName ?? team.name,
+        source: 'more.asset-diagnostics',
       );
       if (resolved == null) {
         missingTeamIds.add(team.id);

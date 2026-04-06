@@ -4,16 +4,14 @@ import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/team/presentation/team_providers.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:eri_sports/shared/widgets/match_card_compact.dart';
+import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 class TeamScreen extends ConsumerWidget {
-  const TeamScreen({
-    required this.teamId,
-    super.key,
-  });
+  const TeamScreen({required this.teamId, super.key});
 
   final String teamId;
 
@@ -25,9 +23,9 @@ class TeamScreen extends ConsumerWidget {
       appBar: AppBar(),
       body: teamAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => const Center(
-          child: Text('Unable to load local team data.'),
-        ),
+        error:
+            (error, stackTrace) =>
+                const Center(child: Text('Unable to load local team data.')),
         data: (state) {
           final resolver = ref.read(appServicesProvider).assetResolver;
           final now = DateTime.now().toUtc();
@@ -35,7 +33,9 @@ class TeamScreen extends ConsumerWidget {
           for (final item in state.matches) {
             if (item.match.kickoffUtc.isAfter(now)) {
               if (nextFixture == null ||
-                  item.match.kickoffUtc.isBefore(nextFixture.match.kickoffUtc)) {
+                  item.match.kickoffUtc.isBefore(
+                    nextFixture.match.kickoffUtc,
+                  )) {
                 nextFixture = item;
               }
             }
@@ -64,17 +64,19 @@ class TeamScreen extends ConsumerWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  border: Border.all(color: scheme.outline.withValues(alpha: 0.6)),
+                  border: Border.all(
+                    color: scheme.outline.withValues(alpha: 0.6),
+                  ),
                 ),
                 child: Column(
                   children: [
                     Row(
                       children: [
-                        EntityBadge(
-                          entityId: state.team.id,
-                          entityName: state.team.name,
-                          type: SportsAssetType.teams,
+                        TeamBadge(
+                          teamId: state.team.id,
+                          teamName: state.team.name,
                           resolver: resolver,
+                          source: 'team.header',
                           size: 52,
                         ),
                         const SizedBox(width: 12),
@@ -84,16 +86,21 @@ class TeamScreen extends ConsumerWidget {
                             children: [
                               Text(
                                 state.team.name,
-                                style: Theme.of(context).textTheme.headlineSmall,
+                                style:
+                                    Theme.of(context).textTheme.headlineSmall,
                               ),
                               if (state.competition != null)
                                 TextButton.icon(
                                   style: TextButton.styleFrom(
                                     padding: EdgeInsets.zero,
                                     minimumSize: const Size(0, 26),
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
                                   ),
-                                  onPressed: () => context.push('/league/${state.competition!.id}'),
+                                  onPressed:
+                                      () => context.push(
+                                        '/league/${state.competition!.id}',
+                                      ),
                                   icon: EntityBadge(
                                     entityId: state.competition!.id,
                                     type: SportsAssetType.leagues,
@@ -156,7 +163,9 @@ class TeamScreen extends ConsumerWidget {
                           homeTeamId: fixture.match.homeTeamId,
                           awayTeamId: fixture.match.awayTeamId,
                           assetResolver: resolver,
-                          onTap: () => context.push('/match/${fixture.match.id}'),
+                          badgeSource: 'team.next-fixture',
+                          onTap:
+                              () => context.push('/match/${fixture.match.id}'),
                           homeScore: fixture.match.homeScore,
                           awayScore: fixture.match.awayScore,
                         ),
@@ -179,13 +188,20 @@ class TeamScreen extends ConsumerWidget {
                 ),
               ...recentMatches.map(
                 (item) => MatchCardCompact(
-                  status: _statusLabel(item.match.kickoffUtc, item.match.status),
-                  timeOrMinute: _timeLabel(item.match.kickoffUtc, item.match.status),
+                  status: _statusLabel(
+                    item.match.kickoffUtc,
+                    item.match.status,
+                  ),
+                  timeOrMinute: _timeLabel(
+                    item.match.kickoffUtc,
+                    item.match.status,
+                  ),
                   homeTeam: item.homeTeamName,
                   awayTeam: item.awayTeamName,
                   homeTeamId: item.match.homeTeamId,
                   awayTeamId: item.match.awayTeamId,
                   assetResolver: resolver,
+                  badgeSource: 'team.recent-matches',
                   onTap: () => context.push('/match/${item.match.id}'),
                   homeScore: item.match.homeScore,
                   awayScore: item.match.awayScore,
@@ -310,9 +326,9 @@ class _FactTile extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             value,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
         ],
       ),

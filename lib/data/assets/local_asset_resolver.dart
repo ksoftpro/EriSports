@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:eri_sports/core/log/app_logger.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -23,10 +24,14 @@ class ResolvedImageRef {
 }
 
 class LocalAssetResolver {
-  LocalAssetResolver({required DaylySportLocator daylySportLocator})
-    : _daylySportLocator = daylySportLocator;
+  LocalAssetResolver({
+    required DaylySportLocator daylySportLocator,
+    AppLogger? logger,
+  }) : _daylySportLocator = daylySportLocator,
+       _logger = logger;
 
   final DaylySportLocator _daylySportLocator;
+  final AppLogger? _logger;
 
   bool _bundleLoaded = false;
   bool _teamManifestLoaded = false;
@@ -72,6 +77,10 @@ class LocalAssetResolver {
     required String entityId,
     String? entityName,
   }) async {
+    if (type == SportsAssetType.teams) {
+      return resolveTeamBadge(teamId: entityId, teamName: entityName);
+    }
+
     final id = entityId.trim().toLowerCase();
     final normalizedName = _normalizeLookup(entityName ?? '');
     if (id.isEmpty && normalizedName.isEmpty) {
@@ -96,48 +105,6 @@ class LocalAssetResolver {
     }
 
     final idCandidates = id.isEmpty ? const <String>[] : _idCandidates(id);
-
-    if (type == SportsAssetType.teams) {
-      for (final candidateId in idCandidates) {
-        final bundledPath = _bundledTeamBadgePathById[candidateId];
-        if (bundledPath != null) {
-          final resolved = ResolvedImageRef.asset(bundledPath);
-          _resolvedCache[cacheKey] = resolved;
-          return resolved;
-        }
-      }
-
-      final bundledById = _bestTeamPathById(
-        _bundledTeamPathsById,
-        idCandidates,
-        normalizedName,
-      );
-      if (bundledById != null) {
-        final resolved = ResolvedImageRef.asset(bundledById);
-        _resolvedCache[cacheKey] = resolved;
-        return resolved;
-      }
-
-      for (final candidateId in idCandidates) {
-        final manifestPath = _teamBadgePathById[candidateId];
-        if (manifestPath != null && await File(manifestPath).exists()) {
-          final resolved = ResolvedImageRef.file(manifestPath);
-          _resolvedCache[cacheKey] = resolved;
-          return resolved;
-        }
-      }
-
-      final localById = _bestTeamPathById(
-        _localTeamPathsById,
-        idCandidates,
-        normalizedName,
-      );
-      if (localById != null) {
-        final resolved = ResolvedImageRef.file(localById);
-        _resolvedCache[cacheKey] = resolved;
-        return resolved;
-      }
-    }
 
     if (type == SportsAssetType.leagues) {
       for (final candidateId in idCandidates) {
@@ -219,6 +186,152 @@ class LocalAssetResolver {
     }
 
     _resolvedCache[cacheKey] = null;
+    return null;
+  }
+
+  Future<ResolvedImageRef?> resolveTeamBadge({
+    String? teamId,
+    String? teamName,
+    String? source,
+  }) async {
+    final rawId = teamId?.trim() ?? '';
+    final id = rawId.toLowerCase();
+    final nameVariants = _teamNameVariants(teamName ?? '');
+    final variantKey = nameVariants.toList(growable: false)..sort();
+
+    if (id.isEmpty && variantKey.isEmpty) {
+      _logTeamBadgeResolution(
+        source: source,
+        teamId: rawId,
+        teamName: teamName,
+        resolvedPath: null,
+        strategy: 'missing-input',
+        usedNameFallback: false,
+      );
+      return null;
+    }
+
+    final cacheKey = 'team-badge|$id|${variantKey.join('|')}';
+    if (_resolvedCache.containsKey(cacheKey)) {
+      return _resolvedCache[cacheKey];
+    }
+
+    await _ensureBundledAssetsLoaded();
+    await _ensureBundledManifestLoaded();
+    if (!_localScanDisabled) {
+      try {
+        await _ensureLocalFilesLoaded(SportsAssetType.teams);
+      } catch (_) {
+        _localScanDisabled = true;
+        _localFilesByType[SportsAssetType.teams] = const [];
+      }
+    }
+
+    final idCandidates = id.isEmpty ? const <String>[] : _idCandidates(id);
+    final bundledTeamAssets =
+        _bundledAssetsByType[SportsAssetType.teams] ?? const <String>[];
+    final localTeamAssets =
+        _localFilesByType[SportsAssetType.teams] ?? const <String>[];
+
+    for (final candidateId in idCandidates) {
+      final bundledPath = _bundledTeamBadgePathById[candidateId];
+      if (bundledPath != null) {
+        return _finishTeamBadgeResolution(
+          cacheKey: cacheKey,
+          source: source,
+          teamId: rawId,
+          teamName: teamName,
+          resolved: ResolvedImageRef.asset(bundledPath),
+          strategy: 'bundled-manifest-id',
+          usedNameFallback: false,
+        );
+      }
+    }
+
+    final bundledById = _bestTeamPathById(
+      _bundledTeamPathsById,
+      idCandidates,
+      nameVariants,
+    );
+    if (bundledById != null) {
+      return _finishTeamBadgeResolution(
+        cacheKey: cacheKey,
+        source: source,
+        teamId: rawId,
+        teamName: teamName,
+        resolved: ResolvedImageRef.asset(bundledById),
+        strategy: 'bundled-indexed-id',
+        usedNameFallback: false,
+      );
+    }
+
+    final bundledByName = _bestTeamPathByName(bundledTeamAssets, nameVariants);
+    if (bundledByName != null) {
+      return _finishTeamBadgeResolution(
+        cacheKey: cacheKey,
+        source: source,
+        teamId: rawId,
+        teamName: teamName,
+        resolved: ResolvedImageRef.asset(bundledByName),
+        strategy: 'bundled-name-fallback',
+        usedNameFallback: true,
+      );
+    }
+
+    for (final candidateId in idCandidates) {
+      final manifestPath = _teamBadgePathById[candidateId];
+      if (manifestPath != null && await File(manifestPath).exists()) {
+        return _finishTeamBadgeResolution(
+          cacheKey: cacheKey,
+          source: source,
+          teamId: rawId,
+          teamName: teamName,
+          resolved: ResolvedImageRef.file(manifestPath),
+          strategy: 'local-manifest-id',
+          usedNameFallback: false,
+        );
+      }
+    }
+
+    final localById = _bestTeamPathById(
+      _localTeamPathsById,
+      idCandidates,
+      nameVariants,
+    );
+    if (localById != null) {
+      return _finishTeamBadgeResolution(
+        cacheKey: cacheKey,
+        source: source,
+        teamId: rawId,
+        teamName: teamName,
+        resolved: ResolvedImageRef.file(localById),
+        strategy: 'local-indexed-id',
+        usedNameFallback: false,
+      );
+    }
+
+    final localByName = _bestTeamPathByName(localTeamAssets, nameVariants);
+    if (localByName != null) {
+      return _finishTeamBadgeResolution(
+        cacheKey: cacheKey,
+        source: source,
+        teamId: rawId,
+        teamName: teamName,
+        resolved: ResolvedImageRef.file(localByName),
+        strategy: 'local-name-fallback',
+        usedNameFallback: true,
+      );
+    }
+
+    _resolvedCache[cacheKey] = null;
+    _logTeamBadgeResolution(
+      source: source,
+      teamId: rawId,
+      teamName: teamName,
+      resolvedPath: null,
+      strategy: 'not-found',
+      usedNameFallback: id.isEmpty,
+    );
     return null;
   }
 
@@ -615,7 +728,7 @@ class LocalAssetResolver {
   String? _bestTeamPathById(
     Map<String, List<String>> indexedPaths,
     List<String> idCandidates,
-    String normalizedName,
+    Set<String> nameVariants,
   ) {
     for (final candidateId in idCandidates) {
       final paths = indexedPaths[candidateId];
@@ -623,7 +736,7 @@ class LocalAssetResolver {
         continue;
       }
 
-      final bestPath = _pickBestTeamPath(paths, normalizedName);
+      final bestPath = _pickBestTeamPath(paths, nameVariants);
       if (bestPath != null) {
         return bestPath;
       }
@@ -677,7 +790,42 @@ class LocalAssetResolver {
     return matches.first.group(0);
   }
 
-  String _normalizedTeamNameFromPath(String path) {
+  String? _pickBestTeamPath(List<String> paths, Set<String> nameVariants) {
+    if (paths.isEmpty) {
+      return null;
+    }
+
+    if (nameVariants.isNotEmpty) {
+      final bestByName = _bestTeamPathByName(paths, nameVariants);
+      if (bestByName != null) {
+        return bestByName;
+      }
+    }
+
+    return paths.first;
+  }
+
+  String? _bestTeamPathByName(List<String> paths, Set<String> nameVariants) {
+    if (paths.isEmpty || nameVariants.isEmpty) {
+      return null;
+    }
+
+    String? bestPath;
+    var bestScore = 0;
+
+    for (final path in paths) {
+      final candidateVariants = _teamNameVariants(_teamNameStemFromPath(path));
+      final score = _scoreTeamNameMatch(candidateVariants, nameVariants);
+      if (score > bestScore) {
+        bestScore = score;
+        bestPath = path;
+      }
+    }
+
+    return bestScore > 0 ? bestPath : null;
+  }
+
+  String _teamNameStemFromPath(String path) {
     final basename = p.basenameWithoutExtension(path);
     var stem = basename;
 
@@ -690,25 +838,75 @@ class LocalAssetResolver {
 
     stem = stem.replaceFirst(RegExp(r'[_-]?badge$', caseSensitive: false), '');
     stem = stem.replaceFirst(RegExp(r'[_-]?\d+$'), '');
-    return _normalizeLookup(stem);
+    return stem;
   }
 
-  String? _pickBestTeamPath(List<String> paths, String normalizedName) {
-    if (paths.isEmpty) {
-      return null;
+  Set<String> _teamNameVariants(String value) {
+    final variants = <String>{};
+    final normalized = _normalizeLookup(value);
+    if (normalized.isNotEmpty) {
+      variants.add(normalized);
+      variants.add(_stripTeamStopwords(normalized));
+
+      final withSaint = normalized.replaceAll(RegExp(r'\bst\b'), 'saint');
+      final withSt = normalized.replaceAll('saint', 'st');
+      variants.add(withSaint.trim());
+      variants.add(withSt.trim());
     }
 
-    if (normalizedName.isNotEmpty) {
-      for (final path in paths) {
-        final candidateName = _normalizedTeamNameFromPath(path);
-        if (candidateName.contains(normalizedName) ||
-            normalizedName.contains(candidateName)) {
-          return path;
+    variants.removeWhere((variant) => variant.trim().isEmpty);
+    return variants;
+  }
+
+  int _scoreTeamNameMatch(
+    Set<String> candidateVariants,
+    Set<String> requestedVariants,
+  ) {
+    var bestScore = 0;
+
+    for (final candidate in candidateVariants) {
+      final candidateTokens =
+          candidate.split(' ').where((token) => token.isNotEmpty).toSet();
+      final candidateCore = _stripTeamStopwords(candidate);
+
+      for (final requested in requestedVariants) {
+        final requestedTokens =
+            requested.split(' ').where((token) => token.isNotEmpty).toSet();
+        final requestedCore = _stripTeamStopwords(requested);
+
+        var score = 0;
+        if (candidate == requested) {
+          score = 500 + candidate.length;
+        } else if (candidateCore.isNotEmpty && candidateCore == requestedCore) {
+          score = 420 + candidateCore.length;
+        } else if (candidate.contains(requested) ||
+            requested.contains(candidate)) {
+          score =
+              320 +
+              (candidate.length < requested.length
+                  ? candidate.length
+                  : requested.length);
+        }
+
+        final sharedTokens =
+            candidateTokens.intersection(requestedTokens).length;
+        if (sharedTokens > 0) {
+          score += sharedTokens * 60;
+        }
+
+        if (sharedTokens >= 2 &&
+            candidateCore.isNotEmpty &&
+            requestedCore.isNotEmpty) {
+          score += 80;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
         }
       }
     }
 
-    return paths.first;
+    return bestScore;
   }
 
   String? _bestPlayerPathById(
@@ -808,12 +1006,276 @@ class LocalAssetResolver {
   }
 
   String _normalizeLookup(String value) {
-    return value
+    return _foldToAscii(value)
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
         .trim()
         .replaceAll(RegExp(r'\s+'), ' ');
   }
+
+  String _stripTeamStopwords(String value) {
+    return value
+        .split(' ')
+        .where((token) => token.isNotEmpty && !_teamStopwords.contains(token))
+        .join(' ')
+        .trim();
+  }
+
+  String _foldToAscii(String value) {
+    if (value.isEmpty) {
+      return value;
+    }
+
+    final buffer = StringBuffer();
+    for (final rune in value.runes) {
+      final char = String.fromCharCode(rune);
+      buffer.write(_latinFoldMap[char] ?? char);
+    }
+    return buffer.toString();
+  }
+
+  ResolvedImageRef? _finishTeamBadgeResolution({
+    required String cacheKey,
+    required String? source,
+    required String? teamId,
+    required String? teamName,
+    required ResolvedImageRef resolved,
+    required String strategy,
+    required bool usedNameFallback,
+  }) {
+    _resolvedCache[cacheKey] = resolved;
+    _logTeamBadgeResolution(
+      source: source,
+      teamId: teamId,
+      teamName: teamName,
+      resolvedPath: resolved.path,
+      strategy: strategy,
+      usedNameFallback: usedNameFallback,
+    );
+    return resolved;
+  }
+
+  void _logTeamBadgeResolution({
+    required String? source,
+    required String? teamId,
+    required String? teamName,
+    required String? resolvedPath,
+    required String strategy,
+    required bool usedNameFallback,
+  }) {
+    if (_logger == null) {
+      return;
+    }
+
+    final normalizedSource =
+        source == null || source.trim().isEmpty ? 'unknown' : source.trim();
+    final normalizedId =
+        teamId == null || teamId.trim().isEmpty ? '-' : teamId.trim();
+    final normalizedName =
+        teamName == null || teamName.trim().isEmpty ? '-' : teamName.trim();
+    final matchFound = resolvedPath != null;
+
+    _logger.info(
+      '[TeamBadge] source=$normalizedSource teamId=$normalizedId teamName="$normalizedName" strategy=$strategy matched=$matchFound usedNameFallback=$usedNameFallback resolved=${resolvedPath ?? '-'}',
+    );
+  }
+
+  static const Set<String> _teamStopwords = {
+    'fc',
+    'cf',
+    'sc',
+    'afc',
+    'ac',
+    'as',
+    'fk',
+    'if',
+    'bk',
+    'sk',
+    'club',
+    'de',
+  };
+
+  static const Map<String, String> _latinFoldMap = {
+    'À': 'A',
+    'Á': 'A',
+    'Â': 'A',
+    'Ã': 'A',
+    'Ä': 'A',
+    'Å': 'A',
+    'Æ': 'AE',
+    'Ç': 'C',
+    'È': 'E',
+    'É': 'E',
+    'Ê': 'E',
+    'Ë': 'E',
+    'Ì': 'I',
+    'Í': 'I',
+    'Î': 'I',
+    'Ï': 'I',
+    'Ð': 'D',
+    'Ñ': 'N',
+    'Ò': 'O',
+    'Ó': 'O',
+    'Ô': 'O',
+    'Õ': 'O',
+    'Ö': 'O',
+    'Ø': 'O',
+    'Ù': 'U',
+    'Ú': 'U',
+    'Û': 'U',
+    'Ü': 'U',
+    'Ý': 'Y',
+    'Þ': 'TH',
+    'ß': 'ss',
+    'à': 'a',
+    'á': 'a',
+    'â': 'a',
+    'ã': 'a',
+    'ä': 'a',
+    'å': 'a',
+    'æ': 'ae',
+    'ç': 'c',
+    'è': 'e',
+    'é': 'e',
+    'ê': 'e',
+    'ë': 'e',
+    'ì': 'i',
+    'í': 'i',
+    'î': 'i',
+    'ï': 'i',
+    'ð': 'd',
+    'ñ': 'n',
+    'ò': 'o',
+    'ó': 'o',
+    'ô': 'o',
+    'õ': 'o',
+    'ö': 'o',
+    'ø': 'o',
+    'ù': 'u',
+    'ú': 'u',
+    'û': 'u',
+    'ü': 'u',
+    'ý': 'y',
+    'þ': 'th',
+    'ÿ': 'y',
+    'Ā': 'A',
+    'ā': 'a',
+    'Ă': 'A',
+    'ă': 'a',
+    'Ą': 'A',
+    'ą': 'a',
+    'Ć': 'C',
+    'ć': 'c',
+    'Ĉ': 'C',
+    'ĉ': 'c',
+    'Ċ': 'C',
+    'ċ': 'c',
+    'Č': 'C',
+    'č': 'c',
+    'Ď': 'D',
+    'ď': 'd',
+    'Đ': 'D',
+    'đ': 'd',
+    'Ē': 'E',
+    'ē': 'e',
+    'Ĕ': 'E',
+    'ĕ': 'e',
+    'Ė': 'E',
+    'ė': 'e',
+    'Ę': 'E',
+    'ę': 'e',
+    'Ě': 'E',
+    'ě': 'e',
+    'Ĝ': 'G',
+    'ĝ': 'g',
+    'Ğ': 'G',
+    'ğ': 'g',
+    'Ġ': 'G',
+    'ġ': 'g',
+    'Ģ': 'G',
+    'ģ': 'g',
+    'Ĥ': 'H',
+    'ĥ': 'h',
+    'Ħ': 'H',
+    'ħ': 'h',
+    'Ĩ': 'I',
+    'ĩ': 'i',
+    'Ī': 'I',
+    'ī': 'i',
+    'Ĭ': 'I',
+    'ĭ': 'i',
+    'Į': 'I',
+    'į': 'i',
+    'İ': 'I',
+    'ı': 'i',
+    'Ĵ': 'J',
+    'ĵ': 'j',
+    'Ķ': 'K',
+    'ķ': 'k',
+    'Ĺ': 'L',
+    'ĺ': 'l',
+    'Ļ': 'L',
+    'ļ': 'l',
+    'Ľ': 'L',
+    'ľ': 'l',
+    'Ł': 'L',
+    'ł': 'l',
+    'Ń': 'N',
+    'ń': 'n',
+    'Ņ': 'N',
+    'ņ': 'n',
+    'Ň': 'N',
+    'ň': 'n',
+    'Ō': 'O',
+    'ō': 'o',
+    'Ŏ': 'O',
+    'ŏ': 'o',
+    'Ő': 'O',
+    'ő': 'o',
+    'Œ': 'OE',
+    'œ': 'oe',
+    'Ŕ': 'R',
+    'ŕ': 'r',
+    'Ŗ': 'R',
+    'ŗ': 'r',
+    'Ř': 'R',
+    'ř': 'r',
+    'Ś': 'S',
+    'ś': 's',
+    'Ŝ': 'S',
+    'ŝ': 's',
+    'Ş': 'S',
+    'ş': 's',
+    'Š': 'S',
+    'š': 's',
+    'Ţ': 'T',
+    'ţ': 't',
+    'Ť': 'T',
+    'ť': 't',
+    'Ũ': 'U',
+    'ũ': 'u',
+    'Ū': 'U',
+    'ū': 'u',
+    'Ŭ': 'U',
+    'ŭ': 'u',
+    'Ů': 'U',
+    'ů': 'u',
+    'Ű': 'U',
+    'ű': 'u',
+    'Ų': 'U',
+    'ų': 'u',
+    'Ŵ': 'W',
+    'ŵ': 'w',
+    'Ŷ': 'Y',
+    'ŷ': 'y',
+    'Ÿ': 'Y',
+    'Ź': 'Z',
+    'ź': 'z',
+    'Ż': 'Z',
+    'ż': 'z',
+    'Ž': 'Z',
+    'ž': 'z',
+  };
 
   List<String> _assetPrefixesFor(SportsAssetType type) {
     final folderName = _folderNameFor(type);

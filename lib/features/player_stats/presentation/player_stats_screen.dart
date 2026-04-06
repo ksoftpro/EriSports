@@ -3,6 +3,7 @@ import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/player_stats/presentation/player_stats_providers.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
+import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -242,7 +243,9 @@ class _TopPanel extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
+              color: Theme.of(
+                context,
+              ).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
             ),
           ),
           const SizedBox(height: 10),
@@ -306,7 +309,9 @@ class _CategoryStrip extends StatelessWidget {
             child: Text(
               'Categories',
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
+                color: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
               ),
             ),
           ),
@@ -371,7 +376,9 @@ class _LeaderboardRow extends StatelessWidget {
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.65),
+            color: Theme.of(
+              context,
+            ).colorScheme.outline.withValues(alpha: 0.65),
           ),
         ),
         child: Padding(
@@ -406,13 +413,23 @@ class _LeaderboardRow extends StatelessWidget {
                         if (teamId != null) ...[
                           GestureDetector(
                             onTap: () => context.push('/team/$teamId'),
-                            child: EntityBadge(
-                              entityId: teamId,
-                              entityName: entry.teamName,
-                              type: SportsAssetType.teams,
+                            child: TeamBadge(
+                              teamId: teamId,
+                              teamName: entry.teamName,
                               resolver: resolver,
+                              source: 'player-stats.team-pill',
                               size: 16,
                             ),
+                          ),
+                          const SizedBox(width: 6),
+                        ] else if ((entry.teamName ?? '')
+                            .trim()
+                            .isNotEmpty) ...[
+                          TeamBadge(
+                            teamName: entry.teamName,
+                            resolver: resolver,
+                            source: 'player-stats.team-pill-name-only',
+                            size: 16,
                           ),
                           const SizedBox(width: 6),
                         ],
@@ -442,11 +459,9 @@ class _LeaderboardRow extends StatelessWidget {
                   Text(
                     statTypeLabel(statType),
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.color
-                          ?.withValues(alpha: 0.82),
+                      color: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
                     ),
                   ),
                   if (entry.stat.subStatValue != null)
@@ -511,10 +526,10 @@ class _EmptyStatsState extends StatelessWidget {
         child: Text(
           message,
           textAlign: TextAlign.center,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyLarge?.copyWith(
-            color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+            color: Theme.of(
+              context,
+            ).textTheme.bodySmall?.color?.withValues(alpha: 0.82),
           ),
         ),
       ),
