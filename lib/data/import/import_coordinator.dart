@@ -1586,31 +1586,69 @@ class ImportCoordinator {
   }
 
   Future<void> _importPlayersFile(File file) async {
-    final content = await file.readAsString();
-    final parsed = _playersParser.parse(content);
+    final decoded = await _decodeJsonFile(file);
+    final parsed = _playersParser.parseDecoded(decoded);
     final now = DateTime.now().toUtc();
 
     await database.transaction(() async {
+      for (final competition in parsed.competitions) {
+        await _ensureCompetitionByName(competition.id, competition.name, now);
+      }
+
+      for (final team in parsed.teams) {
+        await _ensureTeamWithName(
+          team.id,
+          team.name,
+          team.competitionId,
+          now,
+        );
+      }
+
       for (final player in parsed.players) {
-        if (player.teamId != null) {
-          await _ensureTeam(player.teamId!, now);
+        if (player.competitionId != null) {
+          await _ensureCompetitionByName(
+            player.competitionId!,
+            player.competitionName ?? 'League ${player.competitionId}',
+            now,
+          );
         }
 
-        await database
-            .into(database.players)
-            .insertOnConflictUpdate(
-              PlayersCompanion.insert(
-                id: player.id,
-                teamId: Value(player.teamId),
-                name: player.name,
-                position: Value(player.position),
-                jerseyNumber: Value(player.jerseyNumber),
-                photoAssetKey: const Value(null),
-                updatedAtUtc: now,
-              ),
-            );
+        if (player.teamId != null) {
+          await _ensureTeamWithName(
+            player.teamId!,
+            player.teamName,
+            player.competitionId,
+            now,
+          );
+        }
+
+        await _upsertPlayerFromParsed(player, now);
       }
     });
+  }
+
+  Future<void> _upsertPlayerFromParsed(ParsedPlayer player, DateTime now) async {
+    final existing =
+        await (database.select(database.players)
+          ..where((tbl) => tbl.id.equals(player.id))).getSingleOrNull();
+
+    final mergedTeamId = player.teamId ?? existing?.teamId;
+    final mergedPosition = player.position ?? existing?.position;
+    final mergedJerseyNumber = player.jerseyNumber ?? existing?.jerseyNumber;
+
+    await database
+        .into(database.players)
+        .insertOnConflictUpdate(
+          PlayersCompanion.insert(
+            id: player.id,
+            teamId: Value(mergedTeamId),
+            name: player.name,
+            position: Value(mergedPosition),
+            jerseyNumber: Value(mergedJerseyNumber),
+            photoAssetKey: Value(existing?.photoAssetKey),
+            updatedAtUtc: now,
+          ),
+        );
   }
 
   Future<void> _importMatchDetailFile(File file) async {
