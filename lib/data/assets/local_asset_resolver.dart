@@ -228,16 +228,15 @@ class LocalAssetResolver {
     }
 
     try {
-      final manifestJson = await rootBundle.loadString('AssetManifest.json');
-      final manifestMap = jsonDecode(manifestJson) as Map<String, dynamic>;
+      final assetManifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      final allAssets = assetManifest.listAssets();
 
       for (final type in SportsAssetType.values) {
         final prefixes = _assetPrefixesFor(type);
-        final paths = manifestMap.keys
-            .where((path) => prefixes.any(path.startsWith))
-            .toSet()
-            .toList(growable: false)
-          ..sort();
+        final paths = allAssets
+          .where((path) => prefixes.any(path.startsWith))
+          .toSet()
+          .toList(growable: false)..sort();
         _bundledAssetsByType[type] = paths;
 
         if (type == SportsAssetType.teams) {
@@ -249,8 +248,30 @@ class LocalAssetResolver {
         }
       }
     } catch (_) {
-      for (final type in SportsAssetType.values) {
-        _bundledAssetsByType[type] = const [];
+      try {
+        final manifestJson = await rootBundle.loadString('AssetManifest.json');
+        final manifestMap = jsonDecode(manifestJson) as Map<String, dynamic>;
+
+        for (final type in SportsAssetType.values) {
+          final prefixes = _assetPrefixesFor(type);
+          final paths = manifestMap.keys
+            .where((path) => prefixes.any(path.startsWith))
+            .toSet()
+            .toList(growable: false)..sort();
+          _bundledAssetsByType[type] = paths;
+
+          if (type == SportsAssetType.teams) {
+            _indexTeamAssetPaths(paths, _bundledTeamPathsById);
+          }
+
+          if (type == SportsAssetType.players) {
+            _indexPlayerAssetPaths(paths, _bundledPlayerPathsById);
+          }
+        }
+      } catch (_) {
+        for (final type in SportsAssetType.values) {
+          _bundledAssetsByType[type] = const [];
+        }
       }
     }
 
@@ -270,10 +291,36 @@ class LocalAssetResolver {
     };
 
     try {
-      final raw = await rootBundle.loadString(
-        'assets/manifest/fotmob_assets_manifest.json',
-      );
-      final decoded = jsonDecode(raw);
+      final daylySportDir =
+          await _daylySportLocator.getOrCreateDaylySportDirectory();
+      final candidates = [
+        File(
+          p.join(daylySportDir.path, 'manifest', 'fotmob_assets_manifest.json'),
+        ),
+        File(
+          p.join(
+            daylySportDir.path,
+            'assets',
+            'manifest',
+            'fotmob_assets_manifest.json',
+          ),
+        ),
+      ];
+
+      File? sourceFile;
+      for (final file in candidates) {
+        if (await file.exists()) {
+          sourceFile = file;
+          break;
+        }
+      }
+
+      if (sourceFile == null) {
+        _bundleManifestLoaded = true;
+        return;
+      }
+
+      final decoded = jsonDecode(await sourceFile.readAsString());
       if (decoded is! Map<String, dynamic>) {
         _bundleManifestLoaded = true;
         return;
@@ -320,9 +367,10 @@ class LocalAssetResolver {
           String? mappedPath;
           final badge = rawTeam['badge'];
           if (badge is Map<String, dynamic>) {
-            final fileName = _stringValue(
-              badge['fileName'] ?? badge['filename'],
-            )?.toLowerCase();
+            final fileName =
+                _stringValue(
+                  badge['fileName'] ?? badge['filename'],
+                )?.toLowerCase();
             if (fileName != null) {
               mappedPath = teamPathByBase[fileName];
             }
@@ -335,7 +383,7 @@ class LocalAssetResolver {
         }
       }
     } catch (_) {
-      // Ignore malformed/unavailable bundled manifest.
+      // Ignore malformed/unavailable local manifest.
     }
 
     _bundleManifestLoaded = true;
@@ -605,8 +653,9 @@ class LocalAssetResolver {
 
   String? _extractTeamIdFromPath(String path) {
     final basename = p.basenameWithoutExtension(path).toLowerCase();
-    final trailingDigits =
-        RegExp(r'(\d+)(?:[_-]badge)?$').firstMatch(basename)?.group(1);
+    final trailingDigits = RegExp(
+      r'(\d+)(?:[_-]badge)?$',
+    ).firstMatch(basename)?.group(1);
     if (trailingDigits != null && trailingDigits.isNotEmpty) {
       return trailingDigits;
     }

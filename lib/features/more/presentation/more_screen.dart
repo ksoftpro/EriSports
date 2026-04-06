@@ -57,9 +57,22 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     final services = ref.read(appServicesProvider);
     services.assetResolver.invalidateCache();
 
-    final teamIds = await services.database.readAllTeamIds();
+    final teams = await services.database.readTeamsSorted();
+    final teamIds = teams.map((team) => team.id).toList(growable: false);
     final playerIds = await services.database.readAllPlayerIds();
     final competitionIds = await services.database.readAllCompetitionIds();
+
+    final missingTeamIds = <String>[];
+    for (final team in teams) {
+      final resolved = await services.assetResolver.resolve(
+        type: SportsAssetType.teams,
+        entityId: team.id,
+        entityName: team.shortName ?? team.name,
+      );
+      if (resolved == null) {
+        missingTeamIds.add(team.id);
+      }
+    }
 
     Future<List<String>> findMissing(
       List<String> ids,
@@ -78,7 +91,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
       return missing;
     }
 
-    final missingTeamIds = await findMissing(teamIds, SportsAssetType.teams);
     final missingPlayerIds = await findMissing(
       playerIds,
       SportsAssetType.players,
@@ -135,25 +147,28 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         context: context,
                         label: 'System',
                         selected: themeMode == ThemeMode.system,
-                        onTap: () => ref
-                            .read(themeModeProvider.notifier)
-                            .setThemeMode(ThemeMode.system),
+                        onTap:
+                            () => ref
+                                .read(themeModeProvider.notifier)
+                                .setThemeMode(ThemeMode.system),
                       ),
                       _themeChip(
                         context: context,
                         label: 'Light',
                         selected: themeMode == ThemeMode.light,
-                        onTap: () => ref
-                            .read(themeModeProvider.notifier)
-                            .setThemeMode(ThemeMode.light),
+                        onTap:
+                            () => ref
+                                .read(themeModeProvider.notifier)
+                                .setThemeMode(ThemeMode.light),
                       ),
                       _themeChip(
                         context: context,
                         label: 'Dark',
                         selected: themeMode == ThemeMode.dark,
-                        onTap: () => ref
-                            .read(themeModeProvider.notifier)
-                            .setThemeMode(ThemeMode.dark),
+                        onTap:
+                            () => ref
+                                .read(themeModeProvider.notifier)
+                                .setThemeMode(ThemeMode.dark),
                       ),
                     ],
                   ),

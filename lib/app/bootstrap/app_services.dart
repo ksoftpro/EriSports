@@ -36,7 +36,9 @@ class AppServices {
       scanner: scanner,
       logger: logger,
     );
-    final leagueStandingsSource = LeagueStandingsSource();
+    final leagueStandingsSource = LeagueStandingsSource(
+      daylySportLocator: daylySportLocator,
+    );
 
     return AppServices(
       database: database,

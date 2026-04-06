@@ -1,6 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 
-import 'package:flutter/services.dart';
+import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 
 const List<String> kPreferredStandingsModeOrder = [
   'all',
@@ -44,32 +45,94 @@ String standingsModeLabel(String modeKey) {
 
 class LeagueStandingsSource {
   LeagueStandingsSource({
-    AssetBundle? assetBundle,
-    this.assetPath = 'assets/manifest/top_standings_full_data.json',
-  }) : _assetBundle = assetBundle ?? rootBundle;
+    required DaylySportLocator daylySportLocator,
+    this.filePrefix = 'top_standings_full_data',
+  }) : _daylySportLocator = daylySportLocator;
 
-  final AssetBundle _assetBundle;
-  final String assetPath;
+  final DaylySportLocator _daylySportLocator;
+  final String filePrefix;
 
   LeagueStandingsBundle? _cachedBundle;
+  String? _cachedSourcePath;
+  DateTime? _cachedModifiedAtUtc;
 
   Future<LeagueStandingsBundle> loadBundle() async {
+    final sourceFile = await _resolveSourceFile();
+    if (sourceFile == null) {
+      const empty = LeagueStandingsBundle.empty();
+      _cachedBundle = empty;
+      _cachedSourcePath = null;
+      _cachedModifiedAtUtc = null;
+      return empty;
+    }
+
+    final stat = await sourceFile.stat();
+    final lastModifiedUtc = stat.modified.toUtc();
     final cached = _cachedBundle;
-    if (cached != null) {
+    if (cached != null &&
+        _cachedSourcePath == sourceFile.path &&
+        _cachedModifiedAtUtc == lastModifiedUtc) {
       return cached;
     }
 
     try {
-      final raw = await _assetBundle.loadString(assetPath);
+      final raw = await sourceFile.readAsString();
       final decoded = jsonDecode(raw);
       final parsed = LeagueStandingsBundle.fromJson(decoded);
       _cachedBundle = parsed;
+      _cachedSourcePath = sourceFile.path;
+      _cachedModifiedAtUtc = lastModifiedUtc;
       return parsed;
     } catch (_) {
       const empty = LeagueStandingsBundle.empty();
       _cachedBundle = empty;
+      _cachedSourcePath = sourceFile.path;
+      _cachedModifiedAtUtc = lastModifiedUtc;
       return empty;
     }
+  }
+
+  Future<File?> _resolveSourceFile() async {
+    try {
+      final root = await _daylySportLocator.getOrCreateDaylySportDirectory();
+      if (!await root.exists()) {
+        return null;
+      }
+
+      final matches = <File>[];
+      await for (final entity in root.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File) {
+          continue;
+        }
+        final lowerName = _filename(entity.path).toLowerCase();
+        if (lowerName.startsWith(filePrefix.toLowerCase()) &&
+            lowerName.endsWith('.json')) {
+          matches.add(entity);
+        }
+      }
+
+      if (matches.isEmpty) {
+        return null;
+      }
+
+      matches.sort((a, b) {
+        final aTime = a.statSync().modified;
+        final bTime = b.statSync().modified;
+        return bTime.compareTo(aTime);
+      });
+      return matches.first;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _filename(String path) {
+    final separators = RegExp(r'[\\/]');
+    final parts = path.split(separators);
+    return parts.isEmpty ? path : parts.last;
   }
 
   Future<LeagueStandingsLeague?> readLeagueByCompetitionId(
@@ -81,6 +144,8 @@ class LeagueStandingsSource {
 
   void invalidateCache() {
     _cachedBundle = null;
+    _cachedSourcePath = null;
+    _cachedModifiedAtUtc = null;
   }
 }
 

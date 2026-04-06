@@ -123,7 +123,7 @@ class _WidgetHarness {
       database: database,
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
-      leagueStandingsSource: LeagueStandingsSource(),
+      leagueStandingsSource: LeagueStandingsSource(daylySportLocator: locator),
       logger: logger,
     );
 
