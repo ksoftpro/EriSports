@@ -12,7 +12,6 @@ import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
-import 'package:eri_sports/shared/widgets/match_card_compact.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,76 +22,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-    'offline startup imports and match center renders timeline/stats',
-    (tester) async {
-      final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-      final harness = await _TestHarness.create(tester, binding);
-      addTearDown(harness.dispose);
-
-      expect(find.textContaining('Local data import: success'), findsOneWidget);
-      expect(find.text('Arsenal'), findsWidgets);
-
-      await tester.tap(find.byType(MatchCardCompact).first.hitTestable());
-      await tester.pumpAndSettle();
-
-      expect(find.text('Match Detail'), findsOneWidget);
-      expect(find.text('Timeline'), findsOneWidget);
-      expect(find.text('Stats'), findsOneWidget);
-      expect(find.textContaining('Goal'), findsWidgets);
-      expect(find.text('Possession'), findsOneWidget);
-    },
-  );
-
-  testWidgets('offline leagues, team, player, and search navigation works', (
+  testWidgets('offline asset diagnostics maps bundled team badges', (
     tester,
   ) async {
     final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
     final harness = await _TestHarness.create(tester, binding);
     addTearDown(harness.dispose);
 
-    await tester.tap(find.text('Leagues').first.hitTestable());
+    await tester.tap(find.text('More').first.hitTestable());
     await tester.pumpAndSettle();
 
-    expect(find.text('Premier League'), findsWidgets);
+    expect(find.text('Run offline asset diagnostics'), findsOneWidget);
 
-    await tester.tap(find.text('Premier League').first.hitTestable());
+    await tester.tap(
+      find.text('Run offline asset diagnostics').first.hitTestable(),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('Standings'), findsOneWidget);
-    expect(find.text('Arsenal').first, findsOneWidget);
-
-    await tester.tap(find.text('Arsenal').first.hitTestable());
-    await tester.pumpAndSettle();
-
-    expect(find.text('Recent Matches'), findsOneWidget);
-    expect(find.text('Squad'), findsOneWidget);
-
-    await tester.tap(find.text('Bukayo Saka').first.hitTestable());
-    await tester.pumpAndSettle();
-
-    expect(find.text('Position'), findsOneWidget);
-    expect(find.text('MID'), findsOneWidget);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Search').first.hitTestable());
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byType(EditableText).first, 'Saka');
-    await tester.pump(const Duration(milliseconds: 220));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Players'), findsOneWidget);
-    await tester.tap(find.text('Bukayo Saka').first.hitTestable());
-    await tester.pumpAndSettle();
-
-    expect(find.text('Position'), findsOneWidget);
+    expect(find.text('Asset diagnostics'), findsOneWidget);
+    expect(find.text('Teams: 2/2 mapped'), findsOneWidget);
   });
 }
 
@@ -109,7 +57,9 @@ class _TestHarness {
     tester.view.physicalSize = const Size(1080, 1920);
     tester.view.devicePixelRatio = 1.0;
 
-    final tempRoot = await Directory.systemTemp.createTemp('erisports_it_');
+    final tempRoot = await Directory.systemTemp.createTemp(
+      'erisports_it_diag_',
+    );
     final daylySportDir = Directory(p.join(tempRoot.path, 'daylySport'));
     await daylySportDir.create(recursive: true);
 
@@ -193,9 +143,9 @@ class _TestHarness {
           'competitionName': 'Premier League',
           'country': 'England',
           'kickoffUtc': DateTime.now().toUtc().toIso8601String(),
-          'status': 'live',
-          'homeScore': 2,
-          'awayScore': 1,
+          'status': 'scheduled',
+          'homeScore': 0,
+          'awayScore': 0,
           'homeTeam': {'id': '9825', 'name': 'Arsenal'},
           'awayTeam': {'id': '8650', 'name': 'Liverpool'},
           'round': 'Matchday 30',
@@ -203,80 +153,21 @@ class _TestHarness {
       ],
     };
 
-    final standingsJson = {
-      'competitionId': '47',
-      'competitionName': 'Premier League',
-      'country': 'England',
-      'standings': [
-        {
-          'position': 1,
-          'played': 30,
-          'won': 22,
-          'draw': 5,
-          'lost': 3,
-          'goalsFor': 68,
-          'goalsAgainst': 25,
-          'goalDiff': 43,
-          'points': 71,
-          'team': {'id': '9825', 'name': 'Arsenal', 'shortName': 'ARS'},
-        },
-        {
-          'position': 2,
-          'played': 30,
-          'won': 21,
-          'draw': 6,
-          'lost': 3,
-          'goalsFor': 66,
-          'goalsAgainst': 28,
-          'goalDiff': 38,
-          'points': 69,
-          'team': {'id': '8650', 'name': 'Liverpool', 'shortName': 'LIV'},
-        },
-      ],
-    };
-
-    final playersJson = {
-      'players': [
-        {
-          'id': '961995',
-          'name': 'Bukayo Saka',
-          'position': 'MID',
-          'jerseyNumber': 7,
-          'teamId': '9825',
-        },
-      ],
-    };
-
-    final matchDetailJson = {
-      'matchId': '1001',
-      'homeTeamId': '9825',
-      'awayTeamId': '8650',
-      'events': [
-        {
-          'minute': 12,
-          'type': 'goal',
-          'teamId': '9825',
-          'playerId': '961995',
-          'playerName': 'Bukayo Saka',
-          'detail': 'Left-footed finish',
-        },
-      ],
-      'teamStats': {
-        'home': {'possession': 56, 'shots_on_target': 7, 'corners': 5},
-        'away': {'possession': 44, 'shots_on_target': 4, 'corners': 2},
-      },
-    };
-
     Future<void> writeJson(String filename, Map<String, dynamic> data) async {
       final file = File(p.join(daylySportDir.path, filename));
       await file.writeAsString(jsonEncode(data));
     }
 
+    Future<void> writeBadge(String relativePath) async {
+      final file = File(p.join(daylySportDir.path, relativePath));
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(<int>[137, 80, 78, 71]);
+    }
+
     await writeJson('teams_2026_04_03.json', teamsJson);
     await writeJson('fixtures_2026_04_03.json', fixturesJson);
-    await writeJson('standings_2026_04_03.json', standingsJson);
-    await writeJson('players_2026_04_03.json', playersJson);
-    await writeJson('match_detail_1001.json', matchDetailJson);
+    await writeBadge('teams/premier_league/team_Arsenal_9825_badge.png');
+    await writeBadge('teams/premier_league/team_Liverpool_8650_badge.png');
   }
 }
 

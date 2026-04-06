@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:eri_sports/app/app.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/core/log/app_logger.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
@@ -16,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -126,6 +128,8 @@ class _WidgetHarness {
       leagueStandingsSource: LeagueStandingsSource(daylySportLocator: locator),
       logger: logger,
     );
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
 
     final startupReport = await services.importCoordinator.runLocalImport(
       triggerType: 'startup',
@@ -135,6 +139,7 @@ class _WidgetHarness {
       ProviderScope(
         overrides: [
           appServicesProvider.overrideWithValue(services),
+          sharedPreferencesProvider.overrideWithValue(preferences),
           startupImportReportProvider.overrideWithValue(startupReport),
         ],
         child: const EriSportsApp(),
