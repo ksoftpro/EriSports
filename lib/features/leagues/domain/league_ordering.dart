@@ -4,6 +4,7 @@ const List<String> referenceLeagueOrder = [
   'premier league',
   'champions league',
   'africa cup of nations',
+  'fifa 26',
   'caf champions league',
   'euro',
   'ligue 1',
@@ -16,6 +17,21 @@ const List<String> referenceLeagueOrder = [
   'saudi pro league',
   'fa cup',
 ];
+
+const String kVirtualLeagueIdPrefix = 'virtual_league_';
+
+enum LeagueCategory { international, domestic, other }
+
+const Set<String> _internationalCanonicals = {
+  'africa cup of nations',
+  'fifa 26',
+  'fifa world cup',
+  'champions league',
+  'caf champions league',
+  'euro',
+  'europa league',
+  'uefa super cup',
+};
 
 const int _unknownLeagueRank = 100000;
 
@@ -53,6 +69,79 @@ List<CompetitionRow> orderLeaguesForReference(List<CompetitionRow> leagues) {
   return sorted;
 }
 
+List<CompetitionRow> ensureFeaturedInternationalLeagues(
+  List<CompetitionRow> leagues,
+) {
+  final merged = List<CompetitionRow>.from(leagues);
+  final canonicals = {
+    for (final league in merged) canonicalLeagueName(league.name),
+  };
+
+  void ensure({
+    required String canonical,
+    required String id,
+    required String name,
+  }) {
+    if (canonicals.contains(canonical)) {
+      return;
+    }
+
+    merged.add(
+      CompetitionRow(
+        id: id,
+        name: name,
+        country: 'International',
+        logoAssetKey: null,
+        displayOrder: -1000,
+        updatedAtUtc: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      ),
+    );
+    canonicals.add(canonical);
+  }
+
+  ensure(
+    canonical: 'africa cup of nations',
+    id: '${kVirtualLeagueIdPrefix}afcon',
+    name: 'AFCON',
+  );
+  ensure(
+    canonical: 'fifa 26',
+    id: '${kVirtualLeagueIdPrefix}fifa_26',
+    name: 'FIFA 26',
+  );
+
+  return merged;
+}
+
+LeagueCategory leagueCategoryFor(CompetitionRow league) {
+  final canonical = canonicalLeagueName(league.name);
+  if (_internationalCanonicals.contains(canonical)) {
+    return LeagueCategory.international;
+  }
+
+  final country = league.country;
+  if (country != null && country.trim().isNotEmpty) {
+    return LeagueCategory.domestic;
+  }
+
+  return LeagueCategory.other;
+}
+
+String leagueCategoryLabel(LeagueCategory category) {
+  switch (category) {
+    case LeagueCategory.international:
+      return 'International Leagues';
+    case LeagueCategory.domestic:
+      return 'Domestic Leagues';
+    case LeagueCategory.other:
+      return 'Other Leagues';
+  }
+}
+
+bool isVirtualLeagueId(String id) {
+  return id.startsWith(kVirtualLeagueIdPrefix);
+}
+
 int referenceLeagueRank(String leagueName) {
   final canonical = canonicalLeagueName(leagueName);
   return _rankByCanonicalName[canonical] ?? _unknownLeagueRank;
@@ -71,6 +160,12 @@ String canonicalLeagueName(String leagueName) {
   }
   if (normalized.contains('africa cup of nations') || normalized == 'afcon') {
     return 'africa cup of nations';
+  }
+  if (normalized == 'fifa 26' ||
+      normalized == 'fifa26' ||
+      normalized.contains('fifa world cup 2026') ||
+      normalized.contains('world cup 2026')) {
+    return 'fifa 26';
   }
   if (normalized.contains('caf champions league')) {
     return 'caf champions league';

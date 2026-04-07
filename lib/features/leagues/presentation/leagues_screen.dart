@@ -1,6 +1,7 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
+import 'package:eri_sports/features/leagues/domain/league_ordering.dart';
 import 'package:eri_sports/features/leagues/presentation/leagues_providers.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:flutter/material.dart';
@@ -31,6 +32,7 @@ class _LeaguesScreenState extends ConsumerState<LeaguesScreen> {
                 const Center(child: Text('Unable to load local competitions.')),
         data: (leagues) {
           final filtered = _applySearch(leagues);
+          final grouped = _groupByCategory(filtered);
 
           if (filtered.isEmpty) {
             return const Center(child: Text('No competitions imported yet.'));
@@ -71,58 +73,35 @@ class _LeaguesScreenState extends ConsumerState<LeaguesScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: scheme.outline.withValues(alpha: 0.65)),
-                ),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Following',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {},
-                            child: const Text('Edit'),
-                          ),
-                        ],
-                      ),
+              for (final category in LeagueCategory.values)
+                if ((grouped[category] ?? const []).isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _LeagueSection(
+                      title: leagueCategoryLabel(category),
+                      leagues: grouped[category]!,
+                      resolver: resolver,
                     ),
-                    ...List.generate(filtered.length, (index) {
-                      final league = filtered[index];
-                      return Column(
-                        children: [
-                          _LeagueTile(
-                            leagueId: league.id,
-                            name: league.name,
-                            resolver: resolver,
-                          ),
-                          if (index != filtered.length - 1)
-                            Divider(
-                              height: 1,
-                              indent: 46,
-                              endIndent: 12,
-                              color: scheme.outline.withValues(alpha: 0.35),
-                            ),
-                        ],
-                      );
-                    }),
-                  ],
-                ),
-              ),
+                  ),
             ],
           );
         },
       ),
     );
+  }
+
+  Map<LeagueCategory, List<CompetitionRow>> _groupByCategory(
+    List<CompetitionRow> leagues,
+  ) {
+    final grouped = {
+      for (final category in LeagueCategory.values) category: <CompetitionRow>[],
+    };
+
+    for (final league in leagues) {
+      grouped[leagueCategoryFor(league)]!.add(league);
+    }
+
+    return grouped;
   }
 
   List<CompetitionRow> _applySearch(List<CompetitionRow> leagues) {
@@ -154,8 +133,23 @@ class _LeagueTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final virtualEntry = isVirtualLeagueId(leagueId);
+
     return InkWell(
-      onTap: () => context.push('/league/$leagueId'),
+      onTap: () {
+        if (virtualEntry) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'League added to list. Import data for this league to open details.',
+              ),
+            ),
+          );
+          return;
+        }
+
+        context.push('/league/$leagueId');
+      },
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
         child: Row(
@@ -169,7 +163,7 @@ class _LeagueTile extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                name,
+                virtualEntry ? '$name (coming soon)' : name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleMedium,
@@ -177,6 +171,64 @@ class _LeagueTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _LeagueSection extends StatelessWidget {
+  const _LeagueSection({
+    required this.title,
+    required this.leagues,
+    required this.resolver,
+  });
+
+  final String title;
+  final List<CompetitionRow> leagues;
+  final LocalAssetResolver resolver;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outline.withValues(alpha: 0.65)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ),
+          ...List.generate(leagues.length, (index) {
+            final league = leagues[index];
+            return Column(
+              children: [
+                _LeagueTile(
+                  leagueId: league.id,
+                  name: league.name,
+                  resolver: resolver,
+                ),
+                if (index != leagues.length - 1)
+                  Divider(
+                    height: 1,
+                    indent: 46,
+                    endIndent: 12,
+                    color: scheme.outline.withValues(alpha: 0.35),
+                  ),
+              ],
+            );
+          }),
+        ],
       ),
     );
   }

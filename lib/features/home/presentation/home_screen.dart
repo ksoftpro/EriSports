@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/navigation/detail_navigation.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/home/presentation/home_providers.dart';
@@ -506,7 +507,7 @@ class _FixtureRow extends StatelessWidget {
     final scoreText = '${fixture.match.homeScore} - ${fixture.match.awayScore}';
 
     return InkWell(
-      onTap: () => context.push('/match/${fixture.match.id}'),
+      onTap: () => context.openMatchDetail(fixture.match.id),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
         child: Row(

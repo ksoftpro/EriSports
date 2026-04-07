@@ -9,5 +9,7 @@ final leaguesProvider = FutureProvider<List<CompetitionRow>>((ref) async {
   ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.catalog));
   final services = ref.read(appServicesProvider);
   final competitions = await services.database.readCompetitionsSorted();
-  return orderLeaguesForReference(competitions);
+  return orderLeaguesForReference(
+    ensureFeaturedInternationalLeagues(competitions),
+  );
 });

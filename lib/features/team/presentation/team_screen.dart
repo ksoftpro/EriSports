@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/navigation/detail_navigation.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/team/presentation/team_providers.dart';
@@ -164,8 +165,8 @@ class TeamScreen extends ConsumerWidget {
                           awayTeamId: fixture.match.awayTeamId,
                           assetResolver: resolver,
                           badgeSource: 'team.next-fixture',
-                          onTap:
-                              () => context.push('/match/${fixture.match.id}'),
+                            onTap:
+                              () => context.openMatchDetail(fixture.match.id),
                           homeScore: fixture.match.homeScore,
                           awayScore: fixture.match.awayScore,
                         ),
@@ -202,7 +203,7 @@ class TeamScreen extends ConsumerWidget {
                   awayTeamId: item.match.awayTeamId,
                   assetResolver: resolver,
                   badgeSource: 'team.recent-matches',
-                  onTap: () => context.push('/match/${item.match.id}'),
+                  onTap: () => context.openMatchDetail(item.match.id),
                   homeScore: item.match.homeScore,
                   awayScore: item.match.awayScore,
                 ),

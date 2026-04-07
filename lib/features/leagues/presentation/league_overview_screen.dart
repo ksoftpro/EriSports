@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/navigation/detail_navigation.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
@@ -771,7 +772,7 @@ class _FixturesTab extends StatelessWidget {
                         awayTeamId: item.match.awayTeamId,
                         assetResolver: resolver,
                         badgeSource: 'league.fixtures',
-                        onTap: () => context.push('/match/${item.match.id}'),
+                        onTap: () => context.openMatchDetail(item.match.id),
                         homeScore: item.match.homeScore,
                         awayScore: item.match.awayScore,
                       );
@@ -1210,7 +1211,7 @@ class _NewsTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       onTap: () {
         if (item.matchId != null) {
-          context.push('/match/${item.matchId}');
+          context.openMatchDetail(item.matchId!);
           return;
         }
         showModalBottomSheet<void>(
