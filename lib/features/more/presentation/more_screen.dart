@@ -4,6 +4,8 @@ import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
+import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -18,7 +20,177 @@ class MoreScreen extends ConsumerStatefulWidget {
 
 class _MoreScreenState extends ConsumerState<MoreScreen> {
   bool _isDiagnosingAssets = false;
+  bool _isPickingJsonFolder = false;
+  String? _folderSelectionMessage;
   AssetDiagnosticsReport? _assetDiagnostics;
+
+  Future<void> _pickJsonDirectory() async {
+    if (_isPickingJsonFolder) {
+      return;
+    }
+
+    setState(() {
+      _isPickingJsonFolder = true;
+      _folderSelectionMessage = null;
+    });
+
+    try {
+      final selectedPath = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Select JSON data folder',
+      );
+
+      if (selectedPath == null || selectedPath.trim().isEmpty) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _folderSelectionMessage = 'Folder selection canceled.';
+          _isPickingJsonFolder = false;
+        });
+        return;
+      }
+
+      final services = ref.read(appServicesProvider);
+      await services.daylySportLocator.setCustomDirectoryPath(selectedPath);
+      final result = await ref
+          .read(daylysportSyncControllerProvider.notifier)
+          .runManualSync();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _folderSelectionMessage =
+            result.status == DaylysportSyncStatus.failed
+                ? 'Folder updated, but synchronization failed: ${result.errorMessage ?? 'unknown error'}'
+                : 'JSON folder updated successfully.';
+        _isPickingJsonFolder = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _folderSelectionMessage = 'Unable to set folder: $error';
+        _isPickingJsonFolder = false;
+      });
+    }
+  }
+
+  Future<void> _clearCustomJsonDirectory() async {
+    if (_isPickingJsonFolder) {
+      return;
+    }
+
+    setState(() {
+      _isPickingJsonFolder = true;
+      _folderSelectionMessage = null;
+    });
+
+    try {
+      final services = ref.read(appServicesProvider);
+      await services.daylySportLocator.setCustomDirectoryPath(null);
+      final result = await ref
+          .read(daylysportSyncControllerProvider.notifier)
+          .runManualSync();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _folderSelectionMessage =
+            result.status == DaylysportSyncStatus.failed
+                ? 'Reset to default folder, but sync failed: ${result.errorMessage ?? 'unknown error'}'
+                : 'Using default daylySport folder again.';
+        _isPickingJsonFolder = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _folderSelectionMessage = 'Unable to reset folder: $error';
+        _isPickingJsonFolder = false;
+      });
+    }
+  }
+
+  Future<void> _openManualPathDialog(String? currentPath) async {
+    final controller = TextEditingController(text: currentPath ?? '');
+    final nextPath = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Set JSON folder path'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Directory path',
+              hintText: '/storage/emulated/0/daylySport',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (nextPath == null) {
+      return;
+    }
+
+    if (nextPath.isEmpty) {
+      await _clearCustomJsonDirectory();
+      return;
+    }
+
+    if (_isPickingJsonFolder) {
+      return;
+    }
+
+    setState(() {
+      _isPickingJsonFolder = true;
+      _folderSelectionMessage = null;
+    });
+
+    try {
+      final services = ref.read(appServicesProvider);
+      await services.daylySportLocator.setCustomDirectoryPath(nextPath);
+      final result = await ref
+          .read(daylysportSyncControllerProvider.notifier)
+          .runManualSync();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _folderSelectionMessage =
+            result.status == DaylysportSyncStatus.failed
+                ? 'Path saved, but sync failed: ${result.errorMessage ?? 'unknown error'}'
+                : 'JSON folder path saved.';
+        _isPickingJsonFolder = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _folderSelectionMessage = 'Unable to save path: $error';
+        _isPickingJsonFolder = false;
+      });
+    }
+  }
 
   Future<void> _runAssetDiagnostics() async {
     if (_isDiagnosingAssets) {
@@ -98,6 +270,8 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     final startupState = ref.watch(startupControllerProvider);
     final themeMode = ref.watch(themeModeProvider);
     final syncState = ref.watch(daylysportSyncControllerProvider);
+    final services = ref.read(appServicesProvider);
+    final selectedJsonFolder = services.daylySportLocator.readCustomDirectoryPath();
 
     return SafeArea(
       child: ListView(
@@ -164,6 +338,63 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
             onPressed: () => context.push('/sync'),
             icon: const Icon(Icons.sync),
             label: const Text('Open Synchronize Data'),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'JSON data directory',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    selectedJsonFolder ??
+                        'Default: /storage/emulated/0/daylySport (or platform fallback)',
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _isPickingJsonFolder ? null : _pickJsonDirectory,
+                        icon: const Icon(Icons.folder_open),
+                        label: Text(
+                          _isPickingJsonFolder
+                              ? 'Applying folder...'
+                              : 'Browse data JSONs directory',
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed:
+                            _isPickingJsonFolder
+                                ? null
+                                : () => _openManualPathDialog(selectedJsonFolder),
+                        icon: const Icon(Icons.edit_location_alt),
+                        label: const Text('Set path manually'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed:
+                            _isPickingJsonFolder || selectedJsonFolder == null
+                                ? null
+                                : _clearCustomJsonDirectory,
+                        icon: const Icon(Icons.restart_alt),
+                        label: const Text('Use default folder'),
+                      ),
+                    ],
+                  ),
+                  if (_folderSelectionMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(_folderSelectionMessage!),
+                    ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(

@@ -3,11 +3,53 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DaylySportLocator {
+  DaylySportLocator({SharedPreferences? sharedPreferences})
+    : _sharedPreferences = sharedPreferences;
+
+  static const _customFolderPrefKey = 'daylysport.custom_json_folder';
+  final SharedPreferences? _sharedPreferences;
+
+  String? readCustomDirectoryPath() {
+    final path = _sharedPreferences?.getString(_customFolderPrefKey);
+    if (path == null || path.trim().isEmpty) {
+      return null;
+    }
+    return path.trim();
+  }
+
+  Future<void> setCustomDirectoryPath(String? path) async {
+    final prefs = _sharedPreferences;
+    if (prefs == null) {
+      return;
+    }
+
+    if (path == null || path.trim().isEmpty) {
+      await prefs.remove(_customFolderPrefKey);
+      return;
+    }
+
+    await prefs.setString(_customFolderPrefKey, path.trim());
+  }
+
   Future<Directory> getOrCreateDaylySportDirectory() async {
     if (Platform.isAndroid) {
       await _ensureAndroidStoragePermission();
+    }
+
+    final customPath = readCustomDirectoryPath();
+    if (customPath != null) {
+      final customDir = Directory(customPath);
+      try {
+        if (!await customDir.exists()) {
+          await customDir.create(recursive: true);
+        }
+        return customDir;
+      } catch (_) {
+        // Fall back to default candidate lookup if custom path is inaccessible.
+      }
     }
 
     final candidates = await _candidateDirectories();

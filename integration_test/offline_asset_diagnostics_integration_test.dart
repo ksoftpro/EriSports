@@ -105,6 +105,7 @@ class _TestHarness {
 
     final services = AppServices(
       database: database,
+      daylySportLocator: locator,
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
       leagueStandingsSource: leagueStandingsSource,

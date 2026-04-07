@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppServices {
   AppServices({
     required this.database,
+    required this.daylySportLocator,
     required this.importCoordinator,
     required this.assetResolver,
     required this.leagueStandingsSource,
@@ -23,6 +24,7 @@ class AppServices {
   });
 
   final AppDatabase database;
+  final DaylySportLocator daylySportLocator;
   final ImportCoordinator importCoordinator;
   final LocalAssetResolver assetResolver;
   final LeagueStandingsSource leagueStandingsSource;
@@ -34,7 +36,9 @@ class AppServices {
   }) async {
     final logger = AppLogger();
     final database = AppDatabase();
-    final daylySportLocator = DaylySportLocator();
+    final daylySportLocator = DaylySportLocator(
+      sharedPreferences: sharedPreferences,
+    );
     final cacheStore = DaylySportCacheStore(
       sharedPreferences: sharedPreferences,
     );
@@ -68,6 +72,7 @@ class AppServices {
 
     return AppServices(
       database: database,
+      daylySportLocator: daylySportLocator,
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
       leagueStandingsSource: leagueStandingsSource,

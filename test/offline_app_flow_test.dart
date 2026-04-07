@@ -164,6 +164,7 @@ class _WidgetHarness {
 
     final services = AppServices(
       database: database,
+      daylySportLocator: locator,
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
       leagueStandingsSource: leagueStandingsSource,
