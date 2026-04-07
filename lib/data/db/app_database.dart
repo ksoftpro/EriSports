@@ -204,6 +204,18 @@ class TopPlayerLeaderboardEntryView {
   final String? teamName;
 }
 
+class CompetitionPlayerView {
+  const CompetitionPlayerView({
+    required this.player,
+    required this.teamId,
+    required this.teamName,
+  });
+
+  final PlayerRow player;
+  final String? teamId;
+  final String? teamName;
+}
+
 class MatchDetailView {
   const MatchDetailView({
     required this.match,
@@ -379,6 +391,35 @@ class AppDatabase extends _$AppDatabase {
           ..where((tbl) => tbl.teamId.equals(teamId))
           ..orderBy([(tbl) => OrderingTerm.asc(tbl.name)]))
         .get();
+  }
+
+  Future<List<CompetitionPlayerView>> readPlayersForCompetition(
+    String competitionId, {
+    int limit = 400,
+  }) async {
+    final teamAlias = alias(teams, 'competition_players_team');
+
+    final query =
+        select(players).join([
+            leftOuterJoin(teamAlias, teamAlias.id.equalsExp(players.teamId)),
+          ])
+          ..where(teamAlias.competitionId.equals(competitionId))
+          ..orderBy([
+            OrderingTerm.desc(players.updatedAtUtc),
+            OrderingTerm.asc(players.name),
+          ])
+          ..limit(limit);
+
+    final rows = await query.get();
+    return rows
+        .map(
+          (row) => CompetitionPlayerView(
+            player: row.readTable(players),
+            teamId: row.readTableOrNull(teamAlias)?.id,
+            teamName: row.readTableOrNull(teamAlias)?.name,
+          ),
+        )
+        .toList(growable: false);
   }
 
   Future<List<HomeMatchView>> readTeamMatches(

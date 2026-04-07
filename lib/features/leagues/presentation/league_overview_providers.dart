@@ -56,6 +56,9 @@ class LeagueNewsItem {
     required this.publishedAtUtc,
     required this.isInsight,
     this.matchId,
+    this.imagePlayerId,
+    this.imageTeamId,
+    this.imageTeamName,
   });
 
   final String id;
@@ -65,6 +68,27 @@ class LeagueNewsItem {
   final DateTime publishedAtUtc;
   final bool isInsight;
   final String? matchId;
+  final String? imagePlayerId;
+  final String? imageTeamId;
+  final String? imageTeamName;
+}
+
+class LeagueTransferItem {
+  const LeagueTransferItem({
+    required this.playerId,
+    required this.playerName,
+    required this.teamId,
+    required this.teamName,
+    required this.position,
+    required this.updatedAtUtc,
+  });
+
+  final String playerId;
+  final String playerName;
+  final String? teamId;
+  final String teamName;
+  final String? position;
+  final DateTime updatedAtUtc;
 }
 
 class LeagueTeamStatRow {
@@ -93,7 +117,9 @@ class LeagueOverviewState {
     required this.standings,
     required this.overallStandingsRows,
     required this.fixtureRows,
+    required this.goalLeaders,
     required this.newsItems,
+    required this.transferItems,
   });
 
   final String competitionId;
@@ -104,81 +130,89 @@ class LeagueOverviewState {
   final LeagueStandingsLeague? standings;
   final List<LeagueStandingsRow> overallStandingsRows;
   final List<HomeMatchView> fixtureRows;
+  final List<TopPlayerLeaderboardEntryView> goalLeaders;
   final List<LeagueNewsItem> newsItems;
+  final List<LeagueTransferItem> transferItems;
 }
 
-final leagueOverviewProvider =
-    FutureProvider.family<LeagueOverviewState, String>((
-      ref,
-      competitionId,
-    ) async {
-      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.catalog));
-      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.standings));
-      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.matches));
-      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
-      final services = ref.read(appServicesProvider);
-      final competition = await services.database.readCompetitionById(
-        competitionId,
-      );
-      final standings = await services.leagueStandingsSource
-          .readLeagueByCompetitionId(competitionId);
-      final fallbackStandingsRows = await services.database
-          .readStandingsTableView(competitionId);
-      final overallRows = _resolveOverallStandingsRows(
-        standings,
-        fallbackStandingsRows,
-      );
-      final fixtureRows = await services.database.readMatchesForCompetition(
-        competitionId,
-        limit: 240,
-      );
-      final goalLeaders = await services.database.readTopPlayersForCategory(
-        competitionId,
-        'goals',
-        limit: 3,
-      );
+final leagueOverviewProvider = FutureProvider.family<
+  LeagueOverviewState,
+  String
+>((ref, competitionId) async {
+  ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.catalog));
+  ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.standings));
+  ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.matches));
+  ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
+  final services = ref.read(appServicesProvider);
+  final competition = await services.database.readCompetitionById(
+    competitionId,
+  );
+  final standings = await services.leagueStandingsSource
+      .readLeagueByCompetitionId(competitionId);
+  final fallbackStandingsRows = await services.database.readStandingsTableView(
+    competitionId,
+  );
+  final overallRows = _resolveOverallStandingsRows(
+    standings,
+    fallbackStandingsRows,
+  );
+  final fixtureRows = await services.database.readMatchesForCompetition(
+    competitionId,
+    limit: 240,
+  );
+  final goalLeaders = await services.database.readTopPlayersForCategory(
+    competitionId,
+    'goals',
+    limit: 8,
+  );
+  final competitionPlayers = await services.database.readPlayersForCompetition(
+    competitionId,
+    limit: 420,
+  );
 
-      final competitionName =
-          competition?.name ?? standings?.displayName ?? 'League';
-      final country = competition?.country;
-      final visualTheme = LeagueThemeResolver.resolve(
-        competitionId: competitionId,
-        competitionName: competitionName,
-      );
+  final competitionName =
+      competition?.name ?? standings?.displayName ?? 'League';
+  final country = competition?.country;
+  final visualTheme = LeagueThemeResolver.resolve(
+    competitionId: competitionId,
+    competitionName: competitionName,
+  );
 
-      final seasonLabels = _deriveSeasonLabels(
-        fixtureRows,
-        explicitSeason: standings?.meta.season,
-      );
-      final newsItems = _buildLeagueNews(
-        competitionName: competitionName,
-        standingsRows: overallRows,
-        fixtures: fixtureRows,
-        goalLeaders: goalLeaders,
-      );
+  final seasonLabels = _deriveSeasonLabels(
+    fixtureRows,
+    explicitSeason: standings?.meta.season,
+  );
+  final transferItems = _buildTransferItems(competitionPlayers);
+  final newsItems = _buildLeagueNews(
+    competitionName: competitionName,
+    standingsRows: overallRows,
+    fixtures: fixtureRows,
+    goalLeaders: goalLeaders,
+  );
 
-      return LeagueOverviewState(
-        competitionId: competitionId,
-        competitionName: competitionName,
-        countryLabel: _countryLabel(country, competitionName),
-        availableSeasonLabels: seasonLabels,
-        visualTheme: visualTheme,
-        standings: standings,
-        overallStandingsRows: overallRows,
-        fixtureRows: fixtureRows,
-        newsItems: newsItems,
-      );
-    });
+  return LeagueOverviewState(
+    competitionId: competitionId,
+    competitionName: competitionName,
+    countryLabel: _countryLabel(country, competitionName),
+    availableSeasonLabels: seasonLabels,
+    visualTheme: visualTheme,
+    standings: standings,
+    overallStandingsRows: overallRows,
+    fixtureRows: fixtureRows,
+    goalLeaders: goalLeaders,
+    newsItems: newsItems,
+    transferItems: transferItems,
+  );
+});
 
-final leaguePlayerStatCategoriesProvider =
-    FutureProvider.family<List<TopStatCategoryView>, String>((
-      ref,
-      competitionId,
-    ) async {
-      ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
-      final services = ref.read(appServicesProvider);
-      return services.database.readTopStatCategories(competitionId);
-    });
+final leaguePlayerStatCategoriesProvider = FutureProvider.family<
+  List<TopStatCategoryView>,
+  String
+>((ref, competitionId) async {
+  ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
+  final services = ref.read(appServicesProvider);
+  return services.database.readTopStatCategories(competitionId);
+});
 
 @immutable
 class LeaguePlayerLeadersQuery {
@@ -381,6 +415,8 @@ List<LeagueNewsItem> _buildLeagueNews({
         source: 'Offline Desk',
         publishedAtUtc: now,
         isInsight: true,
+        imageTeamId: top.teamId,
+        imageTeamName: top.displayTeamName,
       ),
     );
   }
@@ -396,6 +432,9 @@ List<LeagueNewsItem> _buildLeagueNews({
         source: 'Stats Hub',
         publishedAtUtc: now.subtract(const Duration(hours: 2)),
         isInsight: true,
+        imagePlayerId: scorer.stat.playerId,
+        imageTeamId: scorer.stat.teamId,
+        imageTeamName: scorer.teamName,
       ),
     );
   }
@@ -417,6 +456,8 @@ List<LeagueNewsItem> _buildLeagueNews({
         publishedAtUtc: match.match.kickoffUtc,
         isInsight: false,
         matchId: match.match.id,
+        imageTeamId: match.match.homeTeamId,
+        imageTeamName: match.homeTeamName,
       ),
     );
   }
@@ -439,11 +480,32 @@ List<LeagueNewsItem> _buildLeagueNews({
         ),
         isInsight: false,
         matchId: match.match.id,
+        imageTeamId: match.match.homeTeamId,
+        imageTeamName: match.homeTeamName,
       ),
     );
   }
 
   items.sort((a, b) => b.publishedAtUtc.compareTo(a.publishedAtUtc));
+  return items;
+}
+
+List<LeagueTransferItem> _buildTransferItems(List<CompetitionPlayerView> rows) {
+  final mapped = <String, LeagueTransferItem>{};
+
+  for (final row in rows) {
+    mapped[row.player.id] = LeagueTransferItem(
+      playerId: row.player.id,
+      playerName: row.player.name,
+      teamId: row.teamId,
+      teamName: row.teamName ?? 'Unknown Team',
+      position: row.player.position,
+      updatedAtUtc: row.player.updatedAtUtc,
+    );
+  }
+
+  final items = mapped.values.toList(growable: false)
+    ..sort((a, b) => b.updatedAtUtc.compareTo(a.updatedAtUtc));
   return items;
 }
 
