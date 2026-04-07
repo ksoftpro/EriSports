@@ -9,6 +9,7 @@ import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
 import 'package:eri_sports/data/local_files/json_data_version_tracker.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
+import 'package:eri_sports/features/team/data/team_raw_source.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,6 +20,7 @@ class AppServices {
     required this.importCoordinator,
     required this.assetResolver,
     required this.leagueStandingsSource,
+    required this.teamRawSource,
     required this.daylysportSyncCoordinator,
     required this.logger,
   });
@@ -28,6 +30,7 @@ class AppServices {
   final ImportCoordinator importCoordinator;
   final LocalAssetResolver assetResolver;
   final LeagueStandingsSource leagueStandingsSource;
+  final TeamRawSource teamRawSource;
   final DaylysportSyncCoordinator daylysportSyncCoordinator;
   final AppLogger logger;
 
@@ -59,6 +62,10 @@ class AppServices {
       daylySportLocator: daylySportLocator,
       cacheStore: cacheStore,
     );
+    final teamRawSource = TeamRawSource(
+      daylySportLocator: daylySportLocator,
+      cacheStore: cacheStore,
+    );
     final discoveryService = DaylysportFileDiscoveryService(
       daylySportLocator: daylySportLocator,
       scanner: scanner,
@@ -76,6 +83,7 @@ class AppServices {
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
       leagueStandingsSource: leagueStandingsSource,
+      teamRawSource: teamRawSource,
       daylysportSyncCoordinator: daylysportSyncCoordinator,
       logger: logger,
     );
