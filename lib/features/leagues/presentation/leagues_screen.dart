@@ -94,7 +94,8 @@ class _LeaguesScreenState extends ConsumerState<LeaguesScreen> {
     List<CompetitionRow> leagues,
   ) {
     final grouped = {
-      for (final category in LeagueCategory.values) category: <CompetitionRow>[],
+      for (final category in LeagueCategory.values)
+        category: <CompetitionRow>[],
     };
 
     for (final league in leagues) {
@@ -138,12 +139,56 @@ class _LeagueTile extends StatelessWidget {
     return InkWell(
       onTap: () {
         if (virtualEntry) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'League added to list. Import data for this league to open details.',
-              ),
+          showModalBottomSheet<void>(
+            context: context,
+            backgroundColor: Colors.white,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
             ),
+            builder: (sheetContext) {
+              return SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: Theme.of(sheetContext).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'This competition is listed, but local league detail data is not imported yet. You can sync offline files now and reopen this league.',
+                        style: TextStyle(
+                          color: Color(0xFF5E6572),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                            child: const Text('Close'),
+                          ),
+                          const SizedBox(width: 10),
+                          FilledButton.icon(
+                            onPressed: () {
+                              Navigator.of(sheetContext).pop();
+                              context.push('/sync');
+                            },
+                            icon: const Icon(Icons.sync_rounded),
+                            label: const Text('Open Sync'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           );
           return;
         }

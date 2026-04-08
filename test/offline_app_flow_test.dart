@@ -532,8 +532,12 @@ class _SeededStartupController extends StartupController {
 }
 
 Future<void> _pumpForStability(WidgetTester tester) async {
-  for (var i = 0; i < 40; i++) {
-    await tester.pump(const Duration(milliseconds: 50));
+  await tester.pump();
+  for (var i = 0; i < 12; i++) {
+    await tester.pump(const Duration(milliseconds: 16));
+    if (tester.binding.transientCallbackCount == 0) {
+      break;
+    }
   }
 }
 

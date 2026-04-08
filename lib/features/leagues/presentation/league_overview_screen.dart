@@ -7,6 +7,7 @@ import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/leagues/presentation/league_overview_providers.dart';
+import 'package:eri_sports/features/leagues/presentation/league_theme_resolver.dart';
 import 'package:eri_sports/features/player_stats/presentation/player_stats_providers.dart';
 import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
 import 'package:eri_sports/shared/widgets/compact_standings_table.dart';
@@ -27,8 +28,6 @@ class LeagueOverviewScreen extends ConsumerStatefulWidget {
       _LeagueOverviewScreenState();
 }
 
-enum _LeagueStatsScope { players, teams }
-
 class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
   String _selectedStandingsModeKey = 'all';
   LeagueFixtureFilter _fixtureFilter = LeagueFixtureFilter.all;
@@ -36,7 +35,6 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
   LeagueTeamStatMetric _teamMetric = LeagueTeamStatMetric.points;
   String? _selectedSeason;
   String? _selectedPlayerStatType;
-  _LeagueStatsScope _statsScope = _LeagueStatsScope.players;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +43,7 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
     );
 
     return DefaultTabController(
-      length: 7,
+      length: 8,
       child: Scaffold(
         backgroundColor: const Color(0xFFF3F4F6),
         body: SafeArea(
@@ -65,6 +63,7 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
               final headerPref = ref.watch(
                 leagueHeaderPreferenceProvider(widget.competitionId),
               );
+              final visualTheme = state.visualTheme;
 
               return Align(
                 alignment: Alignment.topCenter,
@@ -80,6 +79,8 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
                           countryLabel: state.countryLabel,
                           seasonLabel: seasonLabel,
                           isFollowing: headerPref.isFollowing,
+                          notificationsOn: headerPref.notificationsOn,
+                          theme: visualTheme,
                           resolver: resolver,
                           onBack: () => context.pop(),
                           onSeasonTap:
@@ -98,9 +99,22 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
                                   ),
                                 );
                           },
+                          onNotifyTap: () {
+                            ref
+                                .read(
+                                  leagueHeaderPreferenceProvider(
+                                    widget.competitionId,
+                                  ).notifier,
+                                )
+                                .update(
+                                  (pref) => pref.copyWith(
+                                    notificationsOn: !pref.notificationsOn,
+                                  ),
+                                );
+                          },
                         ),
                         const SizedBox(height: 10),
-                        const _LeagueTabsBar(),
+                        _LeagueTabsBar(theme: visualTheme),
                         const SizedBox(height: 10),
                         Expanded(
                           child: Container(
@@ -140,7 +154,18 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
                                     });
                                   },
                                 ),
-                                _StatsTab(
+                                _NewsTab(
+                                  competitionId: state.competitionId,
+                                  newsItems: state.newsItems,
+                                  filter: _newsFilter,
+                                  resolver: resolver,
+                                  onFilterChanged: (filter) {
+                                    setState(() {
+                                      _newsFilter = filter;
+                                    });
+                                  },
+                                ),
+                                _PlayerStatsBody(
                                   competitionId: state.competitionId,
                                   selectedStatType: _selectedPlayerStatType,
                                   onSelectedStatType: (value) {
@@ -148,16 +173,13 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
                                       _selectedPlayerStatType = value;
                                     });
                                   },
-                                  statsScope: _statsScope,
-                                  onStatsScopeChanged: (scope) {
-                                    setState(() {
-                                      _statsScope = scope;
-                                    });
-                                  },
                                   resolver: resolver,
-                                  teamRows: state.overallStandingsRows,
-                                  teamMetric: _teamMetric,
-                                  onTeamMetricChanged: (metric) {
+                                ),
+                                _TeamStatsBody(
+                                  rows: state.overallStandingsRows,
+                                  metric: _teamMetric,
+                                  resolver: resolver,
+                                  onMetricChanged: (metric) {
                                     setState(() {
                                       _teamMetric = metric;
                                     });
@@ -174,17 +196,6 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
                                   onSelectSeason: (season) {
                                     setState(() {
                                       _selectedSeason = season;
-                                    });
-                                  },
-                                ),
-                                _NewsTab(
-                                  competitionId: state.competitionId,
-                                  newsItems: state.newsItems,
-                                  filter: _newsFilter,
-                                  resolver: resolver,
-                                  onFilterChanged: (filter) {
-                                    setState(() {
-                                      _newsFilter = filter;
                                     });
                                   },
                                 ),
@@ -314,8 +325,11 @@ class _LeagueHeaderCard extends StatelessWidget {
     required this.countryLabel,
     required this.seasonLabel,
     required this.isFollowing,
+    required this.notificationsOn,
+    required this.theme,
     required this.resolver,
     required this.onBack,
+    required this.onNotifyTap,
     required this.onSeasonTap,
     required this.onFollowTap,
   });
@@ -325,8 +339,11 @@ class _LeagueHeaderCard extends StatelessWidget {
   final String countryLabel;
   final String seasonLabel;
   final bool isFollowing;
+  final bool notificationsOn;
+  final LeagueVisualTheme theme;
   final LocalAssetResolver resolver;
   final VoidCallback onBack;
+  final VoidCallback onNotifyTap;
   final VoidCallback onSeasonTap;
   final VoidCallback onFollowTap;
 
@@ -336,9 +353,13 @@ class _LeagueHeaderCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: LinearGradient(
+          colors: [theme.headerTop, theme.headerBottom],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFDDE1E6)),
+        border: Border.all(color: theme.onHeader.withValues(alpha: 0.18)),
       ),
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
       child:
@@ -350,16 +371,29 @@ class _LeagueHeaderCard extends StatelessWidget {
                       _HeaderGhostButton(
                         icon: Icons.arrow_back_rounded,
                         onTap: onBack,
+                        iconColor: theme.onHeader,
+                        backgroundColor: theme.onHeader.withValues(alpha: 0.14),
+                        borderColor: theme.onHeader.withValues(alpha: 0.24),
+                      ),
+                      const SizedBox(width: 8),
+                      _NotificationButton(
+                        notificationsOn: notificationsOn,
+                        onTap: onNotifyTap,
+                        theme: theme,
                       ),
                       const Spacer(),
                       _HeaderSeasonButton(
                         seasonLabel: seasonLabel,
                         onTap: onSeasonTap,
+                        textColor: theme.onHeader,
+                        backgroundColor: theme.onHeader.withValues(alpha: 0.14),
+                        borderColor: theme.onHeader.withValues(alpha: 0.24),
                       ),
                       const SizedBox(width: 8),
                       _FollowButton(
                         isFollowing: isFollowing,
                         onTap: onFollowTap,
+                        textColor: theme.onHeader,
                       ),
                     ],
                   ),
@@ -369,6 +403,7 @@ class _LeagueHeaderCard extends StatelessWidget {
                       _LeagueLogo(
                         competitionId: competitionId,
                         competitionName: competitionName,
+                        theme: theme,
                         resolver: resolver,
                       ),
                       const SizedBox(width: 12),
@@ -376,6 +411,8 @@ class _LeagueHeaderCard extends StatelessWidget {
                         child: _LeagueNameBlock(
                           competitionName: competitionName,
                           countryLabel: countryLabel,
+                          titleColor: theme.onHeader,
+                          subtitleColor: theme.onHeaderMuted,
                         ),
                       ),
                     ],
@@ -387,11 +424,21 @@ class _LeagueHeaderCard extends StatelessWidget {
                   _HeaderGhostButton(
                     icon: Icons.arrow_back_rounded,
                     onTap: onBack,
+                    iconColor: theme.onHeader,
+                    backgroundColor: theme.onHeader.withValues(alpha: 0.14),
+                    borderColor: theme.onHeader.withValues(alpha: 0.24),
+                  ),
+                  const SizedBox(width: 8),
+                  _NotificationButton(
+                    notificationsOn: notificationsOn,
+                    onTap: onNotifyTap,
+                    theme: theme,
                   ),
                   const SizedBox(width: 12),
                   _LeagueLogo(
                     competitionId: competitionId,
                     competitionName: competitionName,
+                    theme: theme,
                     resolver: resolver,
                   ),
                   const SizedBox(width: 12),
@@ -399,14 +446,23 @@ class _LeagueHeaderCard extends StatelessWidget {
                     child: _LeagueNameBlock(
                       competitionName: competitionName,
                       countryLabel: countryLabel,
+                      titleColor: theme.onHeader,
+                      subtitleColor: theme.onHeaderMuted,
                     ),
                   ),
                   _HeaderSeasonButton(
                     seasonLabel: seasonLabel,
                     onTap: onSeasonTap,
+                    textColor: theme.onHeader,
+                    backgroundColor: theme.onHeader.withValues(alpha: 0.14),
+                    borderColor: theme.onHeader.withValues(alpha: 0.24),
                   ),
                   const SizedBox(width: 10),
-                  _FollowButton(isFollowing: isFollowing, onTap: onFollowTap),
+                  _FollowButton(
+                    isFollowing: isFollowing,
+                    onTap: onFollowTap,
+                    textColor: theme.onHeader,
+                  ),
                 ],
               ),
     );
@@ -417,11 +473,13 @@ class _LeagueLogo extends StatelessWidget {
   const _LeagueLogo({
     required this.competitionId,
     required this.competitionName,
+    required this.theme,
     required this.resolver,
   });
 
   final String competitionId;
   final String competitionName;
+  final LeagueVisualTheme theme;
   final LocalAssetResolver resolver;
 
   @override
@@ -431,9 +489,9 @@ class _LeagueLogo extends StatelessWidget {
       height: 58,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FB),
+        color: theme.onHeader.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE1E5EA)),
+        border: Border.all(color: theme.onHeader.withValues(alpha: 0.28)),
       ),
       child: EntityBadge(
         entityId: competitionId,
@@ -451,10 +509,14 @@ class _LeagueNameBlock extends StatelessWidget {
   const _LeagueNameBlock({
     required this.competitionName,
     required this.countryLabel,
+    required this.titleColor,
+    required this.subtitleColor,
   });
 
   final String competitionName;
   final String countryLabel;
+  final Color titleColor;
+  final Color subtitleColor;
 
   @override
   Widget build(BuildContext context) {
@@ -465,10 +527,10 @@ class _LeagueNameBlock extends StatelessWidget {
           competitionName,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 33,
+          style: TextStyle(
+            fontSize: 31,
             height: 1.05,
-            color: Color(0xFF121721),
+            color: titleColor,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.8,
           ),
@@ -476,9 +538,9 @@ class _LeagueNameBlock extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           countryLabel,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 17,
-            color: Color(0xFF5E6572),
+            color: subtitleColor,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -488,10 +550,19 @@ class _LeagueNameBlock extends StatelessWidget {
 }
 
 class _HeaderGhostButton extends StatelessWidget {
-  const _HeaderGhostButton({required this.icon, required this.onTap});
+  const _HeaderGhostButton({
+    required this.icon,
+    required this.onTap,
+    required this.iconColor,
+    required this.backgroundColor,
+    required this.borderColor,
+  });
 
   final IconData icon;
   final VoidCallback onTap;
+  final Color iconColor;
+  final Color backgroundColor;
+  final Color borderColor;
 
   @override
   Widget build(BuildContext context) {
@@ -503,21 +574,30 @@ class _HeaderGhostButton extends StatelessWidget {
         height: 38,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: const Color(0xFFF5F6F9),
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: const Color(0xFFDDE2E8)),
+          border: Border.all(color: borderColor),
         ),
-        child: Icon(icon, size: 20, color: const Color(0xFF202634)),
+        child: Icon(icon, size: 20, color: iconColor),
       ),
     );
   }
 }
 
 class _HeaderSeasonButton extends StatelessWidget {
-  const _HeaderSeasonButton({required this.seasonLabel, required this.onTap});
+  const _HeaderSeasonButton({
+    required this.seasonLabel,
+    required this.onTap,
+    required this.textColor,
+    required this.backgroundColor,
+    required this.borderColor,
+  });
 
   final String seasonLabel;
   final VoidCallback onTap;
+  final Color textColor;
+  final Color backgroundColor;
+  final Color borderColor;
 
   @override
   Widget build(BuildContext context) {
@@ -527,27 +607,23 @@ class _HeaderSeasonButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8F9FB),
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: const Color(0xFFDCE1E7)),
+          border: Border.all(color: borderColor),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               seasonLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF1A2130),
+                color: textColor,
               ),
             ),
             const SizedBox(width: 2),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 18,
-              color: Color(0xFF2A3242),
-            ),
+            Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: textColor),
           ],
         ),
       ),
@@ -556,10 +632,15 @@ class _HeaderSeasonButton extends StatelessWidget {
 }
 
 class _FollowButton extends StatelessWidget {
-  const _FollowButton({required this.isFollowing, required this.onTap});
+  const _FollowButton({
+    required this.isFollowing,
+    required this.onTap,
+    required this.textColor,
+  });
 
   final bool isFollowing;
   final VoidCallback onTap;
+  final Color textColor;
 
   @override
   Widget build(BuildContext context) {
@@ -570,13 +651,16 @@ class _FollowButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color:
-              isFollowing ? const Color(0xFF2F3440) : const Color(0xFF191C22),
+              isFollowing
+                  ? Colors.black.withValues(alpha: 0.22)
+                  : Colors.black.withValues(alpha: 0.34),
           borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: textColor.withValues(alpha: 0.25)),
         ),
         child: Text(
           isFollowing ? 'Following' : 'Follow',
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: textColor,
             fontWeight: FontWeight.w700,
             fontSize: 14,
           ),
@@ -586,35 +670,64 @@ class _FollowButton extends StatelessWidget {
   }
 }
 
+class _NotificationButton extends StatelessWidget {
+  const _NotificationButton({
+    required this.notificationsOn,
+    required this.onTap,
+    required this.theme,
+  });
+
+  final bool notificationsOn;
+  final VoidCallback onTap;
+  final LeagueVisualTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return _HeaderGhostButton(
+      icon:
+          notificationsOn
+              ? Icons.notifications_active_rounded
+              : Icons.notifications_none_rounded,
+      onTap: onTap,
+      iconColor: theme.onHeader,
+      backgroundColor: theme.onHeader.withValues(alpha: 0.14),
+      borderColor: theme.onHeader.withValues(alpha: 0.24),
+    );
+  }
+}
+
 class _LeagueTabsBar extends StatelessWidget {
-  const _LeagueTabsBar();
+  const _LeagueTabsBar({required this.theme});
+
+  final LeagueVisualTheme theme;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.tabBackground,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFDDE1E6)),
+        border: Border.all(color: theme.onHeader.withValues(alpha: 0.2)),
       ),
-      child: const TabBar(
+      child: TabBar(
         isScrollable: true,
-        labelColor: Color(0xFF171D28),
-        unselectedLabelColor: Color(0xFF6A7280),
-        indicatorColor: Color(0xFF141B26),
+        labelColor: theme.onHeader,
+        unselectedLabelColor: theme.onHeaderMuted,
+        indicatorColor: theme.onHeader,
         indicatorWeight: 2.2,
         indicatorSize: TabBarIndicatorSize.label,
         dividerColor: Color(0x00000000),
         labelPadding: EdgeInsets.only(left: 8, right: 16),
         tabAlignment: TabAlignment.start,
-        tabs: [
+        tabs: const [
           Tab(text: 'Overview'),
           Tab(text: 'Table'),
           Tab(text: 'Fixtures'),
-          Tab(text: 'Stats'),
+          Tab(text: 'News'),
+          Tab(text: 'Player stats'),
+          Tab(text: 'Team stats'),
           Tab(text: 'Transfers'),
           Tab(text: 'Seasons'),
-          Tab(text: 'News'),
         ],
       ),
     );
@@ -1864,64 +1977,6 @@ class _FixtureMatchEntry extends _FixtureEntry {
   final HomeMatchView fixture;
 }
 
-class _StatsTab extends ConsumerWidget {
-  const _StatsTab({
-    required this.competitionId,
-    required this.selectedStatType,
-    required this.onSelectedStatType,
-    required this.statsScope,
-    required this.onStatsScopeChanged,
-    required this.resolver,
-    required this.teamRows,
-    required this.teamMetric,
-    required this.onTeamMetricChanged,
-  });
-
-  final String competitionId;
-  final String? selectedStatType;
-  final ValueChanged<String> onSelectedStatType;
-  final _LeagueStatsScope statsScope;
-  final ValueChanged<_LeagueStatsScope> onStatsScopeChanged;
-  final LocalAssetResolver resolver;
-  final List<LeagueStandingsRow> teamRows;
-  final LeagueTeamStatMetric teamMetric;
-  final ValueChanged<LeagueTeamStatMetric> onTeamMetricChanged;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          child: _SegmentedSwitcher(
-            labels: const ['Players', 'Teams'],
-            selectedIndex: statsScope.index,
-            onSelected: (index) {
-              onStatsScopeChanged(_LeagueStatsScope.values[index]);
-            },
-          ),
-        ),
-        Expanded(
-          child:
-              statsScope == _LeagueStatsScope.players
-                  ? _PlayerStatsBody(
-                    competitionId: competitionId,
-                    selectedStatType: selectedStatType,
-                    onSelectedStatType: onSelectedStatType,
-                    resolver: resolver,
-                  )
-                  : _TeamStatsBody(
-                    rows: teamRows,
-                    metric: teamMetric,
-                    resolver: resolver,
-                    onMetricChanged: onTeamMetricChanged,
-                  ),
-        ),
-      ],
-    );
-  }
-}
-
 class _PlayerStatsBody extends ConsumerWidget {
   const _PlayerStatsBody({
     required this.competitionId,
@@ -2389,128 +2444,139 @@ class _TransferDataRow extends StatelessWidget {
       'dd MMM yyyy',
     ).format(item.updatedAtUtc.toLocal());
 
-    return Container(
-      height: 48,
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 290,
-            child: Row(
-              children: [
-                EntityBadge(
-                  entityId: item.playerId,
-                  entityName: item.playerName,
-                  type: SportsAssetType.players,
-                  resolver: resolver,
-                  size: 30,
+    return InkWell(
+      onTap: () {
+        if (item.playerId.trim().isNotEmpty) {
+          context.push('/player/${item.playerId}');
+          return;
+        }
+        if (item.teamId != null && item.teamId!.trim().isNotEmpty) {
+          context.push('/team/${item.teamId}');
+        }
+      },
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 290,
+              child: Row(
+                children: [
+                  EntityBadge(
+                    entityId: item.playerId,
+                    entityName: item.playerName,
+                    type: SportsAssetType.players,
+                    resolver: resolver,
+                    size: 30,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      item.playerName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF1A2230),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(
+              width: 96,
+              child: Text(
+                '--',
+                style: TextStyle(
+                  color: Color(0xFF798392),
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
+              ),
+            ),
+            SizedBox(
+              width: 214,
+              child: Row(
+                children: [
+                  TeamBadge(
+                    teamId: item.teamId,
+                    teamName: item.teamName,
+                    resolver: resolver,
+                    source: 'league.transfers',
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      item.teamName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF273040),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 118,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2F7),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                   child: Text(
-                    item.playerName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    item.position ?? 'N/A',
                     style: const TextStyle(
-                      color: Color(0xFF1A2230),
+                      color: Color(0xFF4B5566),
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(
-            width: 96,
-            child: Text(
-              '--',
-              style: TextStyle(
-                color: Color(0xFF798392),
-                fontWeight: FontWeight.w600,
               ),
             ),
-          ),
-          SizedBox(
-            width: 214,
-            child: Row(
-              children: [
-                TeamBadge(
-                  teamId: item.teamId,
-                  teamName: item.teamName,
-                  resolver: resolver,
-                  source: 'league.transfers',
-                  size: 18,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    item.teamName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF273040),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(
-            width: 118,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEEF2F7),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  item.position ?? 'N/A',
-                  style: const TextStyle(
-                    color: Color(0xFF4B5566),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
+            const SizedBox(
+              width: 130,
+              child: Text(
+                '--',
+                style: TextStyle(
+                  color: Color(0xFF798392),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-          ),
-          const SizedBox(
-            width: 130,
-            child: Text(
-              '--',
-              style: TextStyle(
-                color: Color(0xFF798392),
-                fontWeight: FontWeight.w600,
+            const SizedBox(
+              width: 142,
+              child: Text(
+                '--',
+                style: TextStyle(
+                  color: Color(0xFF798392),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-          const SizedBox(
-            width: 142,
-            child: Text(
-              '--',
-              style: TextStyle(
-                color: Color(0xFF798392),
-                fontWeight: FontWeight.w600,
+            SizedBox(
+              width: 116,
+              child: Text(
+                dateLabel,
+                style: const TextStyle(
+                  color: Color(0xFF273040),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-          SizedBox(
-            width: 116,
-            child: Text(
-              dateLabel,
-              style: const TextStyle(
-                color: Color(0xFF273040),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2788,11 +2854,7 @@ class _FeaturedNewsCard extends StatelessWidget {
     ).format(item.publishedAtUtc.toLocal());
 
     return InkWell(
-      onTap: () {
-        if (item.matchId != null) {
-          context.openMatchDetail(item.matchId!);
-        }
-      },
+      onTap: () => _openNewsDestination(context, item),
       borderRadius: BorderRadius.circular(14),
       child: Ink(
         decoration: BoxDecoration(
@@ -2873,11 +2935,7 @@ class _SideNewsTile extends StatelessWidget {
     ).format(item.publishedAtUtc.toLocal());
 
     return InkWell(
-      onTap: () {
-        if (item.matchId != null) {
-          context.openMatchDetail(item.matchId!);
-        }
-      },
+      onTap: () => _openNewsDestination(context, item),
       borderRadius: BorderRadius.circular(12),
       child: Ink(
         decoration: BoxDecoration(
@@ -3030,63 +3088,110 @@ class _NewsImage extends StatelessWidget {
   }
 }
 
-class _SegmentedSwitcher extends StatelessWidget {
-  const _SegmentedSwitcher({
-    required this.labels,
-    required this.selectedIndex,
-    required this.onSelected,
-  });
+void _openNewsDestination(BuildContext context, LeagueNewsItem item) {
+  if (item.matchId != null) {
+    context.openMatchDetail(item.matchId!);
+    return;
+  }
 
-  final List<String> labels;
-  final int selectedIndex;
-  final ValueChanged<int> onSelected;
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+    ),
+    builder: (sheetContext) {
+      final published = DateFormat(
+        'EEE, dd MMM yyyy • HH:mm',
+      ).format(item.publishedAtUtc.toLocal());
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF2F4F8),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E7EE)),
-      ),
-      child: Row(
-        children: [
-          for (var i = 0; i < labels.length; i++)
-            Expanded(
-              child: InkWell(
-                onTap: () => onSelected(i),
-                borderRadius: BorderRadius.circular(9),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color:
-                        selectedIndex == i
-                            ? Colors.white
-                            : const Color(0x00000000),
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    labels[i],
-                    style: TextStyle(
-                      color:
-                          selectedIndex == i
-                              ? const Color(0xFF1A2230)
-                              : const Color(0xFF6B7381),
-                      fontWeight:
-                          selectedIndex == i
-                              ? FontWeight.w800
-                              : FontWeight.w600,
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.source,
+                      style: const TextStyle(
+                        color: Color(0xFF5F6877),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              Text(
+                item.title,
+                style: const TextStyle(
+                  color: Color(0xFF151C28),
+                  fontSize: 22,
+                  height: 1.15,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-            ),
-        ],
-      ),
-    );
-  }
+              const SizedBox(height: 10),
+              Text(
+                item.excerpt,
+                style: const TextStyle(
+                  color: Color(0xFF4B5566),
+                  fontSize: 14,
+                  height: 1.35,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                published,
+                style: const TextStyle(
+                  color: Color(0xFF6B7381),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (item.imageTeamId != null)
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop();
+                        context.push('/team/${item.imageTeamId}');
+                      },
+                      icon: const Icon(Icons.shield_rounded, size: 16),
+                      label: Text(item.imageTeamName ?? 'Open team'),
+                    ),
+                  if (item.imagePlayerId != null)
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop();
+                        context.push('/player/${item.imagePlayerId}');
+                      },
+                      icon: const Icon(Icons.person_rounded, size: 16),
+                      label: const Text('Open player'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _FilterChipBar extends StatelessWidget {

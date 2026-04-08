@@ -284,51 +284,6 @@ class LocalAssetResolver {
         _localFilesByType[SportsAssetType.teams] ?? const <String>[];
 
     for (final candidateId in idCandidates) {
-      final bundledPath = _bundledTeamBadgePathById[candidateId];
-      if (bundledPath != null) {
-        return _finishTeamBadgeResolution(
-          cacheKey: cacheKey,
-          source: source,
-          teamId: rawId,
-          teamName: teamName,
-          resolved: ResolvedImageRef.asset(bundledPath),
-          strategy: 'bundled-manifest-id',
-          usedNameFallback: false,
-        );
-      }
-    }
-
-    final bundledById = _bestTeamPathById(
-      _bundledTeamPathsById,
-      idCandidates,
-      nameVariants,
-    );
-    if (bundledById != null) {
-      return _finishTeamBadgeResolution(
-        cacheKey: cacheKey,
-        source: source,
-        teamId: rawId,
-        teamName: teamName,
-        resolved: ResolvedImageRef.asset(bundledById),
-        strategy: 'bundled-indexed-id',
-        usedNameFallback: false,
-      );
-    }
-
-    final bundledByName = _bestTeamPathByName(bundledTeamAssets, nameVariants);
-    if (bundledByName != null) {
-      return _finishTeamBadgeResolution(
-        cacheKey: cacheKey,
-        source: source,
-        teamId: rawId,
-        teamName: teamName,
-        resolved: ResolvedImageRef.asset(bundledByName),
-        strategy: 'bundled-name-fallback',
-        usedNameFallback: true,
-      );
-    }
-
-    for (final candidateId in idCandidates) {
       final manifestPath = _teamBadgePathById[candidateId];
       if (manifestPath != null && await File(manifestPath).exists()) {
         return _finishTeamBadgeResolution(
@@ -369,6 +324,51 @@ class LocalAssetResolver {
         teamName: teamName,
         resolved: ResolvedImageRef.file(localByName),
         strategy: 'local-name-fallback',
+        usedNameFallback: true,
+      );
+    }
+
+    for (final candidateId in idCandidates) {
+      final bundledPath = _bundledTeamBadgePathById[candidateId];
+      if (bundledPath != null) {
+        return _finishTeamBadgeResolution(
+          cacheKey: cacheKey,
+          source: source,
+          teamId: rawId,
+          teamName: teamName,
+          resolved: ResolvedImageRef.asset(bundledPath),
+          strategy: 'bundled-manifest-id',
+          usedNameFallback: false,
+        );
+      }
+    }
+
+    final bundledById = _bestTeamPathById(
+      _bundledTeamPathsById,
+      idCandidates,
+      nameVariants,
+    );
+    if (bundledById != null) {
+      return _finishTeamBadgeResolution(
+        cacheKey: cacheKey,
+        source: source,
+        teamId: rawId,
+        teamName: teamName,
+        resolved: ResolvedImageRef.asset(bundledById),
+        strategy: 'bundled-indexed-id',
+        usedNameFallback: false,
+      );
+    }
+
+    final bundledByName = _bestTeamPathByName(bundledTeamAssets, nameVariants);
+    if (bundledByName != null) {
+      return _finishTeamBadgeResolution(
+        cacheKey: cacheKey,
+        source: source,
+        teamId: rawId,
+        teamName: teamName,
+        resolved: ResolvedImageRef.asset(bundledByName),
+        strategy: 'bundled-name-fallback',
         usedNameFallback: true,
       );
     }
