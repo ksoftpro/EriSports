@@ -3,6 +3,7 @@ import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:eri_sports/features/bookmarks/presentation/bookmarks_providers.dart';
+import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class HomeFeedState {
@@ -29,7 +30,7 @@ final homeFeedProvider = FutureProvider<HomeFeedState>((ref) async {
   final services = ref.read(appServicesProvider);
   final following = ref.watch(followingSelectionProvider);
   final now = DateTime.now().toUtc();
-  final matches = await services.database.readHomeFeedMatches(nowUtc: now);
+  final matches = await services.database.readHomeFeedMatchesAll();
   final competitionMap = await services.database.readCompetitionMapByIds(
     matches
         .map((item) => item.match.competitionId)
@@ -43,13 +44,14 @@ final homeFeedProvider = FutureProvider<HomeFeedState>((ref) async {
   final followed = <HomeMatchView>[];
 
   for (final item in matches) {
-    final status = item.match.status.toLowerCase();
-    if (_isLiveStatus(status)) {
+    final lifecycle = MatchDisplayFormatter.lifecycle(
+      status: item.match.status,
+      kickoffUtc: item.match.kickoffUtc,
+      nowUtc: now,
+    );
+    if (lifecycle == MatchLifecycle.live) {
       live.add(item);
-      continue;
-    }
-
-    if (item.match.kickoffUtc.isAfter(now)) {
+    } else if (lifecycle == MatchLifecycle.upcoming) {
       upcoming.add(item);
     } else {
       recent.add(item);
@@ -76,8 +78,3 @@ final homeFeedProvider = FutureProvider<HomeFeedState>((ref) async {
     },
   );
 });
-
-bool _isLiveStatus(String status) {
-  const liveTokens = {'live', 'inplay', 'in_play', 'playing', 'ht'};
-  return liveTokens.contains(status);
-}

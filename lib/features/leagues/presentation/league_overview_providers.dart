@@ -4,6 +4,7 @@ import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/leagues/presentation/league_theme_resolver.dart';
+import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -410,6 +411,14 @@ List<LeagueNewsItem> _buildLeagueNews({
 }) {
   final items = <LeagueNewsItem>[];
   final now = DateTime.now().toUtc();
+  final lifecycles = <String, MatchLifecycle>{
+    for (final fixture in fixtures)
+      fixture.match.id: MatchDisplayFormatter.lifecycle(
+        status: fixture.match.status,
+        kickoffUtc: fixture.match.kickoffUtc,
+        nowUtc: now,
+      ),
+  };
 
   if (standingsRows.isNotEmpty) {
     final top = standingsRows.first;
@@ -448,16 +457,27 @@ List<LeagueNewsItem> _buildLeagueNews({
 
   final recent =
       fixtures
-          .where((fixture) => fixture.match.kickoffUtc.isBefore(now))
+          .where(
+            (fixture) =>
+                lifecycles[fixture.match.id] == MatchLifecycle.finished,
+          )
           .toList()
         ..sort((a, b) => b.match.kickoffUtc.compareTo(a.match.kickoffUtc));
 
   for (final match in recent.take(4)) {
+    final score = MatchDisplayFormatter.scoreDisplay(
+      status: match.match.status,
+      kickoffUtc: match.match.kickoffUtc,
+      homeScore: match.match.homeScore,
+      awayScore: match.match.awayScore,
+      nowUtc: now,
+    );
+
     items.add(
       LeagueNewsItem(
         id: 'result-${match.match.id}',
         title:
-            '${match.homeTeamName} ${match.match.homeScore}-${match.match.awayScore} ${match.awayTeamName}',
+            '${match.homeTeamName} ${score.centerLabel} ${match.awayTeamName}',
         excerpt: 'Full-time result in the $competitionName.',
         source: 'Match Centre',
         publishedAtUtc: match.match.kickoffUtc,
@@ -471,7 +491,10 @@ List<LeagueNewsItem> _buildLeagueNews({
 
   final upcoming =
       fixtures
-          .where((fixture) => fixture.match.kickoffUtc.isAfter(now))
+          .where(
+            (fixture) =>
+                lifecycles[fixture.match.id] == MatchLifecycle.upcoming,
+          )
           .toList()
         ..sort((a, b) => a.match.kickoffUtc.compareTo(b.match.kickoffUtc));
 

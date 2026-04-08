@@ -2,6 +2,7 @@ import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/app/navigation/detail_navigation.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/features/team/presentation/team_providers.dart';
+import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
 import 'package:eri_sports/shared/widgets/compact_standings_table.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:eri_sports/shared/widgets/team_badge.dart';
@@ -957,42 +958,86 @@ class _FixturesTab extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                   child: Column(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              fixture.roundLabel ?? fixture.status,
-                              style: const TextStyle(
-                                color: Color(0xFF6A7382),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
+                      Builder(
+                        builder: (context) {
+                          final score = MatchDisplayFormatter.scoreDisplay(
+                            status: fixture.status,
+                            kickoffUtc: fixture.kickoffUtc,
+                            homeScore: fixture.homeScore,
+                            awayScore: fixture.awayScore,
+                          );
+
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        fixture.roundLabel ?? fixture.status,
+                                        style: const TextStyle(
+                                          color: Color(0xFF6A7382),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      DateFormat(
+                                        'HH:mm',
+                                      ).format(fixture.kickoffUtc.toLocal()),
+                                      style: const TextStyle(
+                                        color: Color(0xFF1A2230),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ),
-                          Text(
-                            DateFormat(
-                              'HH:mm',
-                            ).format(fixture.kickoffUtc.toLocal()),
-                            style: const TextStyle(
-                              color: Color(0xFF1A2230),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 44,
+                                child: Text(
+                                  score.centerLabel,
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(
+                                    color: Color(0xFF121925),
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       const SizedBox(height: 8),
-                      _FixtureTeamLine(
-                        teamId: fixture.homeTeamId,
-                        teamName: fixture.homeTeamName,
-                        score: fixture.homeScore,
-                        resolver: resolver,
-                      ),
-                      const SizedBox(height: 6),
-                      _FixtureTeamLine(
-                        teamId: fixture.awayTeamId,
-                        teamName: fixture.awayTeamName,
-                        score: fixture.awayScore,
-                        resolver: resolver,
+                      Builder(
+                        builder: (context) {
+                          final score = MatchDisplayFormatter.scoreDisplay(
+                            status: fixture.status,
+                            kickoffUtc: fixture.kickoffUtc,
+                            homeScore: fixture.homeScore,
+                            awayScore: fixture.awayScore,
+                          );
+
+                          return Column(
+                            children: [
+                              _FixtureTeamLine(
+                                teamId: fixture.homeTeamId,
+                                teamName: fixture.homeTeamName,
+                                score: score.homeScoreLabel,
+                                resolver: resolver,
+                              ),
+                              const SizedBox(height: 6),
+                              _FixtureTeamLine(
+                                teamId: fixture.awayTeamId,
+                                teamName: fixture.awayTeamName,
+                                score: score.awayScoreLabel,
+                                resolver: resolver,
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -1015,7 +1060,7 @@ class _FixtureTeamLine extends StatelessWidget {
 
   final String? teamId;
   final String teamName;
-  final int? score;
+  final String? score;
   final dynamic resolver;
 
   @override
@@ -1041,14 +1086,15 @@ class _FixtureTeamLine extends StatelessWidget {
             ),
           ),
         ),
-        Text(
-          score?.toString() ?? '-',
-          style: const TextStyle(
-            color: Color(0xFF121925),
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
+        if (score != null)
+          Text(
+            score!,
+            style: const TextStyle(
+              color: Color(0xFF121925),
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
       ],
     );
   }
@@ -1505,8 +1551,12 @@ class _FixtureSummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final homeScore = fixture.homeScore?.toString() ?? '-';
-    final awayScore = fixture.awayScore?.toString() ?? '-';
+    final score = MatchDisplayFormatter.scoreDisplay(
+      status: fixture.status,
+      kickoffUtc: fixture.kickoffUtc,
+      homeScore: fixture.homeScore,
+      awayScore: fixture.awayScore,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1549,7 +1599,7 @@ class _FixtureSummaryRow extends StatelessWidget {
               ),
             ),
             Text(
-              '$homeScore - $awayScore',
+              score.centerLabel,
               style: const TextStyle(
                 color: Color(0xFF121925),
                 fontWeight: FontWeight.w800,

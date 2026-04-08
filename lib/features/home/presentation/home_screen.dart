@@ -3,6 +3,7 @@ import 'package:eri_sports/app/navigation/detail_navigation.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/home/presentation/home_providers.dart';
+import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
 import 'package:eri_sports/shared/formatters/team_display_name_formatter.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:eri_sports/shared/widgets/team_badge.dart';
@@ -27,17 +28,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final homeFeed = ref.watch(homeFeedProvider);
-    final days = _windowDays();
-    final effectiveDay =
-        days.any((item) => _isSameDay(item, _selectedDay))
-            ? _selectedDay
-            : _dayKey(DateTime.now());
 
     return SafeArea(
       child: homeFeed.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, __) => const Center(child: Text('Failed to load matches.')),
         data: (state) {
+          final days = _allMatchDays(state.all);
+          final fallbackDay = _closestMatchDay(days);
+          final effectiveDay =
+              days.any((item) => _isSameDay(item, _selectedDay))
+                  ? _selectedDay
+                  : fallbackDay;
+
           final resolver = ref.read(appServicesProvider).assetResolver;
           final dayMatches = state.all
               .where(
@@ -64,7 +67,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               _TopBar(
                 onOpenClock: () {
                   setState(() {
-                    _selectedDay = _dayKey(DateTime.now());
+                    _selectedDay = days.firstWhere(
+                      (day) => _isSameDay(day, _dayKey(DateTime.now())),
+                      orElse: () => _closestMatchDay(days),
+                    );
                   });
                 },
                 onOpenCalendar: () => context.push('/leagues'),
@@ -205,13 +211,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  List<DateTime> _windowDays() {
-    final now = _dayKey(DateTime.now());
-    return List<DateTime>.generate(
-      5,
-      (index) => now.add(Duration(days: index - 2)),
-      growable: false,
-    );
+  List<DateTime> _allMatchDays(List<HomeMatchView> matches) {
+    final unique = <DateTime>{
+      for (final item in matches) _dayKey(item.match.kickoffUtc.toLocal()),
+    };
+
+    final output = unique.toList(growable: false)
+      ..sort((a, b) => a.compareTo(b));
+    return output;
+  }
+
+  DateTime _closestMatchDay(List<DateTime> days) {
+    if (days.isEmpty) {
+      return _dayKey(DateTime.now());
+    }
+
+    final today = _dayKey(DateTime.now());
+    for (final day in days) {
+      if (!day.isBefore(today)) {
+        return day;
+      }
+    }
+
+    return days.last;
   }
 
   static DateTime _dayKey(DateTime value) {
@@ -319,58 +341,67 @@ class _DayTabStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (days.isEmpty) {
+      return const SizedBox(height: 46);
+    }
+
     final inactiveColor = Theme.of(
       context,
     ).textTheme.bodySmall?.color?.withValues(alpha: 0.66);
 
     return Container(
       height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(
-        children: days
-            .map(
-              (day) => Expanded(
-                child: InkWell(
-                  onTap: () => onSelect(day),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _labelForDay(day),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.titleMedium?.copyWith(
-                          color:
-                              _isSameDay(day, selectedDay)
-                                  ? Theme.of(context).colorScheme.onSurface
-                                  : inactiveColor,
-                          fontWeight:
-                              _isSameDay(day, selectedDay)
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 140),
-                        height: 2.4,
-                        width: 54,
-                        decoration: BoxDecoration(
-                          color:
-                              _isSameDay(day, selectedDay)
-                                  ? Theme.of(context).colorScheme.onSurface
-                                  : Colors.transparent,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                    ],
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        itemCount: days.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 2),
+        itemBuilder: (context, index) {
+          final day = days[index];
+          final isSelected = _isSameDay(day, selectedDay);
+          return InkWell(
+            onTap: () => onSelect(day),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 78),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _labelForDay(day),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color:
+                          isSelected
+                              ? Theme.of(context).colorScheme.onSurface
+                              : inactiveColor,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 5),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    height: 2.2,
+                    width: 52,
+                    decoration: BoxDecoration(
+                      color:
+                          isSelected
+                              ? Theme.of(context).colorScheme.onSurface
+                              : Colors.transparent,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ],
               ),
-            )
-            .toList(growable: false),
+            ),
+          );
+        },
       ),
     );
   }
@@ -504,7 +535,12 @@ class _FixtureRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scoreText = '${fixture.match.homeScore} - ${fixture.match.awayScore}';
+    final score = MatchDisplayFormatter.scoreDisplay(
+      status: fixture.match.status,
+      kickoffUtc: fixture.match.kickoffUtc,
+      homeScore: fixture.match.homeScore,
+      awayScore: fixture.match.awayScore,
+    );
 
     return InkWell(
       onTap: () => context.openMatchDetail(fixture.match.id),
@@ -533,7 +569,7 @@ class _FixtureRow extends StatelessWidget {
                   SizedBox(
                     width: 64,
                     child: Text(
-                      scoreText,
+                      score.centerLabel,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
@@ -559,21 +595,19 @@ class _FixtureRow extends StatelessWidget {
 
   String _statusLabel(String status, DateTime kickoffUtc) {
     final lower = status.toLowerCase();
-    if (lower == 'live' ||
-        lower == 'inplay' ||
-        lower == 'in_play' ||
-        lower == 'playing') {
-      return 'LIVE';
-    }
+    final lifecycle = MatchDisplayFormatter.lifecycle(
+      status: status,
+      kickoffUtc: kickoffUtc,
+    );
     if (lower.contains('pen')) {
       return 'Pen';
     }
-
-    final isFuture = kickoffUtc.isAfter(DateTime.now().toUtc());
-    if (isFuture) {
+    if (lifecycle == MatchLifecycle.live) {
+      return 'LIVE';
+    }
+    if (lifecycle == MatchLifecycle.upcoming) {
       return DateFormat('HH:mm').format(kickoffUtc.toLocal());
     }
-
     return 'FT';
   }
 }

@@ -1,6 +1,7 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/features/match_detail/presentation/match_detail_providers.dart';
+import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +31,12 @@ class MatchDetailScreen extends ConsumerWidget {
           final kickoff = DateFormat(
             'EEE, dd MMM • HH:mm',
           ).format(detail.match.kickoffUtc.toLocal());
+          final score = MatchDisplayFormatter.scoreDisplay(
+            status: detail.match.status,
+            kickoffUtc: detail.match.kickoffUtc,
+            homeScore: detail.match.homeScore,
+            awayScore: detail.match.awayScore,
+          );
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
@@ -68,7 +75,7 @@ class MatchDetailScreen extends ConsumerWidget {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Text(
-                      '${detail.match.homeScore} - ${detail.match.awayScore}',
+                      score.centerLabel,
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                   ),

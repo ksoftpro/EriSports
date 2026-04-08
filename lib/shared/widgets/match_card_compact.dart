@@ -1,4 +1,5 @@
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
+import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
 import 'package:eri_sports/shared/formatters/team_display_name_formatter.dart';
 import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ class MatchCardCompact extends StatelessWidget {
     this.assetResolver,
     this.badgeSource = 'shared.match-card',
     this.onTap,
+    this.kickoffUtc,
     required this.homeScore,
     required this.awayScore,
     super.key,
@@ -28,12 +30,19 @@ class MatchCardCompact extends StatelessWidget {
   final LocalAssetResolver? assetResolver;
   final String badgeSource;
   final VoidCallback? onTap;
+  final DateTime? kickoffUtc;
   final int homeScore;
   final int awayScore;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final score = MatchDisplayFormatter.scoreDisplay(
+      status: status,
+      kickoffUtc: kickoffUtc ?? DateTime.now().toUtc(),
+      homeScore: homeScore,
+      awayScore: awayScore,
+    );
 
     return GestureDetector(
       onTap: onTap,
@@ -76,13 +85,33 @@ class MatchCardCompact extends StatelessWidget {
               Expanded(
                 child: Column(
                   children: [
-                    _teamRow(context, homeTeam, homeScore, homeTeamId),
+                    _teamRow(
+                      context,
+                      homeTeam,
+                      score.homeScoreLabel,
+                      homeTeamId,
+                    ),
                     Divider(
                       height: 12,
                       color: scheme.outline.withValues(alpha: 0.45),
                     ),
-                    _teamRow(context, awayTeam, awayScore, awayTeamId),
+                    _teamRow(
+                      context,
+                      awayTeam,
+                      score.awayScoreLabel,
+                      awayTeamId,
+                    ),
                   ],
+                ),
+              ),
+              SizedBox(
+                width: 42,
+                child: Text(
+                  score.centerLabel,
+                  textAlign: TextAlign.right,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                 ),
               ),
             ],
@@ -95,7 +124,7 @@ class MatchCardCompact extends StatelessWidget {
   Widget _teamRow(
     BuildContext context,
     String name,
-    int score, [
+    String? score, [
     String? teamId,
   ]) {
     final canResolveBadge = assetResolver != null;
@@ -127,7 +156,8 @@ class MatchCardCompact extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyLarge,
           ),
         ),
-        Text('$score', style: Theme.of(context).textTheme.titleMedium),
+        if (score != null)
+          Text(score, style: Theme.of(context).textTheme.titleMedium),
       ],
     );
   }

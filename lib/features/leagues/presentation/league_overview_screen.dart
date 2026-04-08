@@ -8,6 +8,7 @@ import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/leagues/presentation/league_overview_providers.dart';
 import 'package:eri_sports/features/player_stats/presentation/player_stats_providers.dart';
+import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
 import 'package:eri_sports/shared/widgets/compact_standings_table.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:eri_sports/shared/widgets/team_badge.dart';
@@ -1089,6 +1090,16 @@ class _OverviewNextFixtureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final score =
+        match == null
+            ? null
+            : MatchDisplayFormatter.scoreDisplay(
+              status: match!.match.status,
+              kickoffUtc: match!.match.kickoffUtc,
+              homeScore: match!.match.homeScore,
+              awayScore: match!.match.awayScore,
+            );
+
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFFF8F9FB),
@@ -1156,6 +1167,18 @@ class _OverviewNextFixtureCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 10),
+                  if (score != null)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        score.centerLabel,
+                        style: const TextStyle(
+                          color: Color(0xFF121925),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  if (score != null) const SizedBox(height: 6),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -1577,20 +1600,21 @@ class _FixturesTab extends StatelessWidget {
     final now = DateTime.now().toUtc();
     final filtered = fixtures
         .where((fixture) {
-          final lowerStatus = fixture.match.status.toLowerCase();
-          final isLive = _isLiveStatus(lowerStatus);
-          final isUpcoming = fixture.match.kickoffUtc.isAfter(now) && !isLive;
-          final isFinished = !isLive && !isUpcoming;
+          final lifecycle = MatchDisplayFormatter.lifecycle(
+            status: fixture.match.status,
+            kickoffUtc: fixture.match.kickoffUtc,
+            nowUtc: now,
+          );
 
           switch (filter) {
             case LeagueFixtureFilter.all:
               return true;
             case LeagueFixtureFilter.live:
-              return isLive;
+              return lifecycle == MatchLifecycle.live;
             case LeagueFixtureFilter.upcoming:
-              return isUpcoming;
+              return lifecycle == MatchLifecycle.upcoming;
             case LeagueFixtureFilter.finished:
-              return isFinished;
+              return lifecycle == MatchLifecycle.finished;
           }
         })
         .toList(growable: false)
@@ -1632,6 +1656,12 @@ class _FixturesTab extends StatelessWidget {
                       }
 
                       final item = (entry as _FixtureMatchEntry).fixture;
+                      final score = MatchDisplayFormatter.scoreDisplay(
+                        status: item.match.status,
+                        kickoffUtc: item.match.kickoffUtc,
+                        homeScore: item.match.homeScore,
+                        awayScore: item.match.awayScore,
+                      );
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: InkWell(
@@ -1685,17 +1715,28 @@ class _FixturesTab extends StatelessWidget {
                                       _FixtureTeamRow(
                                         teamId: item.match.homeTeamId,
                                         teamName: item.homeTeamName,
-                                        score: item.match.homeScore,
+                                        score: score.homeScoreLabel,
                                         resolver: resolver,
                                       ),
                                       const SizedBox(height: 6),
                                       _FixtureTeamRow(
                                         teamId: item.match.awayTeamId,
                                         teamName: item.awayTeamName,
-                                        score: item.match.awayScore,
+                                        score: score.awayScoreLabel,
                                         resolver: resolver,
                                       ),
                                     ],
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 44,
+                                  child: Text(
+                                    score.centerLabel,
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(
+                                      color: Color(0xFF121925),
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1734,22 +1775,23 @@ class _FixturesTab extends StatelessWidget {
     return entries;
   }
 
-  bool _isLiveStatus(String status) {
-    const tokens = {'live', 'inplay', 'in_play', 'playing', 'ht'};
-    return tokens.contains(status);
-  }
-
   String _fixtureStatusLabel(String status, DateTime kickoffUtc) {
-    final lower = status.toLowerCase();
-    if (_isLiveStatus(lower)) {
+    final lifecycle = MatchDisplayFormatter.lifecycle(
+      status: status,
+      kickoffUtc: kickoffUtc,
+    );
+    if (lifecycle == MatchLifecycle.live) {
       return 'LIVE';
     }
-    return kickoffUtc.isAfter(DateTime.now().toUtc()) ? 'UPCOMING' : 'FT';
+    return lifecycle == MatchLifecycle.upcoming ? 'UPCOMING' : 'FT';
   }
 
   String _fixtureTimeLabel(String status, DateTime kickoffUtc) {
-    final lower = status.toLowerCase();
-    if (_isLiveStatus(lower)) {
+    final lifecycle = MatchDisplayFormatter.lifecycle(
+      status: status,
+      kickoffUtc: kickoffUtc,
+    );
+    if (lifecycle == MatchLifecycle.live) {
       return 'LIVE';
     }
     return DateFormat('EEE HH:mm').format(kickoffUtc.toLocal());
@@ -1766,7 +1808,7 @@ class _FixtureTeamRow extends StatelessWidget {
 
   final String teamId;
   final String teamName;
-  final int score;
+  final String? score;
   final LocalAssetResolver resolver;
 
   @override
@@ -1792,14 +1834,15 @@ class _FixtureTeamRow extends StatelessWidget {
             ),
           ),
         ),
-        Text(
-          '$score',
-          style: const TextStyle(
-            color: Color(0xFF121925),
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
+        if (score != null)
+          Text(
+            score!,
+            style: const TextStyle(
+              color: Color(0xFF121925),
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
       ],
     );
   }
