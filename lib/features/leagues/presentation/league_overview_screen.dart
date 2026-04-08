@@ -8,6 +8,7 @@ import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/leagues/presentation/league_overview_providers.dart';
 import 'package:eri_sports/features/player_stats/presentation/player_stats_providers.dart';
+import 'package:eri_sports/shared/widgets/compact_standings_table.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
@@ -1122,6 +1123,28 @@ class _TableTab extends StatelessWidget {
             ? modeData.rows
             : overallRows;
 
+    final tableRows = rows
+        .map(
+          (row) => CompactStandingsTableRow(
+            teamId: row.teamId,
+            teamName: row.teamName,
+            shortName: row.shortName,
+            position: row.position,
+            played: row.played,
+            wins: row.wins,
+            draws: row.draws,
+            losses: row.losses,
+            scores: row.scoresStr,
+            goalDiff: row.goalConDiff,
+            points: row.points,
+            form: row.form,
+            qualColorHex: row.qualColor,
+            nextTeamId: nextOpponents[row.teamId]?.teamId,
+            nextTeamName: nextOpponents[row.teamId]?.teamName,
+          ),
+        )
+        .toList(growable: false);
+
     if (rows.isEmpty) {
       return const _EmptyTabState(
         message: 'No standings imported for this league yet.',
@@ -1141,319 +1164,29 @@ class _TableTab extends StatelessWidget {
         else
           const SizedBox(height: 8),
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: math.max(MediaQuery.of(context).size.width - 40, 1120),
-              child: Column(
-                children: [
-                  const _StandingsTableHeader(),
-                  const Divider(height: 1, color: Color(0xFFE4E8ED)),
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: rows.length,
-                      separatorBuilder:
-                          (_, __) => const Divider(
-                            height: 1,
-                            color: Color(0xFFEEF1F5),
-                          ),
-                      itemBuilder: (context, index) {
-                        final row = rows[index];
-                        return _StandingsTableRow(
-                          row: row,
-                          rowCount: rows.length,
-                          resolver: resolver,
-                          nextOpponent: nextOpponents[row.teamId],
-                          onTap: () => context.push('/team/${row.teamId}'),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          child: CompactStandingsTable(
+            rows: tableRows,
+            resolver: resolver,
+            showNext: true,
+            tableBadgeSource: 'league.table',
+            nextBadgeSource: 'league.table.next',
+            fallbackStripColor: (row, rowCount) {
+              if (row.position <= 4) {
+                return const Color(0xFF2E7DFF);
+              }
+              if (row.position <= 6) {
+                return const Color(0xFF2EBB75);
+              }
+              if (row.position >= rowCount - 2) {
+                return const Color(0xFFE55368);
+              }
+              return Colors.transparent;
+            },
+            onRowTap: (row) => context.push('/team/${row.teamId}'),
           ),
         ),
       ],
     );
-  }
-}
-
-class _StandingsTableHeader extends StatelessWidget {
-  const _StandingsTableHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    const style = TextStyle(
-      color: Color(0xFF657082),
-      fontWeight: FontWeight.w700,
-      fontSize: 12,
-    );
-
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
-      alignment: Alignment.center,
-      child: Row(
-        children: [
-          const SizedBox(width: 5),
-          const SizedBox(width: 22, child: Text('#', style: style)),
-          const SizedBox(width: 8),
-          const Expanded(child: Text('Team', style: style)),
-          _headerCell('PL', width: 36),
-          _headerCell('W', width: 32),
-          _headerCell('D', width: 32),
-          _headerCell('L', width: 32),
-          _headerCell('+/-', width: 66),
-          _headerCell('GD', width: 40),
-          _headerCell('PTS', width: 44),
-          const SizedBox(
-            width: 118,
-            child: Text('Form', textAlign: TextAlign.center, style: style),
-          ),
-          const SizedBox(
-            width: 74,
-            child: Text('Next', textAlign: TextAlign.center, style: style),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _headerCell(String text, {required double width}) {
-    return SizedBox(
-      width: width,
-      child: Text(
-        text,
-        textAlign: TextAlign.right,
-        style: const TextStyle(
-          color: Color(0xFF657082),
-          fontWeight: FontWeight.w700,
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
-}
-
-class _StandingsTableRow extends StatelessWidget {
-  const _StandingsTableRow({
-    required this.row,
-    required this.rowCount,
-    required this.resolver,
-    required this.nextOpponent,
-    required this.onTap,
-  });
-
-  final LeagueStandingsRow row;
-  final int rowCount;
-  final LocalAssetResolver resolver;
-  final _NextOpponent? nextOpponent;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final qualColor = _qualColorFromHex(row.qualColor);
-
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 46,
-        padding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
-        child: Row(
-          children: [
-            Container(
-              width: 4,
-              height: 28,
-              decoration: BoxDecoration(
-                color:
-                    qualColor ?? _fallbackPositionColor(row.position, rowCount),
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 22,
-              child: Text(
-                '${row.position}',
-                style: const TextStyle(
-                  color: Color(0xFF1D2533),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Row(
-                children: [
-                  TeamBadge(
-                    teamId: row.teamId,
-                    teamName: row.teamName,
-                    resolver: resolver,
-                    source: 'league.table',
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      row.displayTeamName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF1A2230),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _metricCell('${row.played}', width: 36),
-            _metricCell('${row.wins}', width: 32),
-            _metricCell('${row.draws}', width: 32),
-            _metricCell('${row.losses}', width: 32),
-            _metricCell(row.scoresStr, width: 66),
-            _metricCell(_goalDiffLabel(row.goalConDiff), width: 40),
-            _metricCell('${row.points}', width: 44, bold: true),
-            SizedBox(width: 118, child: _FormPills(form: row.form)),
-            SizedBox(
-              width: 74,
-              child:
-                  nextOpponent == null
-                      ? const Text(
-                        '-',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Color(0xFF808A99)),
-                      )
-                      : Center(
-                        child: TeamBadge(
-                          teamId: nextOpponent!.teamId,
-                          teamName: nextOpponent!.teamName,
-                          resolver: resolver,
-                          source: 'league.table.next',
-                          size: 22,
-                        ),
-                      ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _metricCell(String text, {required double width, bool bold = false}) {
-    return SizedBox(
-      width: width,
-      child: Text(
-        text,
-        textAlign: TextAlign.right,
-        style: TextStyle(
-          color: const Color(0xFF222A38),
-          fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-          fontSize: 12.4,
-        ),
-      ),
-    );
-  }
-
-  Color? _qualColorFromHex(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return null;
-    }
-
-    var hex = value.trim().replaceFirst('#', '');
-    if (hex.length == 6) {
-      hex = 'FF$hex';
-    }
-    if (hex.length != 8) {
-      return null;
-    }
-
-    final parsed = int.tryParse(hex, radix: 16);
-    if (parsed == null) {
-      return null;
-    }
-    return Color(parsed);
-  }
-
-  Color _fallbackPositionColor(int position, int totalRows) {
-    if (position <= 4) {
-      return const Color(0xFF2E7DFF);
-    }
-    if (position <= 6) {
-      return const Color(0xFF2EBB75);
-    }
-    if (position >= totalRows - 2) {
-      return const Color(0xFFE55368);
-    }
-    return Colors.transparent;
-  }
-
-  String _goalDiffLabel(int value) => value > 0 ? '+$value' : '$value';
-}
-
-class _FormPills extends StatelessWidget {
-  const _FormPills({required this.form});
-
-  final String? form;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = (form ?? '')
-        .toUpperCase()
-        .replaceAll(RegExp('[^WDL]'), '')
-        .split('')
-        .where((token) => token.trim().isNotEmpty)
-        .take(5)
-        .toList(growable: false);
-
-    if (tokens.isEmpty) {
-      return const Text(
-        '-',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: Color(0xFF7D8795), fontWeight: FontWeight.w600),
-      );
-    }
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: tokens
-          .map(
-            (token) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1.5),
-              child: Container(
-                width: 18,
-                height: 18,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: _tokenColor(token),
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text(
-                  token,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-          )
-          .toList(growable: false),
-    );
-  }
-
-  Color _tokenColor(String token) {
-    switch (token) {
-      case 'W':
-        return const Color(0xFF1FA463);
-      case 'D':
-        return const Color(0xFF9BA5BD);
-      default:
-        return const Color(0xFFE14E67);
-    }
   }
 }
 

@@ -2,6 +2,7 @@ import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/app/navigation/detail_navigation.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/features/team/presentation/team_providers.dart';
+import 'package:eri_sports/shared/widgets/compact_standings_table.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
 import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
@@ -39,12 +40,16 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
               state.tabs.isNotEmpty
                   ? state.tabs
                   : const [TeamTabSpec(key: 'overview', label: 'Overview')];
-          final followEnabled = ref.watch(teamHeaderFollowingProvider(state.team.id));
+          final followEnabled = ref.watch(
+            teamHeaderFollowingProvider(state.team.id),
+          );
           final seasonLabel = _resolveSeasonLabel(state.availableSeasonLabels);
 
           return SafeArea(
             child: DefaultTabController(
-              key: ValueKey('team-tabs-${tabs.map((tab) => tab.key).join('|')}'),
+              key: ValueKey(
+                'team-tabs-${tabs.map((tab) => tab.key).join('|')}',
+              ),
               length: tabs.length,
               child: Align(
                 alignment: Alignment.topCenter,
@@ -62,13 +67,19 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
                           onBack: () => context.pop(),
                           onFollowTap: () {
                             ref
-                                .read(teamHeaderFollowingProvider(state.team.id).notifier)
+                                .read(
+                                  teamHeaderFollowingProvider(
+                                    state.team.id,
+                                  ).notifier,
+                                )
                                 .update((value) => !value);
                           },
                           onSeasonTap:
                               state.availableSeasonLabels.isEmpty
                                   ? null
-                                  : () => _showSeasonSheet(state.availableSeasonLabels),
+                                  : () => _showSeasonSheet(
+                                    state.availableSeasonLabels,
+                                  ),
                         ),
                         const SizedBox(height: 10),
                         _TeamTabsBar(tabs: tabs),
@@ -78,7 +89,9 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(18),
-                              border: Border.all(color: const Color(0xFFDDE1E6)),
+                              border: Border.all(
+                                color: const Color(0xFFDDE1E6),
+                              ),
                             ),
                             child: TabBarView(
                               children: [
@@ -113,7 +126,11 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
   }) {
     switch (tabKey) {
       case 'overview':
-        return _OverviewTab(state: state, seasonLabel: seasonLabel, resolver: resolver);
+        return _OverviewTab(
+          state: state,
+          seasonLabel: seasonLabel,
+          resolver: resolver,
+        );
       case 'table':
         return _TableTab(
           state: state,
@@ -136,7 +153,9 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
       case 'transfers':
         return _TransfersTab(state: state, resolver: resolver);
       default:
-        return _EmptyTabState(message: 'No renderer available for "$tabKey" tab.');
+        return _EmptyTabState(
+          message: 'No renderer available for "$tabKey" tab.',
+        );
     }
   }
 
@@ -217,9 +236,12 @@ class _TeamHeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorA = _parseHexColor(state.teamColors?.darkMode) ?? const Color(0xFF222B3A);
-    final colorB = _parseHexColor(state.teamColors?.lightMode) ?? const Color(0xFF3A4A62);
-    final textColor = _parseHexColor(state.teamColors?.fontDarkMode) ?? Colors.white;
+    final colorA =
+        _parseHexColor(state.teamColors?.darkMode) ?? const Color(0xFF222B3A);
+    final colorB =
+        _parseHexColor(state.teamColors?.lightMode) ?? const Color(0xFF3A4A62);
+    final textColor =
+        _parseHexColor(state.teamColors?.fontDarkMode) ?? Colors.white;
     final isCompact = MediaQuery.of(context).size.width < 900;
 
     return Container(
@@ -238,7 +260,11 @@ class _TeamHeaderCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      _headerIconButton(Icons.arrow_back_rounded, onBack, textColor),
+                      _headerIconButton(
+                        Icons.arrow_back_rounded,
+                        onBack,
+                        textColor,
+                      ),
                       const Spacer(),
                       if (onSeasonTap != null)
                         _seasonButton(
@@ -256,7 +282,11 @@ class _TeamHeaderCard extends StatelessWidget {
               )
               : Row(
                 children: [
-                  _headerIconButton(Icons.arrow_back_rounded, onBack, textColor),
+                  _headerIconButton(
+                    Icons.arrow_back_rounded,
+                    onBack,
+                    textColor,
+                  ),
                   const SizedBox(width: 12),
                   _headerMainRow(textColor, resolver),
                   if (onSeasonTap != null) ...[
@@ -399,7 +429,8 @@ class _TeamHeaderCard extends StatelessWidget {
 
   String _subtitleLabel(TeamIdentityInfo identity) {
     final parts = <String>[];
-    if (identity.primaryLeagueName != null && identity.primaryLeagueName!.isNotEmpty) {
+    if (identity.primaryLeagueName != null &&
+        identity.primaryLeagueName!.isNotEmpty) {
       parts.add(identity.primaryLeagueName!);
     }
     if (identity.country != null && identity.country!.isNotEmpty) {
@@ -469,14 +500,26 @@ class _OverviewTab extends StatelessWidget {
           spacing: 10,
           runSpacing: 10,
           children: [
-            _InfoCard(label: 'Season', value: seasonLabel, caption: 'Current context'),
+            _InfoCard(
+              label: 'Season',
+              value: seasonLabel,
+              caption: 'Current context',
+            ),
             _InfoCard(
               label: 'League',
               value: state.identity.primaryLeagueName ?? '-',
               caption: state.identity.country ?? 'Country unknown',
             ),
-            _InfoCard(label: 'Squad', value: '${state.squadItems.length}', caption: 'Players'),
-            _InfoCard(label: 'Fixtures', value: '${fixtures.length}', caption: 'Loaded for team'),
+            _InfoCard(
+              label: 'Squad',
+              value: '${state.squadItems.length}',
+              caption: 'Players',
+            ),
+            _InfoCard(
+              label: 'Fixtures',
+              value: '${fixtures.length}',
+              caption: 'Loaded for team',
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -505,16 +548,26 @@ class _OverviewTab extends StatelessWidget {
           title: 'Next fixture',
           child:
               upcoming.isEmpty
-                  ? const _InlineEmptyState(message: 'No upcoming fixture available.')
-                  : _FixtureSummaryRow(fixture: upcoming.first, resolver: resolver),
+                  ? const _InlineEmptyState(
+                    message: 'No upcoming fixture available.',
+                  )
+                  : _FixtureSummaryRow(
+                    fixture: upcoming.first,
+                    resolver: resolver,
+                  ),
         ),
         const SizedBox(height: 10),
         _SectionCard(
           title: 'Latest result',
           child:
               recent.isEmpty
-                  ? const _InlineEmptyState(message: 'No completed fixture available.')
-                  : _FixtureSummaryRow(fixture: recent.first, resolver: resolver),
+                  ? const _InlineEmptyState(
+                    message: 'No completed fixture available.',
+                  )
+                  : _FixtureSummaryRow(
+                    fixture: recent.first,
+                    resolver: resolver,
+                  ),
         ),
         if (state.statHighlights.isNotEmpty) ...[
           const SizedBox(height: 10),
@@ -552,12 +605,35 @@ class _TableTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final table = state.tableData;
     if (table == null || !table.hasRows) {
-      return const _EmptyTabState(message: 'No table context found in team JSON.');
+      return const _EmptyTabState(
+        message: 'No table context found in team JSON.',
+      );
     }
 
     final modeKeys = table.orderedModeKeys;
-    final activeMode = modeKeys.contains(selectedMode) ? selectedMode : modeKeys.first;
+    final activeMode =
+        modeKeys.contains(selectedMode) ? selectedMode : modeKeys.first;
     final rows = table.rowsForMode(activeMode);
+    final tableRows = rows
+        .map(
+          (row) => CompactStandingsTableRow(
+            teamId: row.teamId,
+            teamName: row.teamName,
+            shortName: row.shortName,
+            position: row.position,
+            played: row.played,
+            wins: row.wins,
+            draws: row.draws,
+            losses: row.losses,
+            scores: row.scoresStr,
+            goalDiff: row.goalDiff,
+            points: row.points,
+            form: row.form,
+            qualColorHex: row.qualColor,
+            isHighlighted: row.teamId == table.highlightedTeamId,
+          ),
+        )
+        .toList(growable: false);
 
     return Column(
       children: [
@@ -578,7 +654,10 @@ class _TableTab extends StatelessWidget {
               children: [
                 for (final item in table.legend)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF8F9FB),
                       borderRadius: BorderRadius.circular(999),
@@ -591,7 +670,9 @@ class _TableTab extends StatelessWidget {
                           width: 8,
                           height: 8,
                           decoration: BoxDecoration(
-                            color: _parseHexColor(item.colorHex) ?? const Color(0xFF7D8797),
+                            color:
+                                _parseHexColor(item.colorHex) ??
+                                const Color(0xFF7D8797),
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -611,34 +692,11 @@ class _TableTab extends StatelessWidget {
             ),
           ),
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: 1080,
-              child: Column(
-                children: [
-                  const _TableHeader(),
-                  const Divider(height: 1, color: Color(0xFFE4E8ED)),
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: rows.length,
-                      separatorBuilder:
-                          (_, __) => const Divider(height: 1, color: Color(0xFFEEF1F5)),
-                      itemBuilder: (context, index) {
-                        final row = rows[index];
-                        return _TableRow(
-                          row: row,
-                          highlight: row.teamId == table.highlightedTeamId,
-                          resolver: resolver,
-                          onTap: () => context.push('/team/${row.teamId}'),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          child: CompactStandingsTable(
+            rows: tableRows,
+            resolver: resolver,
+            tableBadgeSource: 'team.table',
+            onRowTap: (row) => context.push('/team/${row.teamId}'),
           ),
         ),
       ],
@@ -658,12 +716,16 @@ class _FixturesTab extends StatelessWidget {
       ..sort((a, b) => b.kickoffUtc.compareTo(a.kickoffUtc));
 
     if (fixtures.isEmpty) {
-      return const _EmptyTabState(message: 'No fixtures available for this team.');
+      return const _EmptyTabState(
+        message: 'No fixtures available for this team.',
+      );
     }
 
     final grouped = <String, List<TeamFixtureItem>>{};
     for (final fixture in fixtures) {
-      final key = DateFormat('EEEE, dd MMM yyyy').format(fixture.kickoffUtc.toLocal());
+      final key = DateFormat(
+        'EEEE, dd MMM yyyy',
+      ).format(fixture.kickoffUtc.toLocal());
       grouped.putIfAbsent(key, () => []).add(fixture);
     }
 
@@ -712,7 +774,9 @@ class _FixturesTab extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            DateFormat('HH:mm').format(fixture.kickoffUtc.toLocal()),
+                            DateFormat(
+                              'HH:mm',
+                            ).format(fixture.kickoffUtc.toLocal()),
                             style: const TextStyle(
                               color: Color(0xFF1A2230),
                               fontWeight: FontWeight.w700,
@@ -899,7 +963,9 @@ class _StatsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (state.statHighlights.isEmpty) {
-      return const _EmptyTabState(message: 'No stats data available for this team.');
+      return const _EmptyTabState(
+        message: 'No stats data available for this team.',
+      );
     }
 
     return ListView.separated(
@@ -945,7 +1011,8 @@ class _StatsTab extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      if (item.subtitle != null && item.subtitle!.trim().isNotEmpty)
+                      if (item.subtitle != null &&
+                          item.subtitle!.trim().isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 3),
                           child: Text(
@@ -986,7 +1053,9 @@ class _HistoryTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (state.historyItems.isEmpty) {
-      return const _EmptyTabState(message: 'No history timeline data found for this team.');
+      return const _EmptyTabState(
+        message: 'No history timeline data found for this team.',
+      );
     }
 
     return ListView.separated(
@@ -1004,7 +1073,11 @@ class _HistoryTab extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           child: Row(
             children: [
-              const Icon(Icons.history_rounded, color: Color(0xFF707B8E), size: 18),
+              const Icon(
+                Icons.history_rounded,
+                color: Color(0xFF707B8E),
+                size: 18,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -1046,7 +1119,9 @@ class _TransfersTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (state.transferItems.isEmpty) {
-      return const _EmptyTabState(message: 'No transfer entries found in this team JSON.');
+      return const _EmptyTabState(
+        message: 'No transfer entries found in this team JSON.',
+      );
     }
 
     return ListView.separated(
@@ -1113,7 +1188,9 @@ class _TransfersTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    DateFormat('dd MMM yyyy').format(item.transferDateUtc.toLocal()),
+                    DateFormat(
+                      'dd MMM yyyy',
+                    ).format(item.transferDateUtc.toLocal()),
                     style: const TextStyle(
                       color: Color(0xFF6B7381),
                       fontSize: 12,
@@ -1128,142 +1205,6 @@ class _TransfersTab extends StatelessWidget {
       },
     );
   }
-}
-
-class _TableHeader extends StatelessWidget {
-  const _TableHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    const style = TextStyle(
-      color: Color(0xFF657082),
-      fontWeight: FontWeight.w700,
-      fontSize: 12,
-    );
-
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
-      child: const Row(
-        children: [
-          SizedBox(width: 5),
-          SizedBox(width: 22, child: Text('#', style: style)),
-          SizedBox(width: 8),
-          Expanded(child: Text('Team', style: style)),
-          SizedBox(width: 36, child: Text('PL', textAlign: TextAlign.right, style: style)),
-          SizedBox(width: 32, child: Text('W', textAlign: TextAlign.right, style: style)),
-          SizedBox(width: 32, child: Text('D', textAlign: TextAlign.right, style: style)),
-          SizedBox(width: 32, child: Text('L', textAlign: TextAlign.right, style: style)),
-          SizedBox(width: 66, child: Text('+/-', textAlign: TextAlign.right, style: style)),
-          SizedBox(width: 42, child: Text('GD', textAlign: TextAlign.right, style: style)),
-          SizedBox(width: 46, child: Text('PTS', textAlign: TextAlign.right, style: style)),
-          SizedBox(
-            width: 112,
-            child: Text('Form', textAlign: TextAlign.center, style: style),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TableRow extends StatelessWidget {
-  const _TableRow({
-    required this.row,
-    required this.highlight,
-    required this.resolver,
-    required this.onTap,
-  });
-
-  final TeamTableRowItem row;
-  final bool highlight;
-  final dynamic resolver;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final qualColor = _parseHexColor(row.qualColor);
-
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 46,
-        padding: const EdgeInsets.fromLTRB(8, 0, 12, 0),
-        decoration:
-            highlight
-                ? BoxDecoration(color: const Color(0xFFEFF4FF), borderRadius: BorderRadius.circular(10))
-                : null,
-        child: Row(
-          children: [
-            Container(
-              width: 4,
-              height: 28,
-              decoration: BoxDecoration(
-                color: qualColor ?? const Color(0xFFAAB3C2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 22,
-              child: Text(
-                '${row.position}',
-                style: const TextStyle(color: Color(0xFF1D2533), fontWeight: FontWeight.w700),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Row(
-                children: [
-                  TeamBadge(
-                    teamId: row.teamId,
-                    teamName: row.teamName,
-                    resolver: resolver,
-                    source: 'team.table',
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      row.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Color(0xFF1A2230), fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _metricCell('${row.played}', width: 36),
-            _metricCell('${row.wins}', width: 32),
-            _metricCell('${row.draws}', width: 32),
-            _metricCell('${row.losses}', width: 32),
-            _metricCell(row.scoresStr, width: 66),
-            _metricCell(_goalDiffLabel(row.goalDiff), width: 42),
-            _metricCell('${row.points}', width: 46, bold: true),
-            SizedBox(width: 112, child: _FormStrip(tokens: _parseFormTokens(row.form), compact: true)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _metricCell(String text, {required double width, bool bold = false}) {
-    return SizedBox(
-      width: width,
-      child: Text(
-        text,
-        textAlign: TextAlign.right,
-        style: TextStyle(
-          color: const Color(0xFF222A38),
-          fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-          fontSize: 12.3,
-        ),
-      ),
-    );
-  }
-
-  String _goalDiffLabel(int value) => value > 0 ? '+$value' : '$value';
 }
 
 class _FilterChipBar extends StatelessWidget {
@@ -1312,7 +1253,10 @@ class _FormStrip extends StatelessWidget {
         '-',
         textAlign: TextAlign.center,
         style: TextStyle(
-          color: compact ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF7D8795),
+          color:
+              compact
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : const Color(0xFF7D8795),
           fontWeight: FontWeight.w600,
         ),
       );
@@ -1372,7 +1316,9 @@ class _FixtureSummaryRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          DateFormat('EEE, dd MMM • HH:mm').format(fixture.kickoffUtc.toLocal()),
+          DateFormat(
+            'EEE, dd MMM • HH:mm',
+          ).format(fixture.kickoffUtc.toLocal()),
           style: const TextStyle(
             color: Color(0xFF6A7382),
             fontWeight: FontWeight.w600,
@@ -1559,11 +1505,17 @@ class _StatPill extends StatelessWidget {
         children: [
           Text(
             '$title: ',
-            style: const TextStyle(color: Color(0xFF697181), fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: Color(0xFF697181),
+              fontWeight: FontWeight.w600,
+            ),
           ),
           Text(
             value,
-            style: const TextStyle(color: Color(0xFF1A2230), fontWeight: FontWeight.w800),
+            style: const TextStyle(
+              color: Color(0xFF1A2230),
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -1619,27 +1571,22 @@ Widget _metaRow(String label, String value) {
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(color: Color(0xFF6A7280), fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: Color(0xFF6A7280),
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
         Text(
           value,
-          style: const TextStyle(color: Color(0xFF1A2230), fontWeight: FontWeight.w700),
+          style: const TextStyle(
+            color: Color(0xFF1A2230),
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ],
     ),
   );
-}
-
-List<String> _parseFormTokens(String? rawForm) {
-  if (rawForm == null || rawForm.trim().isEmpty) {
-    return const [];
-  }
-  final compact = rawForm.toUpperCase().replaceAll(RegExp('[^WDL]'), '');
-  if (compact.isEmpty) {
-    return const [];
-  }
-  return compact.split('').take(5).toList(growable: false);
 }
 
 String _humanizeMode(String value) {
