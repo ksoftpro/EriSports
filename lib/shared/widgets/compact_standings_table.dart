@@ -87,7 +87,7 @@ class CompactStandingsTable extends StatelessWidget {
     this.showForm = true,
     this.showNext = false,
     this.headerLabels = const CompactStandingsHeaderLabels(),
-    this.padding = const EdgeInsets.fromLTRB(12, 0, 12, 14),
+    this.padding = const EdgeInsets.fromLTRB(2, 0, 2, 6),
     this.highlightColor = const Color(0xFFEFF4FF),
     this.defaultStripColor = const Color(0xFFAAB3C2),
     this.fallbackStripColor,
@@ -109,21 +109,21 @@ class CompactStandingsTable extends StatelessWidget {
   final String tableBadgeSource;
   final String nextBadgeSource;
 
-  static const double _rowHeight = 42;
-  static const double _headerHeight = 34;
-  static const double _leftInset = 8;
-  static const double _rightInset = 8;
-  static const double _gap = 6;
-  static const double _stripWidth = 4;
-  static const double _positionWidth = 20;
-  static const double _teamCellWidth = 186;
-  static const double _playedWidth = 30;
-  static const double _metricWidth = 28;
-  static const double _scoresWidth = 56;
-  static const double _goalDiffWidth = 34;
-  static const double _pointsWidth = 40;
-  static const double _formWidth = 92;
-  static const double _nextWidth = 54;
+  static const double _rowHeight = 34;
+  static const double _headerHeight = 26;
+  static const double _leftInset = 2;
+  static const double _rightInset = 2;
+  static const double _gap = 2;
+  static const double _stripWidth = 2;
+  static const double _positionWidth = 15;
+  static const double _teamCellWidth = 136;
+  static const double _playedWidth = 20;
+  static const double _metricWidth = 20;
+  static const double _scoresWidth = 38;
+  static const double _goalDiffWidth = 24;
+  static const double _pointsWidth = 26;
+  static const double _formWidth = 60;
+  static const double _nextWidth = 34;
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +161,7 @@ class CompactStandingsTable extends StatelessWidget {
     const style = TextStyle(
       color: Color(0xFF657082),
       fontWeight: FontWeight.w700,
-      fontSize: 11.7,
+      fontSize: 10.3,
     );
 
     return Container(
@@ -222,14 +222,14 @@ class CompactStandingsTable extends StatelessWidget {
             row.isHighlighted
                 ? BoxDecoration(
                   color: highlightColor,
-                  borderRadius: BorderRadius.circular(9),
+                  borderRadius: BorderRadius.circular(7),
                 )
                 : null,
         child: Row(
           children: [
             Container(
               width: _stripWidth,
-              height: 24,
+              height: 18,
               decoration: BoxDecoration(
                 color: qualColor,
                 borderRadius: BorderRadius.circular(8),
@@ -243,7 +243,7 @@ class CompactStandingsTable extends StatelessWidget {
                 style: const TextStyle(
                   color: Color(0xFF1D2533),
                   fontWeight: FontWeight.w700,
-                  fontSize: 12.5,
+                  fontSize: 10.8,
                 ),
               ),
             ),
@@ -257,9 +257,9 @@ class CompactStandingsTable extends StatelessWidget {
                     teamName: row.teamName,
                     resolver: resolver,
                     source: tableBadgeSource,
-                    size: 18,
+                    size: 14,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 2),
                   Expanded(
                     child: Text(
                       row.displayName,
@@ -268,7 +268,7 @@ class CompactStandingsTable extends StatelessWidget {
                       style: const TextStyle(
                         color: Color(0xFF1A2230),
                         fontWeight: FontWeight.w700,
-                        fontSize: 12.7,
+                        fontSize: 11.3,
                       ),
                     ),
                   ),
@@ -305,7 +305,7 @@ class CompactStandingsTable extends StatelessWidget {
                             teamName: row.nextTeamName,
                             resolver: resolver,
                             source: nextBadgeSource,
-                            size: 20,
+                            size: 14,
                           ),
                         ),
               ),
@@ -324,7 +324,7 @@ class CompactStandingsTable extends StatelessWidget {
         style: const TextStyle(
           color: Color(0xFF657082),
           fontWeight: FontWeight.w700,
-          fontSize: 11.7,
+          fontSize: 10.3,
         ),
       ),
     );
@@ -339,7 +339,7 @@ class CompactStandingsTable extends StatelessWidget {
         style: TextStyle(
           color: const Color(0xFF222A38),
           fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-          fontSize: 12.2,
+          fontSize: 10.9,
         ),
       ),
     );
@@ -412,7 +412,11 @@ class _FormTokens extends StatelessWidget {
       return const Text(
         '-',
         textAlign: TextAlign.center,
-        style: TextStyle(color: Color(0xFF7D8795), fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: Color(0xFF7D8795),
+          fontWeight: FontWeight.w600,
+          fontSize: 10.2,
+        ),
       );
     }
 
@@ -421,10 +425,10 @@ class _FormTokens extends StatelessWidget {
       children: [
         for (final token in tokens)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 1.2),
+            padding: const EdgeInsets.symmetric(horizontal: 0.4),
             child: Container(
-              width: 15,
-              height: 15,
+              width: 10,
+              height: 10,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: _tokenColor(token),
@@ -434,7 +438,7 @@ class _FormTokens extends StatelessWidget {
                 token,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 8,
+                  fontSize: 5.8,
                   fontWeight: FontWeight.w800,
                 ),
               ),

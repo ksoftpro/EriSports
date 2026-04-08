@@ -492,13 +492,197 @@ class _OverviewTab extends StatelessWidget {
         .where((item) => item.kickoffUtc.isBefore(now))
         .toList(growable: false)
       ..sort((a, b) => b.kickoffUtc.compareTo(a.kickoffUtc));
+    final tableSnapshot = _findTableSnapshot(
+      state.tableData,
+      state.identity.teamId,
+    );
+    final latestTransfer =
+        (List<TeamTransferItem>.from(state.transferItems)..sort(
+          (a, b) => b.transferDateUtc.compareTo(a.transferDateUtc),
+        )).firstOrNull;
+    final latestHistory = state.historyItems.firstOrNull;
+
+    final leftSections = <Widget>[
+      if (tableSnapshot != null)
+        _SectionCard(
+          title: 'Table snapshot',
+          child: Column(
+            children: [
+              _metaRow('Position', '${tableSnapshot.position}'),
+              _metaRow('Played', '${tableSnapshot.played}'),
+              _metaRow(
+                'Record',
+                '${tableSnapshot.wins}-${tableSnapshot.draws}-${tableSnapshot.losses}',
+              ),
+              _metaRow(
+                'Goals',
+                '${tableSnapshot.goalsFor}-${tableSnapshot.goalsAgainst}',
+              ),
+              _metaRow(
+                'Goal diff',
+                tableSnapshot.goalDiff > 0
+                    ? '+${tableSnapshot.goalDiff}'
+                    : '${tableSnapshot.goalDiff}',
+              ),
+              _metaRow('Points', '${tableSnapshot.points}'),
+            ],
+          ),
+        ),
+      _SectionCard(
+        title: 'Club details',
+        child: Column(
+          children: [
+            _metaRow('Team ID', state.identity.teamId),
+            _metaRow('Short name', state.identity.shortName ?? '-'),
+            _metaRow('Country', state.identity.country ?? '-'),
+            _metaRow('League', state.identity.primaryLeagueName ?? '-'),
+            _metaRow('Venue', state.identity.venue ?? '-'),
+            _metaRow('City', state.identity.city ?? '-'),
+            _metaRow('Latest season', state.identity.latestSeason ?? '-'),
+          ],
+        ),
+      ),
+      if (state.statHighlights.isNotEmpty)
+        _SectionCard(
+          title: 'Top team stats',
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final stat in state.statHighlights.take(6))
+                _StatPill(title: stat.title, value: stat.value),
+            ],
+          ),
+        ),
+    ];
+
+    final rightSections = <Widget>[
+      if (state.formTokens.isNotEmpty)
+        _SectionCard(
+          title: 'Recent form',
+          child: _FormStrip(tokens: state.formTokens),
+        ),
+      _SectionCard(
+        title: 'Next fixture',
+        child:
+            upcoming.isEmpty
+                ? const _InlineEmptyState(
+                  message: 'No upcoming fixture available.',
+                )
+                : _FixtureSummaryRow(
+                  fixture: upcoming.first,
+                  resolver: resolver,
+                ),
+      ),
+      _SectionCard(
+        title: 'Latest result',
+        child:
+            recent.isEmpty
+                ? const _InlineEmptyState(
+                  message: 'No completed fixture available.',
+                )
+                : _FixtureSummaryRow(fixture: recent.first, resolver: resolver),
+      ),
+      if (latestTransfer != null)
+        _SectionCard(
+          title: 'Latest transfer',
+          child: Row(
+            children: [
+              EntityBadge(
+                entityId: latestTransfer.playerId ?? latestTransfer.playerName,
+                entityName: latestTransfer.playerName,
+                type: SportsAssetType.players,
+                resolver: resolver,
+                size: 30,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      latestTransfer.playerName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF1A2230),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${latestTransfer.fromTeamName ?? '-'} -> ${latestTransfer.toTeamName ?? '-'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF6B7381),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    latestTransfer.fee ?? '--',
+                    style: const TextStyle(
+                      color: Color(0xFF121925),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    DateFormat(
+                      'dd MMM yyyy',
+                    ).format(latestTransfer.transferDateUtc.toLocal()),
+                    style: const TextStyle(
+                      color: Color(0xFF6B7381),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      if (latestHistory != null)
+        _SectionCard(
+          title: 'History pulse',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                latestHistory.title,
+                style: const TextStyle(
+                  color: Color(0xFF1A2230),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                latestHistory.subtitle,
+                style: const TextStyle(
+                  color: Color(0xFF6B7381),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+    ];
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 18),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
       children: [
         Wrap(
-          spacing: 10,
-          runSpacing: 10,
+          spacing: 8,
+          runSpacing: 8,
           children: [
             _InfoCard(
               label: 'Season',
@@ -511,80 +695,92 @@ class _OverviewTab extends StatelessWidget {
               caption: state.identity.country ?? 'Country unknown',
             ),
             _InfoCard(
+              label: 'Position',
+              value:
+                  tableSnapshot != null && tableSnapshot.position > 0
+                      ? '${tableSnapshot.position}'
+                      : '-',
+              caption: 'Table rank',
+            ),
+            _InfoCard(
+              label: 'Points',
+              value: tableSnapshot != null ? '${tableSnapshot.points}' : '-',
+              caption: 'In standings',
+            ),
+            _InfoCard(
               label: 'Squad',
               value: '${state.squadItems.length}',
               caption: 'Players',
             ),
             _InfoCard(
-              label: 'Fixtures',
-              value: '${fixtures.length}',
-              caption: 'Loaded for team',
+              label: 'Transfers',
+              value: '${state.transferItems.length}',
+              caption:
+                  latestTransfer == null
+                      ? 'No transfer rows'
+                      : 'Latest ${DateFormat('dd MMM').format(latestTransfer.transferDateUtc.toLocal())}',
             ),
           ],
         ),
         const SizedBox(height: 12),
-        if (state.formTokens.isNotEmpty)
-          _SectionCard(
-            title: 'Recent form',
-            child: _FormStrip(tokens: state.formTokens),
-          ),
-        if (state.formTokens.isNotEmpty) const SizedBox(height: 10),
-        _SectionCard(
-          title: 'Club details',
-          child: Column(
-            children: [
-              _metaRow('Team ID', state.identity.teamId),
-              _metaRow('Short name', state.identity.shortName ?? '-'),
-              _metaRow('Country', state.identity.country ?? '-'),
-              _metaRow('League', state.identity.primaryLeagueName ?? '-'),
-              _metaRow('Venue', state.identity.venue ?? '-'),
-              _metaRow('City', state.identity.city ?? '-'),
-              _metaRow('Latest season', state.identity.latestSeason ?? '-'),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        _SectionCard(
-          title: 'Next fixture',
-          child:
-              upcoming.isEmpty
-                  ? const _InlineEmptyState(
-                    message: 'No upcoming fixture available.',
-                  )
-                  : _FixtureSummaryRow(
-                    fixture: upcoming.first,
-                    resolver: resolver,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth > 940) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 6,
+                    child: Column(children: _withSectionSpacing(leftSections)),
                   ),
-        ),
-        const SizedBox(height: 10),
-        _SectionCard(
-          title: 'Latest result',
-          child:
-              recent.isEmpty
-                  ? const _InlineEmptyState(
-                    message: 'No completed fixture available.',
-                  )
-                  : _FixtureSummaryRow(
-                    fixture: recent.first,
-                    resolver: resolver,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 5,
+                    child: Column(children: _withSectionSpacing(rightSections)),
                   ),
-        ),
-        if (state.statHighlights.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          _SectionCard(
-            title: 'Top team stats',
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
+                ],
+              );
+            }
+
+            return Column(
               children: [
-                for (final stat in state.statHighlights.take(4))
-                  _StatPill(title: stat.title, value: stat.value),
+                ..._withSectionSpacing(leftSections),
+                if (leftSections.isNotEmpty && rightSections.isNotEmpty)
+                  const SizedBox(height: 10),
+                ..._withSectionSpacing(rightSections),
               ],
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ],
     );
+  }
+
+  TeamTableRowItem? _findTableSnapshot(
+    TeamTableData? tableData,
+    String teamId,
+  ) {
+    if (tableData == null) {
+      return null;
+    }
+    final rows = tableData.rowsForMode('all');
+    for (final row in rows) {
+      if (row.teamId == teamId) {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  List<Widget> _withSectionSpacing(List<Widget> sections) {
+    final output = <Widget>[];
+    for (var i = 0; i < sections.length; i++) {
+      if (i > 0) {
+        output.add(const SizedBox(height: 10));
+      }
+      output.add(sections[i]);
+    }
+    return output;
   }
 }
 
@@ -1440,7 +1636,7 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 220,
+      width: 188,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF8F9FB),

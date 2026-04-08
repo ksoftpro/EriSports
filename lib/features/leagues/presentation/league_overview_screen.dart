@@ -657,6 +657,40 @@ class _OverviewTab extends StatelessWidget {
 
     final topScorer =
         state.goalLeaders.isNotEmpty ? state.goalLeaders.first : null;
+    final sortedRows = List<LeagueStandingsRow>.from(rows)
+      ..sort((a, b) => a.position.compareTo(b.position));
+    final leader = sortedRows.firstOrNull;
+
+    LeagueStandingsRow? bestAttack;
+    LeagueStandingsRow? bestDefence;
+    LeagueStandingsRow? bestFormTeam;
+    var bestFormScore = -1;
+
+    for (final row in sortedRows) {
+      if (bestAttack == null || row.goalsFor > bestAttack.goalsFor) {
+        bestAttack = row;
+      }
+      if (row.played > 0 &&
+          (bestDefence == null ||
+              row.goalsAgainst < bestDefence.goalsAgainst)) {
+        bestDefence = row;
+      }
+      final score = _formScore(row.form);
+      if (score > bestFormScore) {
+        bestFormScore = score;
+        bestFormTeam = row;
+      }
+    }
+
+    final latestTransfer =
+        (List<LeagueTransferItem>.from(state.transferItems)..sort(
+          (a, b) => b.updatedAtUtc.compareTo(a.updatedAtUtc),
+        )).firstOrNull;
+    final latestNews =
+        (List<LeagueNewsItem>.from(state.newsItems)..sort(
+          (a, b) => b.publishedAtUtc.compareTo(a.publishedAtUtc),
+        )).firstOrNull;
+    final insightCount = state.newsItems.where((item) => item.isInsight).length;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
@@ -685,6 +719,19 @@ class _OverviewTab extends StatelessWidget {
               value: '$totalGoals',
               caption:
                   'Avg ${avgGoals == 0 ? '0.0' : avgGoals.toStringAsFixed(2)} / game',
+            ),
+            _OverviewStatCard(
+              label: 'Transfers',
+              value: '${state.transferItems.length}',
+              caption:
+                  latestTransfer == null
+                      ? 'No transfer feed rows'
+                      : 'Latest ${DateFormat('dd MMM').format(latestTransfer.updatedAtUtc.toLocal())}',
+            ),
+            _OverviewStatCard(
+              label: 'News',
+              value: '${state.newsItems.length}',
+              caption: '$insightCount insights available',
             ),
           ],
         ),
@@ -716,6 +763,21 @@ class _OverviewTab extends StatelessWidget {
                           match: upcoming.isNotEmpty ? upcoming.first : null,
                           resolver: resolver,
                         ),
+                        const SizedBox(height: 10),
+                        _OverviewLeagueSignalsCard(
+                          resolver: resolver,
+                          leader: leader,
+                          bestAttack: bestAttack,
+                          bestDefence: bestDefence,
+                          bestFormTeam: bestFormTeam,
+                          bestFormScore: bestFormScore,
+                        ),
+                        const SizedBox(height: 10),
+                        _OverviewPulseCard(
+                          latestNews: latestNews,
+                          latestTransfer: latestTransfer,
+                          resolver: resolver,
+                        ),
                       ],
                     ),
                   ),
@@ -733,12 +795,47 @@ class _OverviewTab extends StatelessWidget {
                   match: upcoming.isNotEmpty ? upcoming.first : null,
                   resolver: resolver,
                 ),
+                const SizedBox(height: 10),
+                _OverviewLeagueSignalsCard(
+                  resolver: resolver,
+                  leader: leader,
+                  bestAttack: bestAttack,
+                  bestDefence: bestDefence,
+                  bestFormTeam: bestFormTeam,
+                  bestFormScore: bestFormScore,
+                ),
+                const SizedBox(height: 10),
+                _OverviewPulseCard(
+                  latestNews: latestNews,
+                  latestTransfer: latestTransfer,
+                  resolver: resolver,
+                ),
               ],
             );
           },
         ),
       ],
     );
+  }
+
+  int _formScore(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 0;
+    }
+
+    var score = 0;
+    final tokens = value
+        .toUpperCase()
+        .replaceAll(RegExp('[^WDL]'), '')
+        .split('');
+    for (final token in tokens.take(5)) {
+      if (token == 'W') {
+        score += 3;
+      } else if (token == 'D') {
+        score += 1;
+      }
+    }
+    return score;
   }
 
   bool _isLiveStatus(String status) {
@@ -761,7 +858,7 @@ class _OverviewStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 220,
+      width: 196,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
         color: const Color(0xFFF8F9FB),
@@ -1073,6 +1170,278 @@ class _OverviewNextFixtureCard extends StatelessWidget {
                   ),
                 ],
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OverviewLeagueSignalsCard extends StatelessWidget {
+  const _OverviewLeagueSignalsCard({
+    required this.resolver,
+    required this.leader,
+    required this.bestAttack,
+    required this.bestDefence,
+    required this.bestFormTeam,
+    required this.bestFormScore,
+  });
+
+  final LocalAssetResolver resolver;
+  final LeagueStandingsRow? leader;
+  final LeagueStandingsRow? bestAttack;
+  final LeagueStandingsRow? bestDefence;
+  final LeagueStandingsRow? bestFormTeam;
+  final int bestFormScore;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasAny =
+        leader != null ||
+        bestAttack != null ||
+        bestDefence != null ||
+        bestFormTeam != null;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE3E7EC)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'League pulse',
+              style: TextStyle(
+                color: Color(0xFF161D29),
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (!hasAny)
+              const _InlineEmptyState(
+                message: 'No standings signals available yet.',
+              )
+            else ...[
+              if (leader != null)
+                _signalRow(
+                  label: 'Leader',
+                  row: leader!,
+                  value: '${leader!.points} pts',
+                ),
+              if (bestAttack != null)
+                _signalRow(
+                  label: 'Best attack',
+                  row: bestAttack!,
+                  value: '${bestAttack!.goalsFor} GF',
+                ),
+              if (bestDefence != null)
+                _signalRow(
+                  label: 'Best defence',
+                  row: bestDefence!,
+                  value: '${bestDefence!.goalsAgainst} GA',
+                ),
+              if (bestFormTeam != null)
+                _signalRow(
+                  label: 'Best form',
+                  row: bestFormTeam!,
+                  value: '$bestFormScore pts',
+                  isLast: true,
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _signalRow({
+    required String label,
+    required LeagueStandingsRow row,
+    required String value,
+    bool isLast = false,
+  }) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 84,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF6B7381),
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          TeamBadge(
+            teamId: row.teamId,
+            teamName: row.teamName,
+            resolver: resolver,
+            source: 'league.overview.pulse',
+            size: 18,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              row.displayTeamName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFF1A2230),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Color(0xFF141B27),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OverviewPulseCard extends StatelessWidget {
+  const _OverviewPulseCard({
+    required this.latestNews,
+    required this.latestTransfer,
+    required this.resolver,
+  });
+
+  final LeagueNewsItem? latestNews;
+  final LeagueTransferItem? latestTransfer;
+  final LocalAssetResolver resolver;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasNews = latestNews != null;
+    final hasTransfer = latestTransfer != null;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE3E7EC)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Feed pulse',
+              style: TextStyle(
+                color: Color(0xFF161D29),
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (!hasNews && !hasTransfer)
+              const _InlineEmptyState(
+                message: 'No news or transfer signals found in this dataset.',
+              )
+            else ...[
+              if (hasNews) ...[
+                Text(
+                  'Latest news',
+                  style: TextStyle(
+                    color: Colors.blueGrey.withValues(alpha: 0.95),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  latestNews!.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF1A2230),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${latestNews!.source} • ${DateFormat('dd MMM • HH:mm').format(latestNews!.publishedAtUtc.toLocal())}',
+                  style: const TextStyle(
+                    color: Color(0xFF6B7381),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              if (hasNews && hasTransfer)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(height: 1, color: Color(0xFFE4E8ED)),
+                ),
+              if (hasTransfer) ...[
+                Text(
+                  'Latest transfer',
+                  style: TextStyle(
+                    color: Colors.blueGrey.withValues(alpha: 0.95),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    TeamBadge(
+                      teamId: latestTransfer!.teamId,
+                      teamName: latestTransfer!.teamName,
+                      resolver: resolver,
+                      source: 'league.overview.transfer',
+                      size: 18,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        latestTransfer!.playerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF1A2230),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      DateFormat(
+                        'dd MMM',
+                      ).format(latestTransfer!.updatedAtUtc.toLocal()),
+                      style: const TextStyle(
+                        color: Color(0xFF6B7381),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  latestTransfer!.teamName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF6B7381),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
           ],
         ),
       ),
