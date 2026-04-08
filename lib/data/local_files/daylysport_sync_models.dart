@@ -126,6 +126,11 @@ Set<DaylysportDataDomain> classifyDaylysportDomains(String relativePath) {
   final lowerPath = relativePath.replaceAll('\\', '/').toLowerCase();
   final fileName = lowerPath.split('/').last;
   final domains = <DaylysportDataDomain>{};
+  final isLeagueFullDataJson =
+      fileName.endsWith('_full_data.json') &&
+      fileName != 'fixtures_full_data.json' &&
+      fileName != 'fotmob_full_player_stats.json' &&
+      !fileName.startsWith('top_standings_full_data');
 
   final isManifestJson =
       lowerPath.contains('/manifest/') || fileName.contains('manifest');
@@ -151,6 +156,7 @@ Set<DaylysportDataDomain> classifyDaylysportDomains(String relativePath) {
 
   if (fileName == 'fotmob_standings_data.json' ||
       fileName.startsWith('top_standings_full_data') ||
+      isLeagueFullDataJson ||
       fileName.contains('standing') ||
       fileName.contains('table')) {
     domains.add(DaylysportDataDomain.standings);

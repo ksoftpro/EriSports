@@ -147,8 +147,12 @@ final leagueOverviewProvider = FutureProvider.family<
   final competition = await services.database.readCompetitionById(
     competitionId,
   );
-  final standings = await services.leagueStandingsSource
-      .readLeagueByCompetitionId(competitionId);
+  final leagueDataset = await services.leagueStandingsSource
+      .readLeagueDatasetByCompetitionId(
+        competitionId,
+        competitionName: competition?.name,
+      );
+  final standings = leagueDataset.standings;
   final fallbackStandingsRows = await services.database.readStandingsTableView(
     competitionId,
   );
@@ -182,7 +186,10 @@ final leagueOverviewProvider = FutureProvider.family<
     fixtureRows,
     explicitSeason: standings?.meta.season,
   );
-  final transferItems = _buildTransferItems(competitionPlayers);
+  final transferItems = _buildTransferItems(
+    competitionPlayers,
+    transferFeed: leagueDataset.transferFeed,
+  );
   final newsItems = _buildLeagueNews(
     competitionName: competitionName,
     standingsRows: overallRows,
@@ -490,7 +497,26 @@ List<LeagueNewsItem> _buildLeagueNews({
   return items;
 }
 
-List<LeagueTransferItem> _buildTransferItems(List<CompetitionPlayerView> rows) {
+List<LeagueTransferItem> _buildTransferItems(
+  List<CompetitionPlayerView> rows, {
+  List<LeagueTransferFeedEntry> transferFeed = const [],
+}) {
+  if (transferFeed.isNotEmpty) {
+    final fromTransferFeed = [
+      for (final item in transferFeed)
+        LeagueTransferItem(
+          playerId: item.playerId,
+          playerName: item.playerName,
+          teamId: item.teamId,
+          teamName: item.teamName,
+          position: item.position,
+          updatedAtUtc: item.transferDateUtc,
+        ),
+    ]..sort((a, b) => b.updatedAtUtc.compareTo(a.updatedAtUtc));
+
+    return fromTransferFeed;
+  }
+
   final mapped = <String, LeagueTransferItem>{};
 
   for (final row in rows) {

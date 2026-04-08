@@ -2154,7 +2154,7 @@ class _TransfersTab extends StatelessWidget {
     if (transfers.isEmpty) {
       return const _EmptyTabState(
         message:
-            'No dedicated transfer feed was found in your local import. This tab is ready and will populate when transfer datasets are available.',
+            'No transfer updates were found in your local league data yet.',
       );
     }
 
@@ -2166,7 +2166,7 @@ class _TransfersTab extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(12, 12, 12, 8),
           child: _InfoStrip(
             text:
-                'Transfer feed is not present in current daylySport schema. Showing latest squad/player registry updates from imported league players.',
+                'Showing transfer updates from imported league JSON and latest local player records.',
           ),
         ),
         Expanded(

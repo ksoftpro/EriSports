@@ -14,6 +14,57 @@ const List<String> kPreferredStandingsModeOrder = [
   'xg',
 ];
 
+const Map<String, List<String>> _fullDataFilesByCompetitionId = {
+  '47': ['premier_league_full_data.json'],
+  '73': ['europa_league_full_data.json'],
+  '42': ['champions_league_full_data.json'],
+  '87': ['laliga_full_data.json'],
+  '54': ['bundesliga_full_data.json'],
+  '55': ['serie_a_full_data.json'],
+  '53': ['ligue1_full_data.json'],
+  '132': ['fa_cup_full_data.json'],
+  '536': ['saudi_pro_league_full_data.json'],
+};
+
+class LeagueTransferFeedEntry {
+  const LeagueTransferFeedEntry({
+    required this.playerId,
+    required this.playerName,
+    required this.teamId,
+    required this.teamName,
+    required this.position,
+    required this.transferDateUtc,
+  });
+
+  final String playerId;
+  final String playerName;
+  final String? teamId;
+  final String teamName;
+  final String? position;
+  final DateTime transferDateUtc;
+}
+
+class LeagueCompetitionDataset {
+  const LeagueCompetitionDataset({
+    required this.standings,
+    required this.transferFeed,
+  });
+
+  const LeagueCompetitionDataset.empty()
+    : standings = null,
+      transferFeed = const [];
+
+  final LeagueStandingsLeague? standings;
+  final List<LeagueTransferFeedEntry> transferFeed;
+}
+
+class _LeagueResolvedData {
+  const _LeagueResolvedData({required this.standings, required this.transfers});
+
+  final LeagueStandingsLeague? standings;
+  final List<LeagueTransferFeedEntry> transfers;
+}
+
 String standingsModeLabel(String modeKey) {
   switch (_normalizeKey(modeKey)) {
     case 'all':
@@ -60,6 +111,39 @@ class LeagueStandingsSource {
   LeagueStandingsBundle? _cachedBundle;
   String? _cachedSourcePath;
   DateTime? _cachedModifiedAtUtc;
+  final Map<String, LeagueStandingsLeague?> _cachedLeaguesByCompetitionId = {};
+  final Map<String, List<LeagueTransferFeedEntry>>
+  _cachedLeagueTransfersByCompetitionId = {};
+  final Map<String, String> _cachedLeagueSourcePaths = {};
+  final Map<String, DateTime> _cachedLeagueModifiedAtUtc = {};
+
+  Future<LeagueCompetitionDataset> readLeagueDatasetByCompetitionId(
+    String competitionId, {
+    String? competitionName,
+  }) async {
+    final normalized = _normalizeKey(competitionId);
+    if (normalized.isEmpty) {
+      return const LeagueCompetitionDataset.empty();
+    }
+
+    final directData = await _readLeagueDataFromFullDataFile(
+      normalized,
+      competitionName: competitionName,
+    );
+    if (directData != null &&
+        (directData.standings != null || directData.transfers.isNotEmpty)) {
+      return LeagueCompetitionDataset(
+        standings: directData.standings,
+        transferFeed: directData.transfers,
+      );
+    }
+
+    final bundle = await loadBundle();
+    return LeagueCompetitionDataset(
+      standings: bundle.resolveLeague(normalized),
+      transferFeed: const [],
+    );
+  }
 
   Future<LeagueStandingsBundle> loadBundle() async {
     final sourceFile = await _resolveSourceFile();
@@ -220,21 +304,614 @@ class LeagueStandingsSource {
 
   Future<LeagueStandingsLeague?> readLeagueByCompetitionId(
     String competitionId,
+    {
+    String? competitionName,
+  }
   ) async {
-    final bundle = await loadBundle();
-    return bundle.resolveLeague(competitionId);
+    final dataset = await readLeagueDatasetByCompetitionId(
+      competitionId,
+      competitionName: competitionName,
+    );
+    return dataset.standings;
+  }
+
+  Future<_LeagueResolvedData?> _readLeagueDataFromFullDataFile(
+    String competitionId, {
+    String? competitionName,
+  }) async {
+    final sourceFile = await _resolveLeagueSourceFile(
+      competitionId,
+      competitionName: competitionName,
+    );
+    if (sourceFile == null) {
+      _clearLeagueCacheFor(competitionId);
+      return null;
+    }
+
+    final stat = await sourceFile.stat();
+    final lastModifiedUtc = stat.modified.toUtc();
+    final hasCachedEntry = _cachedLeagueSourcePaths.containsKey(competitionId);
+    if (hasCachedEntry &&
+        _cachedLeagueSourcePaths[competitionId] == sourceFile.path &&
+        _cachedLeagueModifiedAtUtc[competitionId] == lastModifiedUtc) {
+      return _LeagueResolvedData(
+        standings: _cachedLeaguesByCompetitionId[competitionId],
+        transfers:
+            _cachedLeagueTransfersByCompetitionId[competitionId] ?? const [],
+      );
+    }
+
+    try {
+      final raw = await sourceFile.readAsString();
+      final decoded = await compute(jsonDecode, raw);
+      final parsedStandings = _parseSingleLeaguePayload(
+        decoded,
+        fallbackLookupKey: competitionId,
+      );
+      final parsedTransfers = _parseTransferFeedPayload(decoded);
+      if (parsedStandings == null && parsedTransfers.isEmpty) {
+        _clearLeagueCacheFor(competitionId);
+        return null;
+      }
+
+      _cachedLeaguesByCompetitionId[competitionId] = parsedStandings;
+      _cachedLeagueTransfersByCompetitionId[competitionId] =
+          List.unmodifiable(parsedTransfers);
+      _cachedLeagueSourcePaths[competitionId] = sourceFile.path;
+      _cachedLeagueModifiedAtUtc[competitionId] = lastModifiedUtc;
+      return _LeagueResolvedData(
+        standings: parsedStandings,
+        transfers: parsedTransfers,
+      );
+    } catch (_) {
+      _clearLeagueCacheFor(competitionId);
+      return null;
+    }
+  }
+
+  Future<File?> _resolveLeagueSourceFile(
+    String competitionId, {
+    String? competitionName,
+  }) async {
+    try {
+      final root = await _daylySportLocator.getOrCreateDaylySportDirectory();
+      if (!await root.exists()) {
+        return null;
+      }
+
+      final cacheKey = _leagueFileCacheKey(competitionId);
+      final cached = cacheStore?.readLocatedFile(root.path, cacheKey);
+      if (cached != null) {
+        final cachedFile = File(cached.path);
+        if (await cachedFile.exists()) {
+          final stat = await cachedFile.stat();
+          if (stat.modified.toUtc().millisecondsSinceEpoch ==
+              cached.modifiedAtEpochMs) {
+            return cachedFile;
+          }
+        }
+      }
+
+      final expectedNames = _candidateLeagueFileNames(
+        competitionId,
+        competitionName: competitionName,
+      );
+      final namedMatch = await _findLeagueFileByName(root, expectedNames);
+      if (namedMatch != null) {
+        await _cacheLocatedLeagueFile(root.path, competitionId, namedMatch);
+        return namedMatch;
+      }
+
+      final scannedMatch = await _scanLeagueFileByMetadata(root, competitionId);
+      if (scannedMatch != null) {
+        await _cacheLocatedLeagueFile(root.path, competitionId, scannedMatch);
+        return scannedMatch;
+      }
+
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Set<String> _candidateLeagueFileNames(
+    String competitionId, {
+    String? competitionName,
+  }) {
+    final expected = <String>{};
+
+    final mapped = _fullDataFilesByCompetitionId[competitionId];
+    if (mapped != null && mapped.isNotEmpty) {
+      expected.addAll(mapped.map((name) => name.toLowerCase()));
+    }
+
+    final byName = _fullDataFileNameFromCompetitionName(competitionName);
+    if (byName != null) {
+      expected.add(byName.toLowerCase());
+    }
+
+    final slug = competitionId
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    if (slug.isNotEmpty) {
+      expected.add('${slug}_full_data.json');
+    }
+
+    return expected;
+  }
+
+  String? _fullDataFileNameFromCompetitionName(String? competitionName) {
+    if (competitionName == null || competitionName.trim().isEmpty) {
+      return null;
+    }
+
+    final normalized = competitionName
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ');
+
+    if (normalized.contains('premier league')) {
+      return 'premier_league_full_data.json';
+    }
+    if (normalized.contains('champions league')) {
+      return 'champions_league_full_data.json';
+    }
+    if (normalized.contains('europa league')) {
+      return 'europa_league_full_data.json';
+    }
+    if (normalized.contains('ligue 1')) {
+      return 'ligue1_full_data.json';
+    }
+    if (normalized.contains('bundesliga')) {
+      return 'bundesliga_full_data.json';
+    }
+    if (normalized.contains('serie a')) {
+      return 'serie_a_full_data.json';
+    }
+    if (normalized == 'laliga' || normalized.contains('la liga')) {
+      return 'laliga_full_data.json';
+    }
+    if (normalized.contains('saudi pro league') ||
+        normalized.contains('saudi professional league') ||
+        normalized.contains('roshn saudi league')) {
+      return 'saudi_pro_league_full_data.json';
+    }
+    if (normalized.contains('fa cup') ||
+        normalized.contains('english fa cup')) {
+      return 'fa_cup_full_data.json';
+    }
+
+    return null;
+  }
+
+  Future<File?> _findLeagueFileByName(
+    Directory root,
+    Set<String> expectedNames,
+  ) async {
+    if (expectedNames.isEmpty) {
+      return null;
+    }
+
+    final candidateDirs = [
+      root,
+      Directory('${root.path}${Platform.pathSeparator}assets'),
+      Directory('${root.path}${Platform.pathSeparator}standings'),
+      Directory('${root.path}${Platform.pathSeparator}json'),
+    ];
+
+    final matches = <File>[];
+    for (final directory in candidateDirs) {
+      if (!await directory.exists()) {
+        continue;
+      }
+
+      for (final expected in expectedNames) {
+        final file = File('${directory.path}${Platform.pathSeparator}$expected');
+        if (await file.exists()) {
+          matches.add(file);
+        }
+      }
+    }
+
+    if (matches.isEmpty) {
+      await for (final entity in root.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File) {
+          continue;
+        }
+
+        final lowerName = _filename(entity.path).toLowerCase();
+        if (expectedNames.contains(lowerName)) {
+          matches.add(entity);
+        }
+      }
+    }
+
+    if (matches.isEmpty) {
+      return null;
+    }
+
+    matches.sort((a, b) {
+      final aTime = a.statSync().modified;
+      final bTime = b.statSync().modified;
+      return bTime.compareTo(aTime);
+    });
+    return matches.first;
+  }
+
+  Future<File?> _scanLeagueFileByMetadata(
+    Directory root,
+    String competitionId,
+  ) async {
+    final matches = <File>[];
+    await for (final entity in root.list(recursive: true, followLinks: false)) {
+      if (entity is! File) {
+        continue;
+      }
+
+      final lowerName = _filename(entity.path).toLowerCase();
+      if (!_isPotentialLeagueFullDataFile(lowerName)) {
+        continue;
+      }
+
+      final isMatch = await _fileMatchesCompetitionId(entity, competitionId);
+      if (isMatch) {
+        matches.add(entity);
+      }
+    }
+
+    if (matches.isEmpty) {
+      return null;
+    }
+
+    matches.sort((a, b) {
+      final aTime = a.statSync().modified;
+      final bTime = b.statSync().modified;
+      return bTime.compareTo(aTime);
+    });
+    return matches.first;
+  }
+
+  bool _isPotentialLeagueFullDataFile(String lowerName) {
+    if (!lowerName.endsWith('_full_data.json')) {
+      return false;
+    }
+
+    if (lowerName == 'fixtures_full_data.json') {
+      return false;
+    }
+
+    if (lowerName == 'fotmob_full_player_stats.json') {
+      return false;
+    }
+
+    return !lowerName.startsWith('top_standings_full_data');
+  }
+
+  Future<bool> _fileMatchesCompetitionId(
+    File file,
+    String competitionId,
+  ) async {
+    try {
+      final decoded = await compute(jsonDecode, await file.readAsString());
+      if (decoded is! Map<String, dynamic>) {
+        return false;
+      }
+
+      final meta = decoded['meta'];
+      if (meta is! Map<String, dynamic>) {
+        return false;
+      }
+
+      final leagueId = _normalizeKey(_stringValue(meta['leagueId']));
+      if (leagueId == competitionId) {
+        return true;
+      }
+
+      final slug = _normalizeKey(
+        _stringValue(meta['slug']) ?? _stringValue(meta['leagueKey']),
+      );
+      return slug == competitionId;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  LeagueStandingsLeague? _parseSingleLeaguePayload(
+    dynamic decoded, {
+    required String fallbackLookupKey,
+  }) {
+    if (decoded is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final meta =
+        decoded['meta'] is Map<String, dynamic>
+            ? decoded['meta'] as Map<String, dynamic>
+            : const <String, dynamic>{};
+    final leagueKey =
+        _stringValue(meta['leagueKey']) ??
+        _stringValue(meta['slug']) ??
+        fallbackLookupKey;
+
+    final directStandings = decoded['standings'];
+    if (directStandings is Map<String, dynamic>) {
+      return LeagueStandingsLeague.fromJson(leagueKey, {
+        'meta': meta,
+        'standings': directStandings,
+      });
+    }
+
+    final raw = decoded['raw'];
+    if (raw is Map<String, dynamic>) {
+      final standings = _extractStandingsFromRaw(raw);
+      if (standings != null) {
+        return LeagueStandingsLeague.fromJson(leagueKey, {
+          'meta': meta,
+          'standings': standings,
+        });
+      }
+    }
+
+    final bundle = LeagueStandingsBundle.fromJson(decoded);
+    return bundle.resolveLeague(fallbackLookupKey);
+  }
+
+  List<LeagueTransferFeedEntry> _parseTransferFeedPayload(dynamic decoded) {
+    if (decoded is! Map<String, dynamic>) {
+      return const [];
+    }
+
+    final raw = decoded['raw'];
+    if (raw is! Map<String, dynamic>) {
+      return const [];
+    }
+
+    return _extractTransferFeedFromRaw(raw);
+  }
+
+  List<LeagueTransferFeedEntry> _extractTransferFeedFromRaw(
+    Map<String, dynamic> raw,
+  ) {
+    final transferRoot = _mapValue(raw['transfers']);
+    if (transferRoot == null) {
+      return const [];
+    }
+
+    final rawRows = transferRoot['data'];
+    if (rawRows is! List) {
+      return const [];
+    }
+
+    final parsed = <LeagueTransferFeedEntry>[];
+    for (final row in rawRows) {
+      final data = _mapValue(row);
+      if (data == null) {
+        continue;
+      }
+
+      final playerId = _stringValue(data['playerId']) ?? _stringValue(data['id']);
+      final playerName = _stringValue(data['name']) ?? _stringValue(data['playerName']);
+      if (playerId == null || playerName == null) {
+        continue;
+      }
+
+      final toClubName = _stringValue(data['toClub']);
+      final fromClubName = _stringValue(data['fromClub']);
+      final toClubId = _sanitizeTeamId(_stringValue(data['toClubId']));
+      final fromClubId = _sanitizeTeamId(_stringValue(data['fromClubId']));
+      final resolvedTeamId = toClubId ?? fromClubId;
+      final resolvedTeamName =
+          toClubName ?? fromClubName ?? _stringValue(data['teamName']) ?? 'Unknown Team';
+
+      final positionMap = _mapValue(data['position']);
+      final position =
+          _stringValue(positionMap?['label']) ??
+          _stringValue(positionMap?['key']) ??
+          _stringValue(data['position']);
+
+      final transferDate =
+          _dateTimeValue(data['transferDate']) ??
+          _dateTimeValue(data['fromDate']) ??
+          _dateTimeValue(data['toDate']) ??
+          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+
+      parsed.add(
+        LeagueTransferFeedEntry(
+          playerId: playerId,
+          playerName: playerName,
+          teamId: resolvedTeamId,
+          teamName: resolvedTeamName,
+          position: position,
+          transferDateUtc: transferDate,
+        ),
+      );
+    }
+
+    parsed.sort((a, b) => b.transferDateUtc.compareTo(a.transferDateUtc));
+    return parsed;
+  }
+
+  String? _sanitizeTeamId(String? value) {
+    if (value == null || value.isEmpty || value == '-1' || value == '0') {
+      return null;
+    }
+    return value;
+  }
+
+  Map<String, dynamic>? _extractStandingsFromRaw(Map<String, dynamic> raw) {
+    final dataCandidates = _collectRawTableDataCandidates(raw['table']);
+    Map<String, dynamic>? fallback;
+
+    for (final candidate in dataCandidates) {
+      final table = candidate['table'];
+      if (table is! Map<String, dynamic>) {
+        continue;
+      }
+
+      final normalizedTable = _normalizeModeTable(table);
+      if (normalizedTable.isEmpty) {
+        continue;
+      }
+
+      final standings = <String, dynamic>{
+        'table': normalizedTable,
+      };
+
+      final allRows = normalizedTable['all'];
+      if (allRows != null && allRows.isNotEmpty) {
+        standings['flatTable'] = allRows;
+      }
+
+      final tableType = _stringValue(candidate['tableType']);
+      if (tableType != null) {
+        standings['tableType'] = tableType;
+      }
+
+      if (candidate['isCurrentSeason'] == true) {
+        return standings;
+      }
+
+      fallback ??= standings;
+    }
+
+    return fallback;
+  }
+
+  List<Map<String, dynamic>> _collectRawTableDataCandidates(dynamic tableRoot) {
+    final candidates = <Map<String, dynamic>>[];
+
+    void addCandidate(dynamic value) {
+      if (value is Map<String, dynamic>) {
+        candidates.add(value);
+        return;
+      }
+
+      if (value is List) {
+        for (final item in value) {
+          if (item is Map<String, dynamic>) {
+            candidates.add(item);
+          }
+        }
+      }
+    }
+
+    if (tableRoot is Map<String, dynamic>) {
+      addCandidate(tableRoot['data']);
+      if (tableRoot['table'] is Map<String, dynamic>) {
+        candidates.add(tableRoot);
+      }
+      return candidates;
+    }
+
+    if (tableRoot is List) {
+      for (final section in tableRoot) {
+        if (section is! Map<String, dynamic>) {
+          continue;
+        }
+
+        addCandidate(section['data']);
+        if (section['table'] is Map<String, dynamic>) {
+          candidates.add(section);
+        }
+      }
+    }
+
+    return candidates;
+  }
+
+  Map<String, List<Map<String, dynamic>>> _normalizeModeTable(
+    Map<String, dynamic> rawTable,
+  ) {
+    final normalized = <String, List<Map<String, dynamic>>>{};
+    for (final entry in rawTable.entries) {
+      final modeKey = _normalizeKey(entry.key);
+      if (modeKey.isEmpty || entry.value is! List) {
+        continue;
+      }
+
+      final rows = <Map<String, dynamic>>[];
+      for (final row in entry.value as List<dynamic>) {
+        if (row is Map<String, dynamic>) {
+          rows.add(row);
+          continue;
+        }
+
+        if (row is Map) {
+          rows.add(row.map((key, value) => MapEntry('$key', value)));
+        }
+      }
+
+      if (rows.isNotEmpty) {
+        normalized[modeKey] = rows;
+      }
+    }
+
+    return normalized;
+  }
+
+  String _leagueFileCacheKey(String competitionId) {
+    return 'league_full_data::$competitionId';
+  }
+
+  Future<void> _cacheLocatedLeagueFile(
+    String scope,
+    String competitionId,
+    File file,
+  ) async {
+    if (cacheStore == null) {
+      return;
+    }
+
+    final stat = await file.stat();
+    await cacheStore!.writeLocatedFile(
+      scope,
+      _leagueFileCacheKey(competitionId),
+      CachedLocatedFile(
+        path: file.path,
+        modifiedAtEpochMs: stat.modified.toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  void _clearLeagueCacheFor(String competitionId) {
+    _cachedLeaguesByCompetitionId.remove(competitionId);
+    _cachedLeagueTransfersByCompetitionId.remove(competitionId);
+    _cachedLeagueSourcePaths.remove(competitionId);
+    _cachedLeagueModifiedAtUtc.remove(competitionId);
   }
 
   void invalidateCache({bool clearPersistent = false}) {
+    final idsToClear = <String>{
+      ..._fullDataFilesByCompetitionId.keys,
+      ..._cachedLeagueSourcePaths.keys,
+    };
+
     _cachedBundle = null;
     _cachedSourcePath = null;
     _cachedModifiedAtUtc = null;
+    _cachedLeaguesByCompetitionId.clear();
+    _cachedLeagueTransfersByCompetitionId.clear();
+    _cachedLeagueSourcePaths.clear();
+    _cachedLeagueModifiedAtUtc.clear();
+
     if (clearPersistent) {
       unawaited(
         _daylySportLocator
             .getOrCreateDaylySportDirectory()
-            .then((root) {
-              return cacheStore?.writeLocatedFile(root.path, filePrefix, null);
+            .then((root) async {
+              await cacheStore?.writeLocatedFile(root.path, filePrefix, null);
+              for (final competitionId in idsToClear) {
+                await cacheStore?.writeLocatedFile(
+                  root.path,
+                  _leagueFileCacheKey(competitionId),
+                  null,
+                );
+              }
             })
             .catchError((_) {}),
       );
@@ -674,6 +1351,29 @@ String? _stringValue(dynamic value) {
     return value.toString();
   }
   return null;
+}
+
+Map<String, dynamic>? _mapValue(dynamic value) {
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    return value.map((key, val) => MapEntry('$key', val));
+  }
+  return null;
+}
+
+DateTime? _dateTimeValue(dynamic value) {
+  if (value is DateTime) {
+    return value.toUtc();
+  }
+
+  final text = _stringValue(value);
+  if (text == null) {
+    return null;
+  }
+
+  return DateTime.tryParse(text)?.toUtc();
 }
 
 int? _intValue(dynamic value) {
