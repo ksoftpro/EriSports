@@ -11,6 +11,8 @@ class DaylySportLocator {
 
   static const _customFolderPrefKey = 'daylysport.custom_json_folder';
   final SharedPreferences? _sharedPreferences;
+  Directory? _cachedResolvedDirectory;
+  bool _androidPermissionValidated = false;
 
   String? readCustomDirectoryPath() {
     final path = _sharedPreferences?.getString(_customFolderPrefKey);
@@ -21,6 +23,8 @@ class DaylySportLocator {
   }
 
   Future<void> setCustomDirectoryPath(String? path) async {
+    _cachedResolvedDirectory = null;
+
     final prefs = _sharedPreferences;
     if (prefs == null) {
       return;
@@ -35,8 +39,21 @@ class DaylySportLocator {
   }
 
   Future<Directory> getOrCreateDaylySportDirectory() async {
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid && !_androidPermissionValidated) {
       await _ensureAndroidStoragePermission();
+      _androidPermissionValidated = true;
+    }
+
+    final cached = _cachedResolvedDirectory;
+    if (cached != null) {
+      try {
+        if (await cached.exists()) {
+          return cached;
+        }
+      } catch (_) {
+        // Ignore stale cache and continue with normal discovery.
+      }
+      _cachedResolvedDirectory = null;
     }
 
     final customPath = readCustomDirectoryPath();
@@ -46,6 +63,7 @@ class DaylySportLocator {
         if (!await customDir.exists()) {
           await customDir.create(recursive: true);
         }
+        _cachedResolvedDirectory = customDir;
         return customDir;
       } catch (_) {
         // Fall back to default candidate lookup if custom path is inaccessible.
@@ -60,6 +78,7 @@ class DaylySportLocator {
         if (!await candidate.exists()) {
           await candidate.create(recursive: true);
         }
+        _cachedResolvedDirectory = candidate;
         return candidate;
       } catch (error) {
         lastError = error;

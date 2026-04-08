@@ -270,12 +270,13 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await m.createAll();
+      await _createPerformanceIndexes();
     },
     onUpgrade: (m, from, to) async {
       if (from < 2) {
@@ -285,8 +286,25 @@ class AppDatabase extends _$AppDatabase {
       if (from < 3) {
         await m.createTable(topPlayerStats);
       }
+
+      await _createPerformanceIndexes();
     },
   );
+
+  Future<void> _createPerformanceIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_players_team_name ON players (team_id, name)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_matches_home_team_kickoff ON matches (home_team_id, kickoff_utc DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_matches_away_team_kickoff ON matches (away_team_id, kickoff_utc DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_matches_competition_kickoff ON matches (competition_id, kickoff_utc DESC)',
+    );
+  }
 
   Future<List<MatchRow>> readHomeMatchesByDate(DateTime dayUtc) {
     final start = DateTime.utc(dayUtc.year, dayUtc.month, dayUtc.day);
@@ -758,12 +776,10 @@ class AppDatabase extends _$AppDatabase {
     final homeTeam = alias(teams, 'home_feed_all_home_team');
     final awayTeam = alias(teams, 'home_feed_all_away_team');
 
-    final query =
-        select(matches).join([
-          leftOuterJoin(homeTeam, homeTeam.id.equalsExp(matches.homeTeamId)),
-          leftOuterJoin(awayTeam, awayTeam.id.equalsExp(matches.awayTeamId)),
-        ])
-          ..orderBy([OrderingTerm.asc(matches.kickoffUtc)]);
+    final query = select(matches).join([
+      leftOuterJoin(homeTeam, homeTeam.id.equalsExp(matches.homeTeamId)),
+      leftOuterJoin(awayTeam, awayTeam.id.equalsExp(matches.awayTeamId)),
+    ])..orderBy([OrderingTerm.asc(matches.kickoffUtc)]);
 
     if (limit != null) {
       query.limit(limit);

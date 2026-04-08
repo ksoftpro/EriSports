@@ -23,19 +23,55 @@ class TeamScreen extends ConsumerStatefulWidget {
 class _TeamScreenState extends ConsumerState<TeamScreen> {
   String _selectedTableMode = 'all';
   String? _selectedSeason;
+  bool _enableDeferredDetailLoad = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleDeferredDetailLoad();
+  }
+
+  @override
+  void didUpdateWidget(covariant TeamScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.teamId != widget.teamId) {
+      _enableDeferredDetailLoad = false;
+      _scheduleDeferredDetailLoad();
+    }
+  }
+
+  void _scheduleDeferredDetailLoad() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _enableDeferredDetailLoad) {
+        return;
+      }
+      setState(() {
+        _enableDeferredDetailLoad = true;
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final teamAsync = ref.watch(teamDetailProvider(widget.teamId));
+    final shellAsync = ref.watch(teamShellProvider(widget.teamId));
+    final detailAsync =
+        _enableDeferredDetailLoad
+            ? ref.watch(teamDetailProvider(widget.teamId))
+            : const AsyncLoading<TeamDetailState>();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
-      body: teamAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+      body: shellAsync.when(
+        loading: () => const _TeamShellLoadingView(),
         error:
             (error, stackTrace) =>
                 const Center(child: Text('Unable to load local team data.')),
-        data: (state) {
+        data: (shellState) {
+          final state = detailAsync.valueOrNull ?? shellState;
+          final isEnhancing =
+              _enableDeferredDetailLoad &&
+              detailAsync.valueOrNull == null &&
+              !detailAsync.hasError;
           final resolver = ref.read(appServicesProvider).assetResolver;
           final tabs =
               state.tabs.isNotEmpty
@@ -84,6 +120,10 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
                         ),
                         const SizedBox(height: 10),
                         _TeamTabsBar(tabs: tabs),
+                        if (isEnhancing) ...[
+                          const SizedBox(height: 8),
+                          const LinearProgressIndicator(minHeight: 2.2),
+                        ],
                         const SizedBox(height: 10),
                         Expanded(
                           child: Container(
@@ -213,6 +253,123 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     setState(() {
       _selectedSeason = selected;
     });
+  }
+}
+
+class _TeamShellLoadingView extends StatelessWidget {
+  const _TeamShellLoadingView();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        child: Column(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF273248), Color(0xFF3D4B66)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              child: Row(
+                children: [
+                  _skeletonBox(width: 38, height: 38, circular: true),
+                  const SizedBox(width: 12),
+                  _skeletonBox(width: 64, height: 64, radius: 14),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _skeletonBox(width: 180, height: 20),
+                        const SizedBox(height: 8),
+                        _skeletonBox(width: 120, height: 12),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              height: 46,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFDDE1E6)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: const [
+                  _TabGhost(width: 72),
+                  SizedBox(width: 8),
+                  _TabGhost(width: 70),
+                  SizedBox(width: 8),
+                  _TabGhost(width: 76),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFDDE1E6)),
+                ),
+                child: const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _skeletonBox({
+    required double width,
+    required double height,
+    bool circular = false,
+    double radius = 8,
+  }) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.23),
+        shape: circular ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: circular ? null : BorderRadius.circular(radius),
+      ),
+    );
+  }
+}
+
+class _TabGhost extends StatelessWidget {
+  const _TabGhost({required this.width});
+
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: 14,
+      decoration: BoxDecoration(
+        color: const Color(0xFFDFE3E8),
+        borderRadius: BorderRadius.circular(999),
+      ),
+    );
   }
 }
 

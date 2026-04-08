@@ -6,7 +6,14 @@ import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-enum DaylysportSyncPhase { idle, scanning, synchronizing, success, upToDate, failed }
+enum DaylysportSyncPhase {
+  idle,
+  scanning,
+  synchronizing,
+  success,
+  upToDate,
+  failed,
+}
 
 class DaylysportSyncState {
   const DaylysportSyncState({
@@ -97,9 +104,7 @@ class DaylysportSyncState {
 class DaylysportRefreshBus extends Notifier<Map<DaylysportDataDomain, int>> {
   @override
   Map<DaylysportDataDomain, int> build() {
-    return {
-      for (final domain in DaylysportDataDomain.values) domain: 0,
-    };
+    return {for (final domain in DaylysportDataDomain.values) domain: 0};
   }
 
   void bump(Iterable<DaylysportDataDomain> domains) {
@@ -120,14 +125,12 @@ final daylysportRefreshBusProvider =
       DaylysportRefreshBus.new,
     );
 
-final daylysportRefreshTokenProvider = Provider.family<int, DaylysportDataDomain>((
-  ref,
-  domain,
-) {
-  return ref.watch(
-    daylysportRefreshBusProvider.select((state) => state[domain] ?? 0),
-  );
-});
+final daylysportRefreshTokenProvider =
+    Provider.family<int, DaylysportDataDomain>((ref, domain) {
+      return ref.watch(
+        daylysportRefreshBusProvider.select((state) => state[domain] ?? 0),
+      );
+    });
 
 final dataRefreshTokenProvider = Provider<int>((ref) {
   var total = 0;
@@ -295,6 +298,13 @@ class DaylysportSyncController extends Notifier<DaylysportSyncState> {
 
     if (affectedDomains.contains(DaylysportDataDomain.standings)) {
       services.leagueStandingsSource.invalidateCache(clearPersistent: true);
+    }
+
+    if (affectedDomains.contains(DaylysportDataDomain.catalog) ||
+        affectedDomains.contains(DaylysportDataDomain.standings) ||
+        affectedDomains.contains(DaylysportDataDomain.matches) ||
+        affectedDomains.contains(DaylysportDataDomain.playerStats)) {
+      services.teamRawSource.invalidateCache(clearPersistent: true);
     }
 
     if (affectedDomains.isEmpty) {

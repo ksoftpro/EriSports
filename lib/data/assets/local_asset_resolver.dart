@@ -86,6 +86,35 @@ class LocalAssetResolver {
     }
   }
 
+  Future<void> warmUp({
+    bool includeTeamAssets = true,
+    bool includePlayerAssets = true,
+  }) async {
+    await _ensureBundledAssetsLoaded();
+    await _ensureBundledManifestLoaded();
+
+    if (_localScanDisabled) {
+      return;
+    }
+
+    try {
+      if (includeTeamAssets) {
+        await _ensureLocalFilesLoaded(SportsAssetType.teams);
+      }
+      if (includePlayerAssets) {
+        await _ensureLocalFilesLoaded(SportsAssetType.players);
+      }
+    } catch (_) {
+      _localScanDisabled = true;
+      if (includeTeamAssets) {
+        _localFilesByType[SportsAssetType.teams] = const [];
+      }
+      if (includePlayerAssets) {
+        _localFilesByType[SportsAssetType.players] = const [];
+      }
+    }
+  }
+
   Future<ResolvedImageRef?> resolveByEntityId({
     required SportsAssetType type,
     required String entityId,

@@ -78,6 +78,66 @@ class TeamRawBundle {
   }
 }
 
+class _CachedTeamRawEntry {
+  const _CachedTeamRawEntry({
+    required this.normalizedTeamId,
+    required this.teamId,
+    required this.sourcePath,
+    required this.modifiedAtEpochMs,
+    required this.cachedAtEpochMs,
+    required this.meta,
+    required this.raw,
+  });
+
+  final String normalizedTeamId;
+  final String teamId;
+  final String sourcePath;
+  final int modifiedAtEpochMs;
+  final int cachedAtEpochMs;
+  final Map<String, dynamic> meta;
+  final Map<String, dynamic> raw;
+
+  Map<String, dynamic> toJson() => {
+    'normalizedTeamId': normalizedTeamId,
+    'teamId': teamId,
+    'sourcePath': sourcePath,
+    'modifiedAtEpochMs': modifiedAtEpochMs,
+    'cachedAtEpochMs': cachedAtEpochMs,
+    'meta': meta,
+    'raw': raw,
+  };
+
+  static _CachedTeamRawEntry? fromJson(Map<String, dynamic> value) {
+    final normalizedTeamId = _stringValue(value['normalizedTeamId']);
+    final teamId = _stringValue(value['teamId']);
+    final sourcePath = _stringValue(value['sourcePath']);
+    final modifiedAtEpochMs = value['modifiedAtEpochMs'];
+    final cachedAtEpochMs = value['cachedAtEpochMs'];
+    final meta = _asMap(value['meta']);
+    final raw = _asMap(value['raw']);
+
+    if (normalizedTeamId == null ||
+        teamId == null ||
+        sourcePath == null ||
+        modifiedAtEpochMs is! int ||
+        cachedAtEpochMs is! int ||
+        meta == null ||
+        raw == null) {
+      return null;
+    }
+
+    return _CachedTeamRawEntry(
+      normalizedTeamId: normalizedTeamId,
+      teamId: teamId,
+      sourcePath: sourcePath,
+      modifiedAtEpochMs: modifiedAtEpochMs,
+      cachedAtEpochMs: cachedAtEpochMs,
+      meta: meta,
+      raw: raw,
+    );
+  }
+}
+
 class TeamRawSource {
   TeamRawSource({
     required DaylySportLocator daylySportLocator,
@@ -88,14 +148,43 @@ class TeamRawSource {
   final DaylySportLocator _daylySportLocator;
   final DaylySportCacheStore? cacheStore;
   final String cacheKey;
+  static const _teamEntryCacheKey = 'team_payload_entry_cache_v1';
+  static const _teamEntryCacheLimit = 12;
 
   TeamRawBundle? _cachedBundle;
   String? _cachedSourcePath;
   DateTime? _cachedModifiedAtUtc;
 
   Future<TeamRawEntry?> readTeamById(String teamId) async {
+    final normalizedTeamId = _normalizeTeamId(teamId);
+    if (normalizedTeamId.isEmpty) {
+      return null;
+    }
+
+    final memoryHit = _cachedBundle?.resolveTeam(normalizedTeamId);
+    if (memoryHit != null) {
+      return memoryHit;
+    }
+
+    final persistedHit = await _readPersistedTeamEntry(normalizedTeamId);
+    if (persistedHit != null) {
+      return persistedHit;
+    }
+
     final bundle = await loadBundle();
-    return bundle.resolveTeam(teamId);
+    final resolved = bundle.resolveTeam(normalizedTeamId);
+    if (resolved != null) {
+      await _persistTeamEntry(resolved);
+    }
+    return resolved;
+  }
+
+  Future<void> warmUp({bool preloadBundle = false}) async {
+    if (preloadBundle) {
+      await loadBundle();
+      return;
+    }
+    await _resolveCandidateFiles();
   }
 
   Future<TeamRawBundle> loadBundle() async {
@@ -203,19 +292,164 @@ class TeamRawSource {
       byPath[file.path] = file;
     }
 
-    final deduped = byPath.values.toList(growable: false)
-      ..sort((a, b) {
-        final aName = _fileName(a.path).toLowerCase();
-        final bName = _fileName(b.path).toLowerCase();
-        final aPriority = _candidatePriority(aName);
-        final bPriority = _candidatePriority(bName);
-        if (aPriority != bPriority) {
-          return aPriority.compareTo(bPriority);
-        }
-        return aName.compareTo(bName);
-      });
+    final deduped = byPath.values.toList(growable: false)..sort((a, b) {
+      final aName = _fileName(a.path).toLowerCase();
+      final bName = _fileName(b.path).toLowerCase();
+      final aPriority = _candidatePriority(aName);
+      final bPriority = _candidatePriority(bName);
+      if (aPriority != bPriority) {
+        return aPriority.compareTo(bPriority);
+      }
+      return aName.compareTo(bName);
+    });
 
     return deduped;
+  }
+
+  Future<TeamRawEntry?> _readPersistedTeamEntry(String normalizedTeamId) async {
+    if (cacheStore == null) {
+      return null;
+    }
+
+    final root = await _daylySportLocator.getOrCreateDaylySportDirectory();
+    final located = cacheStore!.readLocatedFile(root.path, cacheKey);
+    if (located == null) {
+      return null;
+    }
+
+    final sourceFile = File(located.path);
+    if (!await sourceFile.exists()) {
+      return null;
+    }
+
+    final sourceStat = await sourceFile.stat();
+    final sourceModifiedMs = sourceStat.modified.toUtc().millisecondsSinceEpoch;
+    if (sourceModifiedMs != located.modifiedAtEpochMs) {
+      return null;
+    }
+
+    final cachedEntries = _readCachedTeamEntries(root.path);
+    _CachedTeamRawEntry? hit;
+    for (final entry in cachedEntries) {
+      if (entry.normalizedTeamId != normalizedTeamId) {
+        continue;
+      }
+      if (entry.sourcePath != sourceFile.path) {
+        continue;
+      }
+      if (entry.modifiedAtEpochMs != sourceModifiedMs) {
+        continue;
+      }
+      hit = entry;
+      break;
+    }
+
+    if (hit == null) {
+      return null;
+    }
+
+    _cachedSourcePath = sourceFile.path;
+    _cachedModifiedAtUtc = DateTime.fromMillisecondsSinceEpoch(
+      sourceModifiedMs,
+      isUtc: true,
+    );
+
+    await _persistCachedTeamEntries(root.path, [
+      _CachedTeamRawEntry(
+        normalizedTeamId: hit.normalizedTeamId,
+        teamId: hit.teamId,
+        sourcePath: hit.sourcePath,
+        modifiedAtEpochMs: hit.modifiedAtEpochMs,
+        cachedAtEpochMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+        meta: hit.meta,
+        raw: hit.raw,
+      ),
+      ...cachedEntries.where(
+        (entry) =>
+            !(entry.normalizedTeamId == hit!.normalizedTeamId &&
+                entry.sourcePath == hit.sourcePath &&
+                entry.modifiedAtEpochMs == hit.modifiedAtEpochMs),
+      ),
+    ]);
+
+    return TeamRawEntry(teamId: hit.teamId, meta: hit.meta, raw: hit.raw);
+  }
+
+  Future<void> _persistTeamEntry(TeamRawEntry entry) async {
+    if (cacheStore == null ||
+        _cachedSourcePath == null ||
+        _cachedModifiedAtUtc == null) {
+      return;
+    }
+
+    final root = await _daylySportLocator.getOrCreateDaylySportDirectory();
+    final normalizedTeamId = _normalizeTeamId(entry.teamId);
+    if (normalizedTeamId.isEmpty) {
+      return;
+    }
+
+    final modifiedAtMs = _cachedModifiedAtUtc!.millisecondsSinceEpoch;
+    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final cachedEntries = _readCachedTeamEntries(root.path)
+        .where(
+          (item) =>
+              !(item.normalizedTeamId == normalizedTeamId &&
+                  item.sourcePath == _cachedSourcePath &&
+                  item.modifiedAtEpochMs == modifiedAtMs),
+        )
+        .toList(growable: true);
+
+    cachedEntries.insert(
+      0,
+      _CachedTeamRawEntry(
+        normalizedTeamId: normalizedTeamId,
+        teamId: entry.teamId,
+        sourcePath: _cachedSourcePath!,
+        modifiedAtEpochMs: modifiedAtMs,
+        cachedAtEpochMs: nowMs,
+        meta: entry.meta,
+        raw: entry.raw,
+      ),
+    );
+
+    await _persistCachedTeamEntries(root.path, cachedEntries);
+  }
+
+  List<_CachedTeamRawEntry> _readCachedTeamEntries(String scope) {
+    if (cacheStore == null) {
+      return const [];
+    }
+
+    final rawEntries = cacheStore!.readJsonObjectList(
+      scope,
+      _teamEntryCacheKey,
+    );
+    final entries = <_CachedTeamRawEntry>[];
+    for (final rawEntry in rawEntries) {
+      final parsed = _CachedTeamRawEntry.fromJson(rawEntry);
+      if (parsed != null) {
+        entries.add(parsed);
+      }
+    }
+
+    entries.sort((a, b) => b.cachedAtEpochMs.compareTo(a.cachedAtEpochMs));
+    return entries;
+  }
+
+  Future<void> _persistCachedTeamEntries(
+    String scope,
+    List<_CachedTeamRawEntry> entries,
+  ) {
+    if (cacheStore == null) {
+      return Future.value();
+    }
+
+    final trimmed = entries.take(_teamEntryCacheLimit).toList(growable: false);
+    return cacheStore!.writeJsonObjectList(
+      scope,
+      _teamEntryCacheKey,
+      trimmed.map((entry) => entry.toJson()).toList(growable: false),
+    );
   }
 
   Future<void> _cacheLocatedFile(File file, DateTime modifiedAtUtc) async {
@@ -294,8 +528,13 @@ class TeamRawSource {
       unawaited(
         _daylySportLocator
             .getOrCreateDaylySportDirectory()
-            .then((root) {
-              return cacheStore?.writeLocatedFile(root.path, cacheKey, null);
+            .then((root) async {
+              await cacheStore?.writeLocatedFile(root.path, cacheKey, null);
+              await cacheStore?.writeJsonObjectList(
+                root.path,
+                _teamEntryCacheKey,
+                const <Map<String, dynamic>>[],
+              );
             })
             .catchError((_) {}),
       );
@@ -310,9 +549,7 @@ Map<String, dynamic>? _asMap(dynamic value) {
     return value;
   }
   if (value is Map) {
-    return {
-      for (final entry in value.entries) '${entry.key}': entry.value,
-    };
+    return {for (final entry in value.entries) '${entry.key}': entry.value};
   }
   return null;
 }

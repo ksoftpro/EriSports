@@ -144,8 +144,8 @@ class TeamTableData {
         preferred.add(mode);
       }
     }
-    final custom = keys.where((key) => !preferred.contains(key)).toList()
-      ..sort();
+    final custom =
+        keys.where((key) => !preferred.contains(key)).toList()..sort();
     return [...preferred, ...custom];
   }
 
@@ -319,7 +319,7 @@ final teamHeaderFollowingProvider = StateProvider.family<bool, String>(
   (ref, _) => false,
 );
 
-final teamDetailProvider = FutureProvider.family<TeamDetailState, String>((
+final teamShellProvider = FutureProvider.family<TeamDetailState, String>((
   ref,
   teamId,
 ) async {
@@ -327,36 +327,97 @@ final teamDetailProvider = FutureProvider.family<TeamDetailState, String>((
   ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.matches));
   ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
   ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.standings));
+
   final services = ref.read(appServicesProvider);
-
-  final rawEntry = await services.teamRawSource.readTeamById(teamId);
-  final rawTeam = rawEntry?.raw;
-  final rawDetails = _asMap(rawTeam?['details']);
-
   final team = await services.database.readTeamById(teamId);
   if (team == null) {
     throw StateError('Team not found: $teamId');
   }
 
-  final competition =
+  final competitionFuture =
       team.competitionId == null
-          ? null
-          : await services.database.readCompetitionById(team.competitionId!);
-  final matches = await services.database.readTeamMatches(teamId);
-  final players = await services.database.readPlayersByTeam(teamId);
+          ? Future<CompetitionRow?>.value(null)
+          : services.database.readCompetitionById(team.competitionId!);
+  final matchesFuture = services.database.readTeamMatches(teamId);
+  final playersFuture = services.database.readPlayersByTeam(teamId);
 
-  final rawTabs = _stringList(rawTeam?['tabs'])
+  final competition = await competitionFuture;
+  final matches = await matchesFuture;
+  final players = await playersFuture;
+
+  final fixtureItems = _extractFixtureItems(null, team.id, matches);
+  final squadItems = _extractSquadItems(null, team.id, players);
+  final tabs = _resolveTeamTabs(
+    const <String>[],
+    hasTable: false,
+    hasFixtures: fixtureItems.isNotEmpty,
+    hasSquad: squadItems.isNotEmpty,
+    hasStats: false,
+    hasHistory: false,
+    hasTransfers: false,
+  );
+
+  final identity = _buildIdentityInfo(
+    team: team,
+    competition: competition,
+    rawDetails: null,
+  );
+
+  final seasons = _deriveSeasonLabels(null, null, matches, fixtureItems);
+
+  return TeamDetailState(
+    team: team,
+    competition: competition,
+    matches: matches,
+    players: players,
+    rawTeam: null,
+    rawDetails: null,
+    rawTabs: const <String>[],
+    tabs: tabs,
+    identity: identity,
+    availableSeasonLabels: seasons,
+    teamColors: null,
+    tableData: null,
+    fixtureItems: fixtureItems,
+    squadItems: squadItems,
+    statHighlights: const <TeamStatHighlight>[],
+    historyItems: const <TeamHistoryItem>[],
+    transferItems: const <TeamTransferItem>[],
+    formTokens: const <String>[],
+  );
+});
+
+final teamDetailProvider = FutureProvider.family<TeamDetailState, String>((
+  ref,
+  teamId,
+) async {
+  final shell = await ref.watch(teamShellProvider(teamId).future);
+  final services = ref.read(appServicesProvider);
+
+  final rawEntry = await services.teamRawSource.readTeamById(teamId);
+  final rawTeam = rawEntry?.raw;
+  if (rawTeam == null) {
+    return shell;
+  }
+
+  final rawDetails = _asMap(rawTeam['details']);
+
+  final rawTabs = _stringList(rawTeam['tabs'])
       .map(_normalizeTabKey)
       .where((key) => key.isNotEmpty)
       .toList(growable: false);
 
-  final tableData = _extractTeamTableData(rawTeam, team.id);
-  final fixtureItems = _extractFixtureItems(rawTeam, team.id, matches);
-  final squadItems = _extractSquadItems(rawTeam, team.id, players);
+  final tableData = _extractTeamTableData(rawTeam, shell.team.id);
+  final fixtureItems = _extractFixtureItems(
+    rawTeam,
+    shell.team.id,
+    shell.matches,
+  );
+  final squadItems = _extractSquadItems(rawTeam, shell.team.id, shell.players);
   final statHighlights = _extractStatHighlights(rawTeam);
   final historyItems = _extractHistoryItems(rawTeam);
   final transferItems = _extractTransferItems(rawTeam);
-  final formTokens = _extractFormTokens(rawTeam, team.id, tableData);
+  final formTokens = _extractFormTokens(rawTeam, shell.team.id, tableData);
 
   final tabs = _resolveTeamTabs(
     rawTabs,
@@ -369,19 +430,24 @@ final teamDetailProvider = FutureProvider.family<TeamDetailState, String>((
   );
 
   final identity = _buildIdentityInfo(
-    team: team,
-    competition: competition,
+    team: shell.team,
+    competition: shell.competition,
     rawDetails: rawDetails,
   );
 
-  final seasons = _deriveSeasonLabels(rawTeam, rawDetails, matches, fixtureItems);
+  final seasons = _deriveSeasonLabels(
+    rawTeam,
+    rawDetails,
+    shell.matches,
+    fixtureItems,
+  );
   final teamColors = _extractTeamColors(rawTeam);
 
   return TeamDetailState(
-    team: team,
-    competition: competition,
-    matches: matches,
-    players: players,
+    team: shell.team,
+    competition: shell.competition,
+    matches: shell.matches,
+    players: shell.players,
     rawTeam: rawTeam,
     rawDetails: rawDetails,
     rawTabs: rawTabs,
@@ -491,7 +557,10 @@ List<TeamTabSpec> _resolveTeamTabs(
   return tabs;
 }
 
-TeamTableData? _extractTeamTableData(Map<String, dynamic>? rawTeam, String teamId) {
+TeamTableData? _extractTeamTableData(
+  Map<String, dynamic>? rawTeam,
+  String teamId,
+) {
   if (rawTeam == null) {
     return null;
   }
@@ -792,7 +861,8 @@ TeamFixtureItem? _parseFixtureItem(Map<String, dynamic> map) {
   return TeamFixtureItem(
     matchId: _stringValue(map['id']) ?? _stringValue(map['matchId']),
     kickoffUtc: kickoff,
-    status: _stringValue(map['status']) ?? _stringValue(map['shortStatus']) ?? '-',
+    status:
+        _stringValue(map['status']) ?? _stringValue(map['shortStatus']) ?? '-',
     homeTeamId:
         _stringValue(map['homeTeamId']) ??
         _stringValue(homeNode?['id']) ??
@@ -878,19 +948,18 @@ List<TeamSquadItem> _extractSquadItems(
     }
   }
 
-  final items = deduped.values.toList(growable: false)
-    ..sort((a, b) {
-      final pos = _positionRank(a.position).compareTo(_positionRank(b.position));
-      if (pos != 0) {
-        return pos;
-      }
-      final numberA = a.shirtNumber ?? 999;
-      final numberB = b.shirtNumber ?? 999;
-      if (numberA != numberB) {
-        return numberA.compareTo(numberB);
-      }
-      return a.playerName.toLowerCase().compareTo(b.playerName.toLowerCase());
-    });
+  final items = deduped.values.toList(growable: false)..sort((a, b) {
+    final pos = _positionRank(a.position).compareTo(_positionRank(b.position));
+    if (pos != 0) {
+      return pos;
+    }
+    final numberA = a.shirtNumber ?? 999;
+    final numberB = b.shirtNumber ?? 999;
+    if (numberA != numberB) {
+      return numberA.compareTo(numberB);
+    }
+    return a.playerName.toLowerCase().compareTo(b.playerName.toLowerCase());
+  });
 
   return List.unmodifiable(items);
 }
@@ -929,15 +998,18 @@ bool _looksLikePlayerMap(Map<String, dynamic> map) {
     return false;
   }
 
-  if (_stringValue(map['id']) != null || _stringValue(map['playerId']) != null) {
+  if (_stringValue(map['id']) != null ||
+      _stringValue(map['playerId']) != null) {
     return true;
   }
 
-  if (_stringValue(map['position']) != null || _asMap(map['position']) != null) {
+  if (_stringValue(map['position']) != null ||
+      _asMap(map['position']) != null) {
     return true;
   }
 
-  if (_intValue(map['shirtNumber']) != null || _intValue(map['number']) != null) {
+  if (_intValue(map['shirtNumber']) != null ||
+      _intValue(map['number']) != null) {
     return true;
   }
 
@@ -991,7 +1063,8 @@ List<TeamStatHighlight> _extractStatHighlights(Map<String, dynamic>? rawTeam) {
           title: _humanizeKey(entry.key),
           value: value,
           subtitle: playerName,
-          playerId: _stringValue(first['id']) ?? _stringValue(first['playerId']),
+          playerId:
+              _stringValue(first['id']) ?? _stringValue(first['playerId']),
           teamId: _stringValue(first['teamId']),
         ),
       );
@@ -1178,7 +1251,8 @@ List<TeamTransferItem> _extractTransferItems(Map<String, dynamic>? rawTeam) {
       continue;
     }
 
-    final playerName = _stringValue(map['name']) ?? _stringValue(map['playerName']);
+    final playerName =
+        _stringValue(map['name']) ?? _stringValue(map['playerName']);
     if (playerName == null) {
       continue;
     }
@@ -1441,15 +1515,14 @@ List<String> _deriveSeasonLabels(
     labels.add('$startYear/${startYear + 1}');
   }
 
-  final sorted = labels.toList(growable: false)
-    ..sort((a, b) {
-      final aYear = int.tryParse(a.split('/').first) ?? 0;
-      final bYear = int.tryParse(b.split('/').first) ?? 0;
-      if (aYear != bYear) {
-        return bYear.compareTo(aYear);
-      }
-      return b.compareTo(a);
-    });
+  final sorted = labels.toList(growable: false)..sort((a, b) {
+    final aYear = int.tryParse(a.split('/').first) ?? 0;
+    final bYear = int.tryParse(b.split('/').first) ?? 0;
+    if (aYear != bYear) {
+      return bYear.compareTo(aYear);
+    }
+    return b.compareTo(a);
+  });
 
   return sorted;
 }
@@ -1486,9 +1559,7 @@ Map<String, dynamic>? _asMap(dynamic value) {
     return value;
   }
   if (value is Map) {
-    return {
-      for (final entry in value.entries) '${entry.key}': entry.value,
-    };
+    return {for (final entry in value.entries) '${entry.key}': entry.value};
   }
   return null;
 }
@@ -1582,10 +1653,11 @@ DateTime? _dateTimeValue(dynamic value) {
 }
 
 String _humanizeKey(String raw) {
-  final clean = raw
-      .replaceAll(RegExp(r'[_\-]+'), ' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
+  final clean =
+      raw
+          .replaceAll(RegExp(r'[_\-]+'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
   if (clean.isEmpty) {
     return raw;
   }

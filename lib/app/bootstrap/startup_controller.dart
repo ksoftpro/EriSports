@@ -2,9 +2,13 @@ import 'dart:async';
 
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
+import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+const _startupLastRefreshEpochKey = 'startup.last_refresh_epoch_ms';
+const _startupRefreshCooldown = Duration(minutes: 4);
 
 enum StartupPhase { idle, blockingImport, backgroundRefresh, ready, failed }
 
@@ -80,6 +84,17 @@ class StartupController extends Notifier<StartupState> {
     final services = ref.read(appServicesProvider);
     final hasCachedData = await services.database.hasBootstrapData();
 
+    if (hasCachedData && _shouldSkipBackgroundRefresh()) {
+      state = state.copyWith(
+        phase: StartupPhase.ready,
+        hasCachedData: true,
+        statusText: 'Offline data ready',
+        clearError: true,
+      );
+      _warmRuntimeCaches(services);
+      return;
+    }
+
     state = state.copyWith(
       phase:
           hasCachedData
@@ -95,6 +110,7 @@ class StartupController extends Notifier<StartupState> {
 
     if (hasCachedData) {
       unawaited(_runStartupImport(services, blocking: false));
+      _warmRuntimeCaches(services);
       return;
     }
 
@@ -116,9 +132,10 @@ class StartupController extends Notifier<StartupState> {
     required bool blocking,
   }) async {
     try {
-      final result = await ref
-          .read(daylysportSyncControllerProvider.notifier)
-          .runStartupSync();
+      final result =
+          await ref
+              .read(daylysportSyncControllerProvider.notifier)
+              .runStartupSync();
       final report = result.importReport;
 
       state = state.copyWith(
@@ -131,6 +148,8 @@ class StartupController extends Notifier<StartupState> {
         latestReport: report,
         clearError: true,
       );
+      await _recordBackgroundRefresh(result.finishedAtUtc);
+      _warmRuntimeCaches(services);
     } catch (error) {
       services.logger.error('Startup import failed.', error);
       state = state.copyWith(
@@ -143,5 +162,38 @@ class StartupController extends Notifier<StartupState> {
         errorMessage: error.toString(),
       );
     }
+  }
+
+  bool _shouldSkipBackgroundRefresh() {
+    final prefs = ref.read(sharedPreferencesProvider);
+    final lastEpochMs = prefs.getInt(_startupLastRefreshEpochKey);
+    if (lastEpochMs == null || lastEpochMs <= 0) {
+      return false;
+    }
+
+    final lastRefresh = DateTime.fromMillisecondsSinceEpoch(
+      lastEpochMs,
+      isUtc: true,
+    );
+    return DateTime.now().toUtc().difference(lastRefresh) <
+        _startupRefreshCooldown;
+  }
+
+  Future<void> _recordBackgroundRefresh(DateTime timestampUtc) {
+    final prefs = ref.read(sharedPreferencesProvider);
+    return prefs.setInt(
+      _startupLastRefreshEpochKey,
+      timestampUtc.toUtc().millisecondsSinceEpoch,
+    );
+  }
+
+  void _warmRuntimeCaches(AppServices services) {
+    unawaited(services.teamRawSource.warmUp(preloadBundle: false));
+    unawaited(
+      services.assetResolver.warmUp(
+        includeTeamAssets: true,
+        includePlayerAssets: true,
+      ),
+    );
   }
 }

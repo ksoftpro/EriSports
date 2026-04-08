@@ -18,6 +18,7 @@ import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
 import 'package:eri_sports/data/local_files/json_data_version_tracker.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
+import 'package:eri_sports/features/team/data/team_raw_source.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -142,6 +143,10 @@ class _TestHarness {
       daylySportLocator: locator,
       cacheStore: cacheStore,
     );
+    final teamRawSource = TeamRawSource(
+      daylySportLocator: locator,
+      cacheStore: cacheStore,
+    );
     final syncCoordinator = DaylysportSyncCoordinator(
       discoveryService: DaylysportFileDiscoveryService(
         daylySportLocator: locator,
@@ -158,6 +163,7 @@ class _TestHarness {
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
       leagueStandingsSource: leagueStandingsSource,
+      teamRawSource: teamRawSource,
       daylysportSyncCoordinator: syncCoordinator,
       logger: logger,
     );
@@ -480,7 +486,10 @@ class _TestHarness {
     await writeJson('teams_2026_04_03.json', teamsJson);
     await writeJson('fixtures_2026_04_03.json', fixturesJson);
     await writeJson('standings_2026_04_03.json', standingsJson);
-    await writeJson('top_standings_full_data_2026_04_03.json', topStandingsFullJson);
+    await writeJson(
+      'top_standings_full_data_2026_04_03.json',
+      topStandingsFullJson,
+    );
     await writeJson('players_2026_04_03.json', playersJson);
     await writeJson('match_detail_1001.json', matchDetailJson);
   }
