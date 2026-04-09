@@ -5,6 +5,7 @@ import 'package:eri_sports/features/leagues/presentation/league_overview_screen.
 import 'package:eri_sports/features/leagues/presentation/leagues_screen.dart';
 import 'package:eri_sports/features/match_detail/presentation/match_detail_screen.dart';
 import 'package:eri_sports/features/more/presentation/more_screen.dart';
+import 'package:eri_sports/features/news/presentation/offline_news_screen.dart';
 import 'package:eri_sports/features/player/presentation/player_screen.dart';
 import 'package:eri_sports/features/player_stats/presentation/player_stats_screen.dart';
 import 'package:eri_sports/features/search/presentation/search_screen.dart';
@@ -36,11 +37,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/search',
-                name: 'search',
+                path: '/news',
+                name: 'news',
                 pageBuilder:
                     (context, state) =>
-                        const NoTransitionPage(child: SearchScreen()),
+                        const NoTransitionPage(child: OfflineNewsScreen()),
               ),
             ],
           ),
@@ -78,6 +79,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/search',
+        name: 'search',
+        builder: (context, state) => const SearchScreen(),
       ),
       GoRoute(
         path: '/league/:leagueId',
