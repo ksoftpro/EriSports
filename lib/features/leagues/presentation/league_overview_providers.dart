@@ -119,6 +119,7 @@ class LeagueOverviewState {
     required this.overallStandingsRows,
     required this.fixtureRows,
     required this.goalLeaders,
+    required this.assistsLeaders,
     required this.newsItems,
     required this.transferItems,
   });
@@ -132,6 +133,7 @@ class LeagueOverviewState {
   final List<LeagueStandingsRow> overallStandingsRows;
   final List<HomeMatchView> fixtureRows;
   final List<TopPlayerLeaderboardEntryView> goalLeaders;
+  final List<TopPlayerLeaderboardEntryView> assistsLeaders;
   final List<LeagueNewsItem> newsItems;
   final List<LeagueTransferItem> transferItems;
 }
@@ -168,6 +170,11 @@ final leagueOverviewProvider = FutureProvider.family<
   final goalLeaders = await services.database.readTopPlayersForCategory(
     competitionId,
     'goals',
+    limit: 8,
+  );
+  final assistsLeaders = await services.database.readTopPlayersForCategory(
+    competitionId,
+    'assists',
     limit: 8,
   );
   final competitionPlayers = await services.database.readPlayersForCompetition(
@@ -208,6 +215,7 @@ final leagueOverviewProvider = FutureProvider.family<
     overallStandingsRows: overallRows,
     fixtureRows: fixtureRows,
     goalLeaders: goalLeaders,
+    assistsLeaders: assistsLeaders,
     newsItems: newsItems,
     transferItems: transferItems,
   );

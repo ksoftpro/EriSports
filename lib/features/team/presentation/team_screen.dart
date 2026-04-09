@@ -659,50 +659,163 @@ class _OverviewTab extends StatelessWidget {
           (a, b) => b.transferDateUtc.compareTo(a.transferDateUtc),
         )).firstOrNull;
     final latestHistory = state.historyItems.firstOrNull;
+    final allTableRows =
+        state.tableData == null
+            ? const <TeamTableRowItem>[]
+            : List<TeamTableRowItem>.from(state.tableData!.rowsForMode('all'))
+              ..sort((a, b) => a.position.compareTo(b.position));
+    final tablePreviewRows = _buildTablePreviewRows(
+      allTableRows,
+      state.identity.teamId,
+    );
+    final squadGroups = _buildSquadGroupCounts(state.squadItems);
 
     final leftSections = <Widget>[
-      if (tableSnapshot != null)
-        _SectionCard(
-          title: 'Table snapshot',
-          child: Column(
-            children: [
-              _metaRow('Position', '${tableSnapshot.position}'),
-              _metaRow('Played', '${tableSnapshot.played}'),
-              _metaRow(
-                'Record',
-                '${tableSnapshot.wins}-${tableSnapshot.draws}-${tableSnapshot.losses}',
-              ),
-              _metaRow(
-                'Goals',
-                '${tableSnapshot.goalsFor}-${tableSnapshot.goalsAgainst}',
-              ),
-              _metaRow(
-                'Goal diff',
-                tableSnapshot.goalDiff > 0
-                    ? '+${tableSnapshot.goalDiff}'
-                    : '${tableSnapshot.goalDiff}',
-              ),
-              _metaRow('Points', '${tableSnapshot.points}'),
-            ],
-          ),
-        ),
       _SectionCard(
-        title: 'Club details',
+        title: 'Team context',
+        subtitle: 'League standing snapshot and current placement',
+        child:
+            tablePreviewRows.isEmpty
+                ? const _InlineEmptyState(
+                  message: 'No table context found in this dataset.',
+                )
+                : Column(
+                  children: [
+                    for (var i = 0; i < tablePreviewRows.length; i++) ...[
+                      _TeamTableContextRow(
+                        row: tablePreviewRows[i],
+                        resolver: resolver,
+                        emphasized: tablePreviewRows[i].teamId == state.identity.teamId,
+                      ),
+                      if (i < tablePreviewRows.length - 1)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 7),
+                          child: Divider(height: 1, color: Color(0xFFE4E8ED)),
+                        ),
+                    ],
+                  ],
+                ),
+      ),
+      _SectionCard(
+        title: 'Momentum',
+        subtitle: 'Recent form and immediate fixtures',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (state.formTokens.isNotEmpty) ...[
+              const Text(
+                'Recent form',
+                style: TextStyle(
+                  color: Color(0xFF5E6879),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              _FormStrip(tokens: state.formTokens),
+              const SizedBox(height: 10),
+            ],
+            const Text(
+              'Next fixture',
+              style: TextStyle(
+                color: Color(0xFF5E6879),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            if (upcoming.isEmpty)
+              const _InlineEmptyState(message: 'No upcoming fixture available.')
+            else
+              _FixtureSummaryRow(fixture: upcoming.first, resolver: resolver),
+            const SizedBox(height: 10),
+            const Divider(height: 1, color: Color(0xFFE4E8ED)),
+            const SizedBox(height: 10),
+            const Text(
+              'Latest result',
+              style: TextStyle(
+                color: Color(0xFF5E6879),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            if (recent.isEmpty)
+              const _InlineEmptyState(message: 'No completed fixture available.')
+            else
+              _FixtureSummaryRow(fixture: recent.first, resolver: resolver),
+          ],
+        ),
+      ),
+    ];
+
+    final rightSections = <Widget>[
+      _SectionCard(
+        title: 'Squad pulse',
+        subtitle: 'Squad depth and latest transfer movement',
         child: Column(
           children: [
-            _metaRow('Team ID', state.identity.teamId),
-            _metaRow('Short name', state.identity.shortName ?? '-'),
-            _metaRow('Country', state.identity.country ?? '-'),
-            _metaRow('League', state.identity.primaryLeagueName ?? '-'),
-            _metaRow('Venue', state.identity.venue ?? '-'),
-            _metaRow('City', state.identity.city ?? '-'),
-            _metaRow('Latest season', state.identity.latestSeason ?? '-'),
+            _metaRow('Total players', '${state.squadItems.length}'),
+            _metaRow('Goalkeepers', '${squadGroups['Goalkeepers'] ?? 0}'),
+            _metaRow('Defenders', '${squadGroups['Defenders'] ?? 0}'),
+            _metaRow('Midfielders', '${squadGroups['Midfielders'] ?? 0}'),
+            _metaRow('Forwards', '${squadGroups['Forwards'] ?? 0}'),
+            if (latestTransfer != null) ...[
+              const SizedBox(height: 8),
+              const Divider(height: 1, color: Color(0xFFE4E8ED)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  EntityBadge(
+                    entityId: latestTransfer.playerId ?? latestTransfer.playerName,
+                    entityName: latestTransfer.playerName,
+                    type: SportsAssetType.players,
+                    resolver: resolver,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Latest transfer',
+                          style: TextStyle(
+                            color: Color(0xFF5E6879),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          latestTransfer.playerName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF1A2230),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    latestTransfer.fee ?? '--',
+                    style: const TextStyle(
+                      color: Color(0xFF121925),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
       if (state.statHighlights.isNotEmpty)
         _SectionCard(
           title: 'Top team stats',
+          subtitle: 'Best values surfaced from the dataset',
           child: Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -712,105 +825,10 @@ class _OverviewTab extends StatelessWidget {
             ],
           ),
         ),
-    ];
-
-    final rightSections = <Widget>[
-      if (state.formTokens.isNotEmpty)
-        _SectionCard(
-          title: 'Recent form',
-          child: _FormStrip(tokens: state.formTokens),
-        ),
-      _SectionCard(
-        title: 'Next fixture',
-        child:
-            upcoming.isEmpty
-                ? const _InlineEmptyState(
-                  message: 'No upcoming fixture available.',
-                )
-                : _FixtureSummaryRow(
-                  fixture: upcoming.first,
-                  resolver: resolver,
-                ),
-      ),
-      _SectionCard(
-        title: 'Latest result',
-        child:
-            recent.isEmpty
-                ? const _InlineEmptyState(
-                  message: 'No completed fixture available.',
-                )
-                : _FixtureSummaryRow(fixture: recent.first, resolver: resolver),
-      ),
-      if (latestTransfer != null)
-        _SectionCard(
-          title: 'Latest transfer',
-          child: Row(
-            children: [
-              EntityBadge(
-                entityId: latestTransfer.playerId ?? latestTransfer.playerName,
-                entityName: latestTransfer.playerName,
-                type: SportsAssetType.players,
-                resolver: resolver,
-                size: 30,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      latestTransfer.playerName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF1A2230),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${latestTransfer.fromTeamName ?? '-'} -> ${latestTransfer.toTeamName ?? '-'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF6B7381),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    latestTransfer.fee ?? '--',
-                    style: const TextStyle(
-                      color: Color(0xFF121925),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    DateFormat(
-                      'dd MMM yyyy',
-                    ).format(latestTransfer.transferDateUtc.toLocal()),
-                    style: const TextStyle(
-                      color: Color(0xFF6B7381),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
       if (latestHistory != null)
         _SectionCard(
           title: 'History pulse',
+          subtitle: 'Most recent history signal',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -833,26 +851,51 @@ class _OverviewTab extends StatelessWidget {
             ],
           ),
         ),
+      _SectionCard(
+        title: 'Club details',
+        subtitle: 'Identity and location context',
+        child: Column(
+          children: [
+            _metaRow('Team ID', state.identity.teamId),
+            _metaRow('Short name', state.identity.shortName ?? '-'),
+            _metaRow('Country', state.identity.country ?? '-'),
+            _metaRow('League', state.identity.primaryLeagueName ?? '-'),
+            _metaRow('Venue', state.identity.venue ?? '-'),
+            _metaRow('City', state.identity.city ?? '-'),
+            _metaRow('Latest season', state.identity.latestSeason ?? '-'),
+          ],
+        ),
+      ),
     ];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        _TeamOverviewHeroCard(
+          teamName: state.identity.name,
+          seasonLabel: seasonLabel,
+          leagueName: state.identity.primaryLeagueName,
+          countryName: state.identity.country,
+          tableSnapshot: tableSnapshot,
+          formTokens: state.formTokens,
+        ),
+        const SizedBox(height: 10),
+        _OverviewMetricGrid(
           children: [
             _InfoCard(
+              icon: Icons.calendar_month_outlined,
               label: 'Season',
               value: seasonLabel,
               caption: 'Current context',
             ),
             _InfoCard(
+              icon: Icons.emoji_events_outlined,
               label: 'League',
               value: state.identity.primaryLeagueName ?? '-',
               caption: state.identity.country ?? 'Country unknown',
             ),
             _InfoCard(
+              icon: Icons.format_list_numbered_rounded,
               label: 'Position',
               value:
                   tableSnapshot != null && tableSnapshot.position > 0
@@ -861,16 +904,19 @@ class _OverviewTab extends StatelessWidget {
               caption: 'Table rank',
             ),
             _InfoCard(
+              icon: Icons.military_tech_outlined,
               label: 'Points',
               value: tableSnapshot != null ? '${tableSnapshot.points}' : '-',
               caption: 'In standings',
             ),
             _InfoCard(
+              icon: Icons.groups_2_outlined,
               label: 'Squad',
               value: '${state.squadItems.length}',
-              caption: 'Players',
+              caption: 'Registered players',
             ),
             _InfoCard(
+              icon: Icons.swap_horiz_rounded,
               label: 'Transfers',
               value: '${state.transferItems.length}',
               caption:
@@ -880,7 +926,7 @@ class _OverviewTab extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         LayoutBuilder(
           builder: (context, constraints) {
             if (constraints.maxWidth > 940) {
@@ -939,6 +985,243 @@ class _OverviewTab extends StatelessWidget {
       output.add(sections[i]);
     }
     return output;
+  }
+
+  List<TeamTableRowItem> _buildTablePreviewRows(
+    List<TeamTableRowItem> rows,
+    String teamId,
+  ) {
+    if (rows.isEmpty) {
+      return const <TeamTableRowItem>[];
+    }
+
+    final topRows = rows.take(5).toList(growable: true);
+    final hasTeam = topRows.any((row) => row.teamId == teamId);
+    if (hasTeam) {
+      return topRows;
+    }
+
+    final teamRow = rows.where((row) => row.teamId == teamId).firstOrNull;
+    if (teamRow != null) {
+      topRows.add(teamRow);
+    }
+    return topRows;
+  }
+
+  Map<String, int> _buildSquadGroupCounts(List<TeamSquadItem> squad) {
+    final counts = <String, int>{
+      'Goalkeepers': 0,
+      'Defenders': 0,
+      'Midfielders': 0,
+      'Forwards': 0,
+    };
+
+    for (final item in squad) {
+      final group = _groupPosition(item.position);
+      counts[group] = (counts[group] ?? 0) + 1;
+    }
+
+    return counts;
+  }
+
+  String _groupPosition(String? rawPosition) {
+    final value = (rawPosition ?? '').toLowerCase();
+    if (value.contains('goal')) {
+      return 'Goalkeepers';
+    }
+    if (value.contains('def')) {
+      return 'Defenders';
+    }
+    if (value.contains('mid')) {
+      return 'Midfielders';
+    }
+    if (value.contains('for') || value.contains('strik') || value.contains('att')) {
+      return 'Forwards';
+    }
+    return 'Midfielders';
+  }
+}
+
+class _TeamOverviewHeroCard extends StatelessWidget {
+  const _TeamOverviewHeroCard({
+    required this.teamName,
+    required this.seasonLabel,
+    required this.leagueName,
+    required this.countryName,
+    required this.tableSnapshot,
+    required this.formTokens,
+  });
+
+  final String teamName;
+  final String seasonLabel;
+  final String? leagueName;
+  final String? countryName;
+  final TeamTableRowItem? tableSnapshot;
+  final List<String> formTokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1F2937), Color(0xFF334155)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            teamName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            '${leagueName ?? 'League'} • ${countryName ?? 'Country'} • Season $seasonLabel',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.88),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _heroChip(
+                'Position',
+                tableSnapshot != null && tableSnapshot!.position > 0
+                    ? '${tableSnapshot!.position}'
+                    : '-',
+              ),
+              _heroChip(
+                'Points',
+                tableSnapshot != null ? '${tableSnapshot!.points}' : '-',
+              ),
+              _heroChip('Form', formTokens.isEmpty ? '-' : formTokens.take(5).join('')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroChip(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
+      child: Text(
+        '$label: $value',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _OverviewMetricGrid extends StatelessWidget {
+  const _OverviewMetricGrid({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        final columns =
+            maxWidth > 1100
+                ? 6
+                : maxWidth > 760
+                ? 3
+                : 2;
+        final cardWidth = (maxWidth - ((columns - 1) * 8)) / columns;
+
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final child in children)
+              SizedBox(width: cardWidth, child: child),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TeamTableContextRow extends StatelessWidget {
+  const _TeamTableContextRow({
+    required this.row,
+    required this.resolver,
+    required this.emphasized,
+  });
+
+  final TeamTableRowItem row;
+  final dynamic resolver;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 24,
+          child: Text(
+            '${row.position}',
+            style: TextStyle(
+              color: emphasized ? const Color(0xFF111827) : const Color(0xFF525D70),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        TeamBadge(
+          teamId: row.teamId,
+          teamName: row.teamName,
+          resolver: resolver,
+          source: 'team.overview.context',
+          size: 20,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            row.displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: const Color(0xFF1A2230),
+              fontWeight: emphasized ? FontWeight.w800 : FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '${row.points} pts',
+          style: const TextStyle(
+            color: Color(0xFF111827),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -1796,9 +2079,10 @@ class _FixtureSummaryRow extends StatelessWidget {
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.child});
+  const _SectionCard({required this.title, required this.child, this.subtitle});
 
   final String title;
+  final String? subtitle;
   final Widget child;
 
   @override
@@ -1821,6 +2105,16 @@ class _SectionCard extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 3),
+            Text(
+              subtitle!,
+              style: const TextStyle(
+                color: Color(0xFF6A7280),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           child,
         ],
@@ -1831,11 +2125,13 @@ class _SectionCard extends StatelessWidget {
 
 class _InfoCard extends StatelessWidget {
   const _InfoCard({
+    this.icon,
     required this.label,
     required this.value,
     required this.caption,
   });
 
+  final IconData? icon;
   final String label;
   final String value;
   final String caption;
@@ -1843,7 +2139,6 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 188,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF8F9FB),
@@ -1853,12 +2148,24 @@ class _InfoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF5F6673),
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 15, color: const Color(0xFF667180)),
+                const SizedBox(width: 6),
+              ],
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF5F6673),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(
@@ -1872,13 +2179,14 @@ class _InfoCard extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             caption,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Color(0xFF757C8A),
+              fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
           ),
