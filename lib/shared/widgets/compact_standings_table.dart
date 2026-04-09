@@ -109,20 +109,19 @@ class CompactStandingsTable extends StatelessWidget {
   final String tableBadgeSource;
   final String nextBadgeSource;
 
-  static const double _rowHeight = 34;
-  static const double _headerHeight = 26;
+  static const double _rowHeight = 32;
+  static const double _headerHeight = 24;
   static const double _leftInset = 2;
   static const double _rightInset = 2;
   static const double _gap = 2;
   static const double _stripWidth = 2;
   static const double _positionWidth = 15;
-  static const double _teamCellWidth = 136;
-  static const double _playedWidth = 20;
-  static const double _metricWidth = 20;
-  static const double _scoresWidth = 38;
-  static const double _goalDiffWidth = 24;
-  static const double _pointsWidth = 26;
-  static const double _formWidth = 60;
+  static const double _teamCellWidth = 132;
+  static const double _playedWidth = 18;
+  static const double _metricWidth = 18;
+  static const double _goalDiffWidth = 22;
+  static const double _pointsWidth = 24;
+  static const double _formWidth = 56;
   static const double _nextWidth = 34;
 
   @override
@@ -161,7 +160,7 @@ class CompactStandingsTable extends StatelessWidget {
     const style = TextStyle(
       color: Color(0xFF657082),
       fontWeight: FontWeight.w700,
-      fontSize: 10.3,
+      fontSize: 9.8,
     );
 
     return Container(
@@ -181,7 +180,6 @@ class CompactStandingsTable extends StatelessWidget {
           _headerCell(headerLabels.wins, _metricWidth),
           _headerCell(headerLabels.draws, _metricWidth),
           _headerCell(headerLabels.losses, _metricWidth),
-          _headerCell(headerLabels.scores, _scoresWidth),
           _headerCell(headerLabels.goalDiff, _goalDiffWidth),
           _headerCell(headerLabels.points, _pointsWidth),
           if (showForm)
@@ -243,7 +241,7 @@ class CompactStandingsTable extends StatelessWidget {
                 style: const TextStyle(
                   color: Color(0xFF1D2533),
                   fontWeight: FontWeight.w700,
-                  fontSize: 10.8,
+                  fontSize: 10.2,
                 ),
               ),
             ),
@@ -257,7 +255,7 @@ class CompactStandingsTable extends StatelessWidget {
                     teamName: row.teamName,
                     resolver: resolver,
                     source: tableBadgeSource,
-                    size: 14,
+                    size: 13,
                   ),
                   const SizedBox(width: 2),
                   Expanded(
@@ -268,7 +266,7 @@ class CompactStandingsTable extends StatelessWidget {
                       style: const TextStyle(
                         color: Color(0xFF1A2230),
                         fontWeight: FontWeight.w700,
-                        fontSize: 11.3,
+                        fontSize: 10.7,
                       ),
                     ),
                   ),
@@ -279,7 +277,6 @@ class CompactStandingsTable extends StatelessWidget {
             _metricCell('${row.wins}', _metricWidth),
             _metricCell('${row.draws}', _metricWidth),
             _metricCell('${row.losses}', _metricWidth),
-            _metricCell(row.scores, _scoresWidth),
             _metricCell(_goalDiffLabel(row.goalDiff), _goalDiffWidth),
             _metricCell('${row.points}', _pointsWidth, bold: true),
             if (showForm)
@@ -324,7 +321,7 @@ class CompactStandingsTable extends StatelessWidget {
         style: const TextStyle(
           color: Color(0xFF657082),
           fontWeight: FontWeight.w700,
-          fontSize: 10.3,
+          fontSize: 9.8,
         ),
       ),
     );
@@ -339,7 +336,7 @@ class CompactStandingsTable extends StatelessWidget {
         style: TextStyle(
           color: const Color(0xFF222A38),
           fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-          fontSize: 10.9,
+          fontSize: 10.3,
         ),
       ),
     );
@@ -358,7 +355,6 @@ class CompactStandingsTable extends StatelessWidget {
         _metricWidth +
         _metricWidth +
         _metricWidth +
-        _scoresWidth +
         _goalDiffWidth +
         _pointsWidth;
     if (showForm) {
@@ -415,7 +411,7 @@ class _FormTokens extends StatelessWidget {
         style: TextStyle(
           color: Color(0xFF7D8795),
           fontWeight: FontWeight.w600,
-          fontSize: 10.2,
+          fontSize: 9.8,
         ),
       );
     }
@@ -428,7 +424,7 @@ class _FormTokens extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 0.4),
             child: Container(
               width: 10,
-              height: 10,
+              height: 9,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: _tokenColor(token),
@@ -438,7 +434,7 @@ class _FormTokens extends StatelessWidget {
                 token,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 5.8,
+                  fontSize: 5.4,
                   fontWeight: FontWeight.w800,
                 ),
               ),
