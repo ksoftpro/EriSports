@@ -38,8 +38,11 @@ class AppShell extends StatelessWidget {
             ),
             NavigationDestination(icon: Icon(Icons.article_outlined), label: 'News'),
             NavigationDestination(icon: Icon(Icons.emoji_events), label: 'Leagues'),
-            NavigationDestination(icon: Icon(Icons.star_border), label: 'Following'),
-            NavigationDestination(icon: Icon(Icons.menu), label: 'More'),
+            NavigationDestination(
+              icon: Icon(Icons.play_circle_outline),
+              label: 'Reels',
+            ),
+            NavigationDestination(icon: Icon(Icons.video_library_outlined), label: 'Video'),
           ],
         ),
       ),

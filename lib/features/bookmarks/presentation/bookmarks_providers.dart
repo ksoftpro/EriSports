@@ -9,6 +9,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 const _followedTeamsKey = 'followed_team_ids';
 const _followedPlayersKey = 'followed_player_ids';
 
+const List<String> _preferredPlayerNames = [
+  'Bukayo Saka',
+  'Martin Odegaard',
+  'Declan Rice',
+  'Cole Palmer',
+  'Enzo Fernandez',
+  'Reece James',
+  'Erling Haaland',
+  'Kevin De Bruyne',
+  'Phil Foden',
+  'Bruno Fernandes',
+  'Marcus Rashford',
+  'Rasmus Hojlund',
+];
+
+const Map<String, List<String>> _defaultClubMatchers = {
+  'arsenal': ['arsenal'],
+  'chelsea': ['chelsea'],
+  'manchester_city': ['manchester city', 'man city'],
+  'manchester_united': ['manchester united', 'man utd', 'man united'],
+};
+
 @immutable
 class FollowingSelectionState {
   const FollowingSelectionState({
@@ -125,12 +147,16 @@ class FollowingDashboardState {
     required this.players,
     required this.availableTeams,
     required this.availablePlayers,
+    required this.competitionNameByTeamId,
+    required this.teamNameById,
   });
 
   final List<FollowedTeamCardData> teams;
   final List<FollowedPlayerCardData> players;
   final List<TeamRow> availableTeams;
   final List<PlayerRow> availablePlayers;
+  final Map<String, String> competitionNameByTeamId;
+  final Map<String, String> teamNameById;
 }
 
 final followingDashboardProvider = FutureProvider<FollowingDashboardState>((
@@ -141,37 +167,58 @@ final followingDashboardProvider = FutureProvider<FollowingDashboardState>((
   ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
   final services = ref.read(appServicesProvider);
 
-  final availableTeams = await services.database.readTeamsSorted(limit: 40);
-  final availablePlayers = await services.database.readPlayersSorted(limit: 60);
+  final availableTeams = await services.database.readTeamsSorted();
+  final availablePlayers = await services.database.readPlayersSorted();
+
+  final competitionById = await services.database.readCompetitionMapByIds(
+    availableTeams
+        .map((team) => team.competitionId)
+        .whereType<String>()
+        .toSet(),
+  );
+
+  final competitionNameByTeamId = <String, String>{
+    for (final team in availableTeams)
+      if (team.competitionId != null)
+        team.id:
+            competitionById[team.competitionId!]?.name ??
+            (team.competitionId ?? 'Competition'),
+  };
+
+  final teamNameById = <String, String>{
+    for (final team in availableTeams) team.id: team.name,
+  };
+
+  final defaultTeamIds = _resolveDefaultTeamIds(availableTeams);
+  final defaultPlayerIds = _resolveDefaultPlayerIds(
+    players: availablePlayers,
+    defaultTeamIds: defaultTeamIds,
+  );
 
   ref.watch(followingSelectionProvider);
 
   await ref
       .read(followingSelectionProvider.notifier)
       .seedDefaults(
-        defaultTeamIds: availableTeams
-            .take(8)
-            .map((t) => t.id)
-            .toList(growable: false),
-        defaultPlayerIds: availablePlayers
-            .take(8)
-            .map((p) => p.id)
-            .toList(growable: false),
+        defaultTeamIds: defaultTeamIds,
+        defaultPlayerIds: defaultPlayerIds,
       );
 
   final latestSelection = ref.read(followingSelectionProvider);
+  final teamsById = <String, TeamRow>{
+    for (final team in availableTeams) team.id: team,
+  };
+  final playersById = <String, PlayerRow>{
+    for (final player in availablePlayers) player.id: player,
+  };
 
   final followedTeams = <FollowedTeamCardData>[];
   for (final teamId in latestSelection.teamIds) {
-    final team = await services.database.readTeamById(teamId);
+    final team = teamsById[teamId] ?? await services.database.readTeamById(teamId);
     if (team == null) {
       continue;
     }
 
-    final competition =
-        team.competitionId == null
-            ? null
-            : await services.database.readCompetitionById(team.competitionId!);
     final matches = await services.database.readTeamMatches(teamId, limit: 30);
     final now = DateTime.now().toUtc();
     HomeMatchView? next;
@@ -194,7 +241,7 @@ final followingDashboardProvider = FutureProvider<FollowingDashboardState>((
     followedTeams.add(
       FollowedTeamCardData(
         team: team,
-        competitionName: competition?.name,
+        competitionName: competitionNameByTeamId[team.id],
         nextMatch: next,
         nextOpponentName: opponent,
       ),
@@ -203,15 +250,13 @@ final followingDashboardProvider = FutureProvider<FollowingDashboardState>((
 
   final followedPlayers = <FollowedPlayerCardData>[];
   for (final playerId in latestSelection.playerIds) {
-    final player = await services.database.readPlayerById(playerId);
+    final player =
+        playersById[playerId] ?? await services.database.readPlayerById(playerId);
     if (player == null) {
       continue;
     }
 
-    final team =
-        player.teamId == null
-            ? null
-            : await services.database.readTeamById(player.teamId!);
+    final team = player.teamId == null ? null : teamsById[player.teamId!];
     followedPlayers.add(FollowedPlayerCardData(player: player, team: team));
   }
 
@@ -220,5 +265,88 @@ final followingDashboardProvider = FutureProvider<FollowingDashboardState>((
     players: followedPlayers,
     availableTeams: availableTeams,
     availablePlayers: availablePlayers,
+    competitionNameByTeamId: competitionNameByTeamId,
+    teamNameById: teamNameById,
   );
 });
+
+List<String> _resolveDefaultTeamIds(List<TeamRow> teams) {
+  final selected = <String>[];
+
+  for (final matcherSet in _defaultClubMatchers.values) {
+    TeamRow? match;
+    for (final team in teams) {
+      final normalizedTeamName = _normalizeSearchKey(team.name);
+      if (matcherSet.any(normalizedTeamName.contains)) {
+        match = team;
+        break;
+      }
+    }
+
+    if (match != null && !selected.contains(match.id)) {
+      selected.add(match.id);
+    }
+  }
+
+  if (selected.isEmpty) {
+    return teams.take(4).map((team) => team.id).toList(growable: false);
+  }
+
+  return selected;
+}
+
+List<String> _resolveDefaultPlayerIds({
+  required List<PlayerRow> players,
+  required List<String> defaultTeamIds,
+}) {
+  final eligiblePlayers = players
+      .where(
+        (player) =>
+            player.teamId != null && defaultTeamIds.contains(player.teamId),
+      )
+      .toList(growable: false);
+
+  if (eligiblePlayers.isEmpty) {
+    return players.take(8).map((player) => player.id).toList(growable: false);
+  }
+
+  final selected = <String>[];
+  final selectedSet = <String>{};
+
+  for (final preferredName in _preferredPlayerNames) {
+    final normalizedPreferred = _normalizeSearchKey(preferredName);
+    for (final player in eligiblePlayers) {
+      if (selectedSet.contains(player.id)) {
+        continue;
+      }
+
+      final normalizedPlayerName = _normalizeSearchKey(player.name);
+      if (normalizedPlayerName == normalizedPreferred ||
+          normalizedPlayerName.contains(normalizedPreferred) ||
+          normalizedPreferred.contains(normalizedPlayerName)) {
+        selected.add(player.id);
+        selectedSet.add(player.id);
+        break;
+      }
+    }
+  }
+
+  for (final player in eligiblePlayers) {
+    if (selected.length >= 10) {
+      break;
+    }
+    if (selectedSet.add(player.id)) {
+      selected.add(player.id);
+    }
+  }
+
+  return selected;
+}
+
+String _normalizeSearchKey(String value) {
+  return value
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}

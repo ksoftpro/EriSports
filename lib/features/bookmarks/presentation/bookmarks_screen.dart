@@ -7,7 +7,6 @@ import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 class BookmarksScreen extends ConsumerStatefulWidget {
   const BookmarksScreen({super.key});
@@ -19,35 +18,36 @@ class BookmarksScreen extends ConsumerStatefulWidget {
 class _BookmarksScreenState extends ConsumerState<BookmarksScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs = TabController(length: 2, vsync: this);
-  bool _isEditing = false;
+  late final TextEditingController _searchController;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+  }
 
   @override
   void dispose() {
     _tabs.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final dashboardAsync = ref.watch(followingDashboardProvider);
-    final scheme = Theme.of(context).colorScheme;
+    final resolver = ref.watch(assetResolverProvider);
+    final selection = ref.watch(followingSelectionProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Following'),
         actions: [
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _isEditing = !_isEditing;
-              });
-            },
-            child: Text(_isEditing ? 'Done' : 'Edit'),
-          ),
           IconButton(
-            onPressed: _showAddSheet,
-            icon: const Icon(Icons.add_circle_outline),
-            tooltip: 'Add',
+            tooltip: 'Refresh',
+            onPressed: () => ref.invalidate(followingDashboardProvider),
+            icon: const Icon(Icons.refresh),
           ),
         ],
         bottom: TabBar(
@@ -61,371 +61,256 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen>
             (error, stackTrace) =>
                 const Center(child: Text('Unable to load following data.')),
         data: (state) {
-          final resolver = ref.watch(assetResolverProvider);
-
-          return TabBarView(
-            controller: _tabs,
-            children: [
-              state.teams.isEmpty
-                  ? const _EmptyFollowingState(label: 'No followed teams yet.')
-                  : GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-                    itemCount: state.teams.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                          childAspectRatio: 0.96,
-                        ),
-                    itemBuilder: (context, index) {
-                      final item = state.teams[index];
-                      final bg = _teamCardBackground(index, scheme.brightness);
-
-                      return InkWell(
-                        onTap: () => context.push('/team/${item.team.id}'),
-                        borderRadius: BorderRadius.circular(14),
-                        child: Ink(
-                          decoration: BoxDecoration(
-                            color: bg,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    TeamBadge(
-                                      teamId: item.team.id,
-                                      teamName: item.team.name,
-                                      resolver: resolver,
-                                      source: 'following.team-grid',
-                                      size: 40,
-                                    ),
-                                    const Spacer(),
-                                    if (_isEditing)
-                                      _RemoveChip(
-                                        onTap: () {
-                                          ref
-                                              .read(
-                                                followingSelectionProvider
-                                                    .notifier,
-                                              )
-                                              .toggleTeam(item.team.id);
-                                        },
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  item.team.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium?.copyWith(
-                                    color: _cardTextColor(
-                                      bg,
-                                      scheme.brightness,
-                                    ),
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  item.competitionName ?? 'Competition',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.labelMedium?.copyWith(
-                                    color: _cardTextColor(
-                                      bg,
-                                      scheme.brightness,
-                                    ).withValues(alpha: 0.84),
-                                  ),
-                                ),
-                                const Spacer(),
-                                if (item.nextMatch != null)
-                                  Text(
-                                    '${DateFormat('EEE HH:mm').format(item.nextMatch!.match.kickoffUtc.toLocal())}\nvs ${item.nextOpponentName ?? 'TBD'}',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.labelMedium?.copyWith(
-                                      color: _cardTextColor(
-                                        bg,
-                                        scheme.brightness,
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  Text(
-                                    'No upcoming fixture',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.labelMedium?.copyWith(
-                                      color: _cardTextColor(
-                                        bg,
-                                        scheme.brightness,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-              state.players.isEmpty
-                  ? const _EmptyFollowingState(
-                    label: 'No followed players yet.',
-                  )
-                  : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
-                    itemCount: state.players.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final item = state.players[index];
-                      return InkWell(
-                        onTap: () => context.push('/player/${item.player.id}'),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Ink(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).cardColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: scheme.outline.withValues(alpha: 0.6),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              EntityBadge(
-                                entityId: item.player.id,
-                                entityName: item.player.name,
-                                type: SportsAssetType.players,
-                                resolver: resolver,
-                                size: 40,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.player.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Row(
-                                      children: [
-                                        if (item.team != null) ...[
-                                          TeamBadge(
-                                            teamId: item.team!.id,
-                                            teamName: item.team!.name,
-                                            resolver: resolver,
-                                            source: 'following.player-team',
-                                            size: 16,
-                                          ),
-                                          const SizedBox(width: 5),
-                                        ],
-                                        Expanded(
-                                          child: Text(
-                                            item.team?.name ?? 'No team',
-                                            style:
-                                                Theme.of(
-                                                  context,
-                                                ).textTheme.labelMedium,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (_isEditing)
-                                _RemoveChip(
-                                  onTap: () {
-                                    ref
-                                        .read(
-                                          followingSelectionProvider.notifier,
-                                        )
-                                        .togglePlayer(item.player.id);
-                                  },
-                                ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-            ],
+          final normalizedQuery = _normalizeSearchKey(_query);
+          final teams = _buildTeamsResults(
+            teams: state.availableTeams,
+            competitionNameByTeamId: state.competitionNameByTeamId,
+            followedTeamIds: selection.teamIds,
+            normalizedQuery: normalizedQuery,
           );
-        },
-      ),
-    );
-  }
+          final players = _buildPlayersResults(
+            players: state.availablePlayers,
+            teamNameById: state.teamNameById,
+            followedPlayerIds: selection.playerIds,
+            normalizedQuery: normalizedQuery,
+          );
 
-  Future<void> _showAddSheet() async {
-    final dashboard = await ref.read(followingDashboardProvider.future);
-    if (!mounted) {
-      return;
-    }
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        return _AddFollowingSheet(
-          teams: dashboard.availableTeams,
-          players: dashboard.availablePlayers,
-        );
-      },
-    );
-  }
-
-  Color _teamCardBackground(int index, Brightness brightness) {
-    const lightPalette = [
-      Color(0xFFE7F0FF),
-      Color(0xFFEAF8EC),
-      Color(0xFFFFF1E2),
-      Color(0xFFF0EAFD),
-    ];
-    const darkPalette = [
-      Color(0xFF1E355C),
-      Color(0xFF1D3A2E),
-      Color(0xFF4A3520),
-      Color(0xFF3D2D56),
-    ];
-
-    final palette = brightness == Brightness.dark ? darkPalette : lightPalette;
-    return palette[index % palette.length];
-  }
-
-  Color _cardTextColor(Color background, Brightness brightness) {
-    return brightness == Brightness.dark
-        ? Colors.white
-        : const Color(0xFF1A2336);
-  }
-}
-
-class _AddFollowingSheet extends ConsumerWidget {
-  const _AddFollowingSheet({required this.teams, required this.players});
-
-  final List<TeamRow> teams;
-  final List<PlayerRow> players;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return DefaultTabController(
-      length: 2,
-      child: SafeArea(
-        child: SizedBox(
-          height: MediaQuery.of(context).size.height * 0.72,
-          child: Column(
+          return Column(
             children: [
-              const TabBar(tabs: [Tab(text: 'Teams'), Tab(text: 'Players')]),
-              Expanded(
-                child: TabBarView(
-                  children: [
-                    ListView.builder(
-                      itemCount: teams.length,
-                      itemBuilder: (context, index) {
-                        final team = teams[index];
-                        final selected = ref
-                            .watch(followingSelectionProvider)
-                            .teamIds
-                            .contains(team.id);
-                        return ListTile(
-                          dense: true,
-                          leading: TeamBadge(
-                            teamId: team.id,
-                            teamName: team.name,
-                            resolver: ref.watch(assetResolverProvider),
-                            source: 'following.team-picker',
-                            size: 22,
-                          ),
-                          title: Text(team.name),
-                          trailing: Checkbox(
-                            value: selected,
-                            onChanged: (_) {
-                              ref
-                                  .read(followingSelectionProvider.notifier)
-                                  .toggleTeam(team.id);
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                child: TextField(
+                  controller: _searchController,
+                  textInputAction: TextInputAction.search,
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: InputDecoration(
+                    hintText: 'Search clubs across all leagues or players',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _query.trim().isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _query = '';
+                              });
                             },
+                            icon: const Icon(Icons.close),
                           ),
-                        );
-                      },
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    ListView.builder(
-                      itemCount: players.length,
-                      itemBuilder: (context, index) {
-                        final player = players[index];
-                        final selected = ref
-                            .watch(followingSelectionProvider)
-                            .playerIds
-                            .contains(player.id);
-                        return ListTile(
-                          dense: true,
-                          leading: EntityBadge(
-                            entityId: player.id,
-                            entityName: player.name,
-                            type: SportsAssetType.players,
-                            resolver: ref.watch(assetResolverProvider),
-                            size: 22,
-                          ),
-                          title: Text(player.name),
-                          trailing: Checkbox(
-                            value: selected,
-                            onChanged: (_) {
-                              ref
-                                  .read(followingSelectionProvider.notifier)
-                                  .togglePlayer(player.id);
-                            },
-                          ),
-                        );
-                      },
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(
+                  children: [
+                    Text(
+                      'Following ${selection.teamIds.length} teams',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      '${selection.playerIds.length} players',
+                      style: Theme.of(context).textTheme.labelLarge,
                     ),
                   ],
                 ),
               ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabs,
+                  children: [
+                    teams.isEmpty
+                        ? _EmptyFollowingState(
+                            label: normalizedQuery.isEmpty
+                                ? 'No teams available in local data.'
+                              : 'No teams match "$_query".',
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                            itemCount: teams.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              final team = teams[index];
+                              final isFollowed = selection.teamIds.contains(team.id);
+                              final competitionName =
+                                  state.competitionNameByTeamId[team.id] ??
+                                  'Competition';
+
+                              return Material(
+                                color: Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(12),
+                                child: InkWell(
+                                  onTap: () => context.push('/team/${team.id}'),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: Row(
+                                      children: [
+                                        TeamBadge(
+                                          teamId: team.id,
+                                          teamName: team.name,
+                                          resolver: resolver,
+                                          source: 'following.teams-search',
+                                          size: 42,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                team.name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                competitionName,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelMedium,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        FilledButton.tonal(
+                                          onPressed: () {
+                                            ref
+                                                .read(
+                                                  followingSelectionProvider
+                                                      .notifier,
+                                                )
+                                                .toggleTeam(team.id);
+                                          },
+                                          child: Text(
+                                            isFollowed ? 'Following' : 'Follow',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                    players.isEmpty
+                        ? _EmptyFollowingState(
+                            label: normalizedQuery.isEmpty
+                                ? 'No players available in local data.'
+                              : 'No players match "$_query".',
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                            itemCount: players.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              final player = players[index];
+                              final isFollowed =
+                                  selection.playerIds.contains(player.id);
+                              final teamName = player.teamId == null
+                                  ? 'No team'
+                                  : state.teamNameById[player.teamId!] ?? 'No team';
+
+                              return Material(
+                                color: Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(12),
+                                child: InkWell(
+                                  onTap: () => context.push('/player/${player.id}'),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: Row(
+                                      children: [
+                                        EntityBadge(
+                                          entityId: player.id,
+                                          entityName: player.name,
+                                          type: SportsAssetType.players,
+                                          resolver: resolver,
+                                          size: 42,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                player.name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Row(
+                                                children: [
+                                                  if (player.teamId != null) ...[
+                                                    TeamBadge(
+                                                      teamId: player.teamId!,
+                                                      teamName: teamName,
+                                                      resolver: resolver,
+                                                      source:
+                                                          'following.players-search',
+                                                      size: 16,
+                                                    ),
+                                                    const SizedBox(width: 5),
+                                                  ],
+                                                  Expanded(
+                                                    child: Text(
+                                                      teamName,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: Theme.of(context)
+                                                          .textTheme
+                                                          .labelMedium,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        FilledButton.tonal(
+                                          onPressed: () {
+                                            ref
+                                                .read(
+                                                  followingSelectionProvider
+                                                      .notifier,
+                                                )
+                                                .togglePlayer(player.id);
+                                          },
+                                          child: Text(
+                                            isFollowed ? 'Following' : 'Follow',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ],
+                ),
+              ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RemoveChip extends StatelessWidget {
-  const _RemoveChip({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.error.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(
-          'Remove',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.error,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -449,4 +334,73 @@ class _EmptyFollowingState extends StatelessWidget {
       ),
     );
   }
+}
+
+List<TeamRow> _buildTeamsResults({
+  required List<TeamRow> teams,
+  required Map<String, String> competitionNameByTeamId,
+  required Set<String> followedTeamIds,
+  required String normalizedQuery,
+}) {
+  final filtered = teams.where((team) {
+    if (normalizedQuery.isEmpty) {
+      return true;
+    }
+
+    final teamName = _normalizeSearchKey(team.name);
+    final competitionName = _normalizeSearchKey(
+      competitionNameByTeamId[team.id] ?? '',
+    );
+    return teamName.contains(normalizedQuery) ||
+        competitionName.contains(normalizedQuery);
+  }).toList(growable: false);
+
+  filtered.sort((a, b) {
+    final followedRankA = followedTeamIds.contains(a.id) ? 0 : 1;
+    final followedRankB = followedTeamIds.contains(b.id) ? 0 : 1;
+    if (followedRankA != followedRankB) {
+      return followedRankA.compareTo(followedRankB);
+    }
+    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  });
+
+  return filtered;
+}
+
+List<PlayerRow> _buildPlayersResults({
+  required List<PlayerRow> players,
+  required Map<String, String> teamNameById,
+  required Set<String> followedPlayerIds,
+  required String normalizedQuery,
+}) {
+  final filtered = players.where((player) {
+    if (normalizedQuery.isEmpty) {
+      return true;
+    }
+
+    final playerName = _normalizeSearchKey(player.name);
+    final teamName = _normalizeSearchKey(
+      player.teamId == null ? '' : (teamNameById[player.teamId!] ?? ''),
+    );
+    return playerName.contains(normalizedQuery) || teamName.contains(normalizedQuery);
+  }).toList(growable: false);
+
+  filtered.sort((a, b) {
+    final followedRankA = followedPlayerIds.contains(a.id) ? 0 : 1;
+    final followedRankB = followedPlayerIds.contains(b.id) ? 0 : 1;
+    if (followedRankA != followedRankB) {
+      return followedRankA.compareTo(followedRankB);
+    }
+    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  });
+
+  return filtered;
+}
+
+String _normalizeSearchKey(String value) {
+  return value
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 }

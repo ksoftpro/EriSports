@@ -114,16 +114,14 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                       },
                       itemBuilder: (context, index) {
                         final media = snapshot.images[index];
-                        return _OfflineNewsPage(
-                          media: media,
-                          isActive: index == _currentIndex,
-                        );
+                        return _OfflineNewsPage(media: media);
                       },
                     ),
                   ),
                   _OfflineNewsFooter(
                     currentIndex: _currentIndex,
                     total: snapshot.images.length,
+                    currentFileName: snapshot.images[_currentIndex].fileName,
                     unreadableCount: snapshot.unreadableCount,
                     skippedUnsupportedCount: snapshot.skippedUnsupportedCount,
                   ),
@@ -214,10 +212,9 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
 }
 
 class _OfflineNewsPage extends StatelessWidget {
-  const _OfflineNewsPage({required this.media, required this.isActive});
+  const _OfflineNewsPage({required this.media});
 
   final OfflineNewsMediaItem media;
-  final bool isActive;
 
   @override
   Widget build(BuildContext context) {
@@ -247,33 +244,6 @@ class _OfflineNewsPage extends StatelessWidget {
                   ),
                 ),
               ),
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 10,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 180),
-                  opacity: isActive ? 1 : 0,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      child: Text(
-                        media.fileName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -286,12 +256,14 @@ class _OfflineNewsFooter extends StatelessWidget {
   const _OfflineNewsFooter({
     required this.currentIndex,
     required this.total,
+    required this.currentFileName,
     required this.unreadableCount,
     required this.skippedUnsupportedCount,
   });
 
   final int currentIndex;
   final int total;
+  final String currentFileName;
   final int unreadableCount;
   final int skippedUnsupportedCount;
 
@@ -301,15 +273,28 @@ class _OfflineNewsFooter extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${currentIndex + 1} / $total', style: style),
-          const Spacer(),
-          if (skippedUnsupportedCount > 0)
-            Text('Skipped: $skippedUnsupportedCount', style: style),
-          if (skippedUnsupportedCount > 0 && unreadableCount > 0)
-            const SizedBox(width: 10),
-          if (unreadableCount > 0) Text('Unreadable: $unreadableCount', style: style),
+          Row(
+            children: [
+              Text('${currentIndex + 1} / $total', style: style),
+              const Spacer(),
+              if (skippedUnsupportedCount > 0)
+                Text('Skipped: $skippedUnsupportedCount', style: style),
+              if (skippedUnsupportedCount > 0 && unreadableCount > 0)
+                const SizedBox(width: 10),
+              if (unreadableCount > 0)
+                Text('Unreadable: $unreadableCount', style: style),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            currentFileName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
         ],
       ),
     );

@@ -57,8 +57,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   _selectDay(days, _todayOrClosest(days));
                 },
                 onOpenCalendar: () => context.push('/leagues'),
+                onOpenFollowing: () => context.push('/following'),
                 onOpenSearch: () => context.push('/search'),
-                onOpenMore: () => context.push('/more'),
+                onOpenMore: () => context.push('/video'),
               ),
               _DayTabStrip(
                 days: days,
@@ -413,12 +414,14 @@ class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.onOpenClock,
     required this.onOpenCalendar,
+    required this.onOpenFollowing,
     required this.onOpenSearch,
     required this.onOpenMore,
   });
 
   final VoidCallback onOpenClock;
   final VoidCallback onOpenCalendar;
+  final VoidCallback onOpenFollowing;
   final VoidCallback onOpenSearch;
   final VoidCallback onOpenMore;
 
@@ -449,14 +452,19 @@ class _TopBar extends StatelessWidget {
             icon: const Icon(Icons.calendar_month_outlined, size: 22),
           ),
           IconButton(
+            tooltip: 'Following',
+            onPressed: onOpenFollowing,
+            icon: const Icon(Icons.people_alt_outlined, size: 22),
+          ),
+          IconButton(
             tooltip: 'Search',
             onPressed: onOpenSearch,
             icon: const Icon(Icons.search, size: 23),
           ),
           IconButton(
-            tooltip: 'More',
+            tooltip: 'Video',
             onPressed: onOpenMore,
-            icon: const Icon(Icons.more_vert, size: 23),
+            icon: const Icon(Icons.video_library_outlined, size: 23),
           ),
         ],
       ),

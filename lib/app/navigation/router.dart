@@ -4,13 +4,14 @@ import 'package:eri_sports/features/home/presentation/home_screen.dart';
 import 'package:eri_sports/features/leagues/presentation/league_overview_screen.dart';
 import 'package:eri_sports/features/leagues/presentation/leagues_screen.dart';
 import 'package:eri_sports/features/match_detail/presentation/match_detail_screen.dart';
-import 'package:eri_sports/features/more/presentation/more_screen.dart';
 import 'package:eri_sports/features/news/presentation/offline_news_screen.dart';
 import 'package:eri_sports/features/player/presentation/player_screen.dart';
 import 'package:eri_sports/features/player_stats/presentation/player_stats_screen.dart';
+import 'package:eri_sports/features/reels/presentation/reels_screen.dart';
 import 'package:eri_sports/features/search/presentation/search_screen.dart';
 import 'package:eri_sports/features/sync/presentation/daylysport_sync_screen.dart';
 import 'package:eri_sports/features/team/presentation/team_screen.dart';
+import 'package:eri_sports/features/video/presentation/video_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -59,27 +60,34 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/bookmarks',
-                name: 'bookmarks',
+                path: '/reels',
+                name: 'reels',
                 pageBuilder:
                     (context, state) =>
-                        const NoTransitionPage(child: BookmarksScreen()),
+                        const NoTransitionPage(child: ReelsScreen()),
               ),
             ],
           ),
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/more',
-                name: 'more',
+                path: '/video',
+                name: 'video',
                 pageBuilder:
                     (context, state) =>
-                        const NoTransitionPage(child: MoreScreen()),
+                        const NoTransitionPage(child: VideoScreen()),
               ),
             ],
           ),
         ],
       ),
+      GoRoute(
+        path: '/following',
+        name: 'following',
+        builder: (context, state) => const BookmarksScreen(),
+      ),
+      GoRoute(path: '/bookmarks', redirect: (context, state) => '/following'),
+      GoRoute(path: '/more', redirect: (context, state) => '/video'),
       GoRoute(
         path: '/search',
         name: 'search',
