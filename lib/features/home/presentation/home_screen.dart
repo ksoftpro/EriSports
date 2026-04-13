@@ -3,6 +3,7 @@ import 'package:eri_sports/app/navigation/detail_navigation.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/features/home/presentation/home_providers.dart';
+import 'package:eri_sports/features/leagues/domain/league_ordering.dart';
 import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
 import 'package:eri_sports/shared/formatters/team_display_name_formatter.dart';
 import 'package:eri_sports/shared/widgets/entity_badge.dart';
@@ -20,10 +21,18 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  DateTime _selectedDay = _dayKey(DateTime.now());
+  DateTime? _selectedDay;
+  PageController? _dayPageController;
+  List<DateTime> _controllerDays = const <DateTime>[];
   bool _followingCollapsed = false;
   bool _hideAllCompetitions = false;
   final Set<String> _collapsedCompetitionIds = <String>{};
+
+  @override
+  void dispose() {
+    _dayPageController?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,43 +44,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         error: (_, __) => const Center(child: Text('Failed to load matches.')),
         data: (state) {
           final days = _allMatchDays(state.all);
-          final fallbackDay = _closestMatchDay(days);
-          final effectiveDay =
-              days.any((item) => _isSameDay(item, _selectedDay))
-                  ? _selectedDay
-                  : fallbackDay;
+          final selectedDay = _resolvePreferredDay(days);
+          final selectedIndex = _indexForDay(days, selectedDay);
+          _ensurePageController(days, selectedIndex);
 
           final resolver = ref.read(appServicesProvider).assetResolver;
-          final dayMatches = state.all
-              .where(
-                (item) =>
-                    _isSameDay(item.match.kickoffUtc.toLocal(), effectiveDay),
-              )
-              .toList(growable: false)
-            ..sort((a, b) => a.match.kickoffUtc.compareTo(b.match.kickoffUtc));
-
-          final sections = _groupByCompetition(
-            dayMatches,
-            state.competitionNamesById,
-          );
-          final followingMatches = state.followed
-              .where(
-                (item) =>
-                    _isSameDay(item.match.kickoffUtc.toLocal(), effectiveDay),
-              )
-              .take(2)
-              .toList(growable: false);
 
           return Column(
             children: [
               _TopBar(
                 onOpenClock: () {
-                  setState(() {
-                    _selectedDay = days.firstWhere(
-                      (day) => _isSameDay(day, _dayKey(DateTime.now())),
-                      orElse: () => _closestMatchDay(days),
-                    );
-                  });
+                  _selectDay(days, _todayOrClosest(days));
                 },
                 onOpenCalendar: () => context.push('/leagues'),
                 onOpenSearch: () => context.push('/search'),
@@ -79,136 +62,268 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               _DayTabStrip(
                 days: days,
-                selectedDay: effectiveDay,
-                onSelect: (day) {
-                  setState(() {
-                    _selectedDay = day;
-                  });
-                },
+                selectedDay: selectedDay,
+                onSelect: (day) => _selectDay(days, day),
               ),
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 16),
-                  children: [
-                    if (followingMatches.isNotEmpty)
-                      _FixtureGroupCard(
-                        title: 'Following',
-                        leadingIcon: Icons.star,
-                        collapsed: _followingCollapsed,
-                        onToggleCollapse: () {
-                          setState(() {
-                            _followingCollapsed = !_followingCollapsed;
-                          });
-                        },
-                        children: followingMatches
-                            .map(
-                              (fixture) => _FixtureRow(
-                                fixture: fixture,
-                                resolver: resolver,
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                    const SizedBox(height: 18),
-                    Center(
-                      child: InkWell(
-                        onTap: () {
-                          setState(() {
-                            _hideAllCompetitions = !_hideAllCompetitions;
-                          });
-                        },
-                        borderRadius: BorderRadius.circular(999),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 22,
-                            vertical: 9,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.secondary,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _hideAllCompetitions ? 'Show all' : 'Hide all',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(width: 6),
-                              Icon(
-                                _hideAllCompetitions
-                                    ? Icons.keyboard_arrow_down
-                                    : Icons.keyboard_arrow_up,
-                                size: 18,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    if (sections.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-                        child: Text(
-                          'No fixtures for ${DateFormat('EEE d MMM').format(effectiveDay)}.',
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
-                      ),
-                    for (final section in sections) ...[
-                      _FixtureGroupCard(
-                        title: section.competitionName,
-                        badge: EntityBadge(
-                          entityId: section.competitionId,
-                          entityName: section.competitionName,
-                          type: SportsAssetType.leagues,
+                child:
+                    days.isEmpty || _dayPageController == null
+                        ? _buildDayMatchesList(
+                          context,
+                          day: selectedDay,
+                          state: state,
                           resolver: resolver,
-                          size: 16,
-                          isCircular: false,
-                        ),
-                        collapsed:
-                            _hideAllCompetitions ||
-                            _collapsedCompetitionIds.contains(
-                              section.competitionId,
-                            ),
-                        onToggleCollapse: () {
-                          setState(() {
-                            if (_collapsedCompetitionIds.contains(
-                              section.competitionId,
-                            )) {
-                              _collapsedCompetitionIds.remove(
-                                section.competitionId,
-                              );
-                            } else {
-                              _collapsedCompetitionIds.add(
-                                section.competitionId,
-                              );
+                        )
+                        : PageView.builder(
+                          controller: _dayPageController,
+                          itemCount: days.length,
+                          onPageChanged: (index) {
+                            final day = days[index];
+                            if (_selectedDay != null &&
+                                _isSameDay(_selectedDay!, day)) {
+                              return;
                             }
-                          });
-                        },
-                        onTapHeader:
-                            () => context.push(
-                              '/league/${section.competitionId}',
-                            ),
-                        children: section.matches
-                            .map(
-                              (fixture) => _FixtureRow(
-                                fixture: fixture,
-                                resolver: resolver,
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                  ],
-                ),
+                            setState(() {
+                              _selectedDay = day;
+                            });
+                          },
+                          itemBuilder: (context, index) {
+                            final day = days[index];
+                            return _buildDayMatchesList(
+                              context,
+                              day: day,
+                              state: state,
+                              resolver: resolver,
+                            );
+                          },
+                        ),
               ),
             ],
           );
         },
       ),
     );
+  }
+
+  Widget _buildDayMatchesList(
+    BuildContext context, {
+    required DateTime day,
+    required HomeFeedState state,
+    required LocalAssetResolver resolver,
+  }) {
+    final dayMatches = state.all
+        .where((item) => _isSameDay(item.match.kickoffUtc.toLocal(), day))
+        .toList(growable: false)
+      ..sort((a, b) => a.match.kickoffUtc.compareTo(b.match.kickoffUtc));
+
+    final sections = _groupByCompetition(dayMatches, state.competitionNamesById);
+    final followingMatches = state.followed
+        .where((item) => _isSameDay(item.match.kickoffUtc.toLocal(), day))
+        .take(2)
+        .toList(growable: false);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 16),
+      children: [
+        if (followingMatches.isNotEmpty)
+          _FixtureGroupCard(
+            title: 'Following',
+            leadingIcon: Icons.star,
+            collapsed: _followingCollapsed,
+            onToggleCollapse: () {
+              setState(() {
+                _followingCollapsed = !_followingCollapsed;
+              });
+            },
+            children: followingMatches
+                .map(
+                  (fixture) => _FixtureRow(
+                    fixture: fixture,
+                    resolver: resolver,
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        const SizedBox(height: 18),
+        Center(
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                _hideAllCompetitions = !_hideAllCompetitions;
+              });
+            },
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 9),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondary,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _hideAllCompetitions ? 'Show all' : 'Hide all',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    _hideAllCompetitions
+                        ? Icons.keyboard_arrow_down
+                        : Icons.keyboard_arrow_up,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        if (sections.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+            child: Text(
+              'No fixtures for ${DateFormat('EEE d MMM').format(day)}.',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ),
+        for (final section in sections) ...[
+          _FixtureGroupCard(
+            title: section.competitionName,
+            badge: EntityBadge(
+              entityId: section.competitionId,
+              entityName: section.competitionName,
+              type: SportsAssetType.leagues,
+              resolver: resolver,
+              size: 16,
+              isCircular: false,
+            ),
+            collapsed:
+                _hideAllCompetitions ||
+                _collapsedCompetitionIds.contains(section.competitionId),
+            onToggleCollapse: () {
+              setState(() {
+                if (_collapsedCompetitionIds.contains(section.competitionId)) {
+                  _collapsedCompetitionIds.remove(section.competitionId);
+                } else {
+                  _collapsedCompetitionIds.add(section.competitionId);
+                }
+              });
+            },
+            onTapHeader: () => context.push('/league/${section.competitionId}'),
+            children: section.matches
+                .map(
+                  (fixture) => _FixtureRow(
+                    fixture: fixture,
+                    resolver: resolver,
+                  ),
+                )
+                .toList(growable: false),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+
+  DateTime _resolvePreferredDay(List<DateTime> days) {
+    if (days.isEmpty) {
+      return _dayKey(DateTime.now());
+    }
+
+    final current = _selectedDay;
+    if (current != null && days.any((item) => _isSameDay(item, current))) {
+      return current;
+    }
+
+    final preferred = _todayOrClosest(days);
+    _selectedDay = preferred;
+    return preferred;
+  }
+
+  DateTime _todayOrClosest(List<DateTime> days) {
+    if (days.isEmpty) {
+      return _dayKey(DateTime.now());
+    }
+
+    final today = _dayKey(DateTime.now());
+    final todayMatch = days.where((day) => _isSameDay(day, today));
+    if (todayMatch.isNotEmpty) {
+      return todayMatch.first;
+    }
+
+    // When today has no fixtures, prefer the nearest upcoming day.
+    // If all fixtures are in the past, use the latest available day.
+    return _closestMatchDay(days);
+  }
+
+  int _indexForDay(List<DateTime> days, DateTime day) {
+    if (days.isEmpty) {
+      return 0;
+    }
+    final index = days.indexWhere((item) => _isSameDay(item, day));
+    return index < 0 ? 0 : index;
+  }
+
+  void _ensurePageController(List<DateTime> days, int selectedIndex) {
+    final shouldRecreate =
+        _dayPageController == null || !_sameDayList(_controllerDays, days);
+
+    if (shouldRecreate) {
+      _dayPageController?.dispose();
+      _controllerDays = List<DateTime>.from(days, growable: false);
+      _dayPageController = PageController(initialPage: selectedIndex);
+      return;
+    }
+
+    final controller = _dayPageController;
+    if (controller == null || !controller.hasClients) {
+      return;
+    }
+
+    final currentPage = controller.page?.round() ?? controller.initialPage;
+    if (currentPage != selectedIndex) {
+      controller.jumpToPage(selectedIndex);
+    }
+  }
+
+  bool _sameDayList(List<DateTime> a, List<DateTime> b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var index = 0; index < a.length; index++) {
+      if (!_isSameDay(a[index], b[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _selectDay(List<DateTime> days, DateTime day) {
+    if (days.isEmpty) {
+      setState(() {
+        _selectedDay = day;
+      });
+      return;
+    }
+
+    final index = _indexForDay(days, day);
+    final selected = days[index];
+    setState(() {
+      _selectedDay = selected;
+    });
+
+    final controller = _dayPageController;
+    if (controller != null && controller.hasClients) {
+      controller.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   List<DateTime> _allMatchDays(List<HomeMatchView> matches) {
@@ -264,9 +379,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .toList(growable: false);
 
     sections.sort(
-      (a, b) => a.matches.first.match.kickoffUtc.compareTo(
-        b.matches.first.match.kickoffUtc,
-      ),
+      (a, b) {
+        final rankA = referenceLeagueRank(a.competitionName);
+        final rankB = referenceLeagueRank(b.competitionName);
+        if (rankA != rankB) {
+          return rankA.compareTo(rankB);
+        }
+
+        final firstKickoffCompare = a.matches.first.match.kickoffUtc.compareTo(
+          b.matches.first.match.kickoffUtc,
+        );
+        if (firstKickoffCompare != 0) {
+          return firstKickoffCompare;
+        }
+
+        final nameCompare =
+            a.competitionName.toLowerCase().compareTo(
+              b.competitionName.toLowerCase(),
+            );
+        if (nameCompare != 0) {
+          return nameCompare;
+        }
+
+        return a.competitionId.compareTo(b.competitionId);
+      },
     );
 
     return sections;
@@ -295,7 +431,7 @@ class _TopBar extends StatelessWidget {
           const Icon(Icons.stacked_line_chart_rounded, size: 22),
           const SizedBox(width: 3),
           Text(
-            'FOTMOB',
+            'ERISPORT',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.w900,
               letterSpacing: 0.2,
