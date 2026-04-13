@@ -18,6 +18,7 @@ import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
 import 'package:eri_sports/data/local_files/json_data_version_tracker.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
+import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -172,6 +173,7 @@ class _WidgetHarness {
       daylySportLocator: locator,
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
+      encryptedMediaService: EncryptedMediaService(),
       leagueStandingsSource: leagueStandingsSource,
       teamRawSource: teamRawSource,
       daylysportSyncCoordinator: syncCoordinator,

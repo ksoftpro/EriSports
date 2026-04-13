@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
+import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:path/path.dart' as p;
 
 const Set<String> _supportedImageExtensions = {
@@ -20,6 +21,7 @@ const Set<String> _supportedVideoExtensions = {
   '.mkv',
   '.avi',
   '.3gp',
+  kEncryptedMediaExtension,
 };
 
 enum DaylySportMediaSection { reels, highlights, news, updates }
@@ -67,6 +69,8 @@ class DaylySportMediaItem {
   String get fileName => p.basename(file.path);
 
   bool get isVideo => type == DaylySportMediaType.video;
+
+  bool get isEncrypted => isEncryptedMediaPath(file.path);
 }
 
 class DaylySportMediaSectionSnapshot {

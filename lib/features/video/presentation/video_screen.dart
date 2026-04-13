@@ -1,5 +1,6 @@
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
+import 'package:eri_sports/features/media/presentation/media_playback_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -145,45 +146,52 @@ class _MediaCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: item.type == DaylySportMediaType.image
-                ? Image.file(item.file, fit: BoxFit.cover)
-                : ColoredBox(
-                    color: const Color(0xFF141A24),
-                    child: Center(
-                      child: Icon(
-                        Icons.play_circle_fill_rounded,
-                        size: 56,
-                        color: Colors.white.withValues(alpha: 0.85),
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => MediaPlaybackScreen(item: item)),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: item.type == DaylySportMediaType.image
+                  ? Image.file(item.file, fit: BoxFit.cover)
+                  : ColoredBox(
+                      color: const Color(0xFF141A24),
+                      child: Center(
+                        child: Icon(
+                          Icons.play_circle_fill_rounded,
+                          size: 56,
+                          color: Colors.white.withValues(alpha: 0.85),
+                        ),
                       ),
                     ),
-                  ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-            child: Text(
-              item.fileName,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: titleStyle,
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            child: Text(
-              '${item.relativePath} • ${DateFormat('d MMM HH:mm').format(item.lastModified.toLocal())}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+              child: Text(
+                item.fileName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: titleStyle,
               ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: Text(
+                '${item.relativePath} • ${DateFormat('d MMM HH:mm').format(item.lastModified.toLocal())}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
