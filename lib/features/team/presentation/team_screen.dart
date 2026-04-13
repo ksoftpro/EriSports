@@ -1358,133 +1358,309 @@ class _FixturesTab extends StatelessWidget {
       );
     }
 
-    final grouped = <String, List<TeamFixtureItem>>{};
+    final grouped = <DateTime, List<TeamFixtureItem>>{};
     for (final fixture in fixtures) {
-      final key = DateFormat(
-        'EEEE, dd MMM yyyy',
-      ).format(fixture.kickoffUtc.toLocal());
+      final local = fixture.kickoffUtc.toLocal();
+      final key = DateTime(local.year, local.month, local.day);
       grouped.putIfAbsent(key, () => []).add(fixture);
     }
+    final orderedDates = grouped.keys.toList(growable: false)
+      ..sort((a, b) => b.compareTo(a));
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
       children: [
-        for (final entry in grouped.entries) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+        for (final date in orderedDates) ...[
+          _FixtureDateHeader(date: date, count: grouped[date]!.length),
+          const SizedBox(height: 6),
+          for (final fixture in grouped[date]!)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _FixtureMatchCard(fixture: fixture, resolver: resolver),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _FixtureDateHeader extends StatelessWidget {
+  const _FixtureDateHeader({required this.date, required this.count});
+
+  final DateTime date;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(2, 10, 2, 7),
+      child: Row(
+        children: [
+          Expanded(
             child: Text(
-              entry.key,
+              DateFormat('EEE, dd MMM yyyy').format(date),
               style: const TextStyle(
-                color: Color(0xFF535D6B),
+                color: Color(0xFF465064),
+                fontWeight: FontWeight.w800,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F3F8),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: const Color(0xFFDCE2EA)),
+            ),
+            child: Text(
+              '$count matches',
+              style: const TextStyle(
+                color: Color(0xFF5D6778),
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
-          for (final fixture in entry.value)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: InkWell(
-                onTap:
-                    fixture.matchId == null
-                        ? null
-                        : () => context.openMatchDetail(fixture.matchId!),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E6EC)),
+        ],
+      ),
+    );
+  }
+}
+
+class _FixtureMatchCard extends StatelessWidget {
+  const _FixtureMatchCard({required this.fixture, required this.resolver});
+
+  final TeamFixtureItem fixture;
+  final dynamic resolver;
+
+  @override
+  Widget build(BuildContext context) {
+    final score = MatchDisplayFormatter.scoreDisplay(
+      status: fixture.status,
+      kickoffUtc: fixture.kickoffUtc,
+      homeScore: fixture.homeScore,
+      awayScore: fixture.awayScore,
+    );
+    final hasNumericScore =
+        fixture.homeScore != null && fixture.awayScore != null;
+    final useUpcomingLayout =
+        score.lifecycle == MatchLifecycle.upcoming || !hasNumericScore;
+
+    final status = _fixtureStatusLabel(
+      fixture.status,
+      score.lifecycle,
+      hasNumericScore: hasNumericScore,
+    );
+    final statusColor = _fixtureStatusColor(
+      score.lifecycle,
+      hasNumericScore: hasNumericScore,
+    );
+    final homeWon = hasNumericScore && fixture.homeScore! > fixture.awayScore!;
+    final awayWon = hasNumericScore && fixture.awayScore! > fixture.homeScore!;
+
+    return InkWell(
+      onTap:
+          fixture.matchId == null
+              ? null
+              : () => context.openMatchDetail(fixture.matchId!),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E6EC)),
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
                   ),
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                  child: Column(
-                    children: [
-                      Builder(
-                        builder: (context) {
-                          final score = MatchDisplayFormatter.scoreDisplay(
-                            status: fixture.status,
-                            kickoffUtc: fixture.kickoffUtc,
-                            homeScore: fixture.homeScore,
-                            awayScore: fixture.awayScore,
-                          );
-
-                          return Row(
-                            children: [
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        fixture.roundLabel ?? fixture.status,
-                                        style: const TextStyle(
-                                          color: Color(0xFF6A7382),
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      DateFormat(
-                                        'HH:mm',
-                                      ).format(fixture.kickoffUtc.toLocal()),
-                                      style: const TextStyle(
-                                        color: Color(0xFF1A2230),
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                width: 44,
-                                child: Text(
-                                  score.centerLabel,
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(
-                                    color: Color(0xFF121925),
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (fixture.roundLabel != null &&
+                    fixture.roundLabel!.trim().isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      fixture.roundLabel!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF6A7382),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(height: 8),
-                      Builder(
-                        builder: (context) {
-                          final score = MatchDisplayFormatter.scoreDisplay(
-                            status: fixture.status,
-                            kickoffUtc: fixture.kickoffUtc,
-                            homeScore: fixture.homeScore,
-                            awayScore: fixture.awayScore,
-                          );
+                    ),
+                  ),
+                ] else
+                  const Spacer(),
+                Text(
+                  DateFormat('HH:mm').format(fixture.kickoffUtc.toLocal()),
+                  style: const TextStyle(
+                    color: Color(0xFF5E6879),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
+            if (useUpcomingLayout)
+              _UpcomingFixtureRow(fixture: fixture, resolver: resolver)
+            else
+              Column(
+                children: [
+                  _FixtureTeamLine(
+                    teamId: fixture.homeTeamId,
+                    teamName: fixture.homeTeamName,
+                    score: '${fixture.homeScore}',
+                    highlight: homeWon,
+                    resolver: resolver,
+                  ),
+                  const SizedBox(height: 5),
+                  _FixtureTeamLine(
+                    teamId: fixture.awayTeamId,
+                    teamName: fixture.awayTeamName,
+                    score: '${fixture.awayScore}',
+                    highlight: awayWon,
+                    resolver: resolver,
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
-                          return Column(
-                            children: [
-                              _FixtureTeamLine(
-                                teamId: fixture.homeTeamId,
-                                teamName: fixture.homeTeamName,
-                                score: score.homeScoreLabel,
-                                resolver: resolver,
-                              ),
-                              const SizedBox(height: 6),
-                              _FixtureTeamLine(
-                                teamId: fixture.awayTeamId,
-                                teamName: fixture.awayTeamName,
-                                score: score.awayScoreLabel,
-                                resolver: resolver,
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
+  String _fixtureStatusLabel(
+    String rawStatus,
+    MatchLifecycle lifecycle, {
+    required bool hasNumericScore,
+  }) {
+    final normalized = rawStatus.trim().toLowerCase();
+    if (!hasNumericScore) {
+      return 'SCHEDULED';
+    }
+    if (lifecycle == MatchLifecycle.live) {
+      return 'LIVE';
+    }
+    if (lifecycle == MatchLifecycle.finished) {
+      return 'FT';
+    }
+    if (normalized.contains('postpon')) {
+      return 'POSTPONED';
+    }
+    if (normalized.contains('cancel')) {
+      return 'CANCELLED';
+    }
+    return 'SCHEDULED';
+  }
+
+  Color _fixtureStatusColor(
+    MatchLifecycle lifecycle, {
+    required bool hasNumericScore,
+  }) {
+    if (!hasNumericScore) {
+      return const Color(0xFF1B5E20);
+    }
+    switch (lifecycle) {
+      case MatchLifecycle.live:
+        return const Color(0xFFC62828);
+      case MatchLifecycle.finished:
+        return const Color(0xFF4B5565);
+      case MatchLifecycle.upcoming:
+        return const Color(0xFF1B5E20);
+    }
+  }
+}
+
+class _UpcomingFixtureRow extends StatelessWidget {
+  const _UpcomingFixtureRow({required this.fixture, required this.resolver});
+
+  final TeamFixtureItem fixture;
+  final dynamic resolver;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              TeamBadge(
+                teamId: fixture.homeTeamId,
+                teamName: fixture.homeTeamName,
+                resolver: resolver,
+                source: 'team.fixtures',
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  fixture.homeTeamName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF1B2331),
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-            ),
-        ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        const Text(
+          'vs',
+          style: TextStyle(
+            color: Color(0xFF121925),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Row(
+            children: [
+              TeamBadge(
+                teamId: fixture.awayTeamId,
+                teamName: fixture.awayTeamName,
+                resolver: resolver,
+                source: 'team.fixtures',
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  fixture.awayTeamName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF1B2331),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -1495,12 +1671,14 @@ class _FixtureTeamLine extends StatelessWidget {
     required this.teamId,
     required this.teamName,
     required this.score,
+    required this.highlight,
     required this.resolver,
   });
 
   final String? teamId;
   final String teamName;
-  final String? score;
+  final String score;
+  final bool highlight;
   final dynamic resolver;
 
   @override
@@ -1520,21 +1698,21 @@ class _FixtureTeamLine extends StatelessWidget {
             teamName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFF1B2331),
-              fontWeight: FontWeight.w700,
+            style: TextStyle(
+              color: const Color(0xFF1B2331),
+              fontWeight: highlight ? FontWeight.w800 : FontWeight.w700,
             ),
           ),
         ),
-        if (score != null)
-          Text(
-            score!,
-            style: const TextStyle(
-              color: Color(0xFF121925),
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
+        const SizedBox(width: 8),
+        Text(
+          score,
+          style: TextStyle(
+            color: const Color(0xFF121925),
+            fontSize: 16,
+            fontWeight: highlight ? FontWeight.w900 : FontWeight.w700,
           ),
+        ),
       ],
     );
   }
@@ -1552,87 +1730,233 @@ class _SquadTab extends StatelessWidget {
       return const _EmptyTabState(message: 'No squad data in this team JSON.');
     }
 
+    final grouped = <String, List<TeamSquadItem>>{};
+    for (final item in state.squadItems) {
+      final group = _squadGroupLabel(item.position);
+      grouped.putIfAbsent(group, () => []).add(item);
+    }
+    const orderedGroups = <String>[
+      'Goalkeepers',
+      'Defenders',
+      'Midfielders',
+      'Forwards',
+      'Other',
+    ];
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth > 940 ? 3 : 2;
-        return GridView.builder(
+        final columns =
+            constraints.maxWidth > 1160
+                ? 4
+                : constraints.maxWidth > 880
+                ? 3
+                : 2;
+
+        return ListView(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-            childAspectRatio: columns == 3 ? 2.7 : 2.45,
-          ),
-          itemCount: state.squadItems.length,
-          itemBuilder: (context, index) {
-            final item = state.squadItems[index];
-            return InkWell(
-              onTap:
-                  item.playerId == null
-                      ? null
-                      : () => context.push('/player/${item.playerId}'),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF9FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE1E5EB)),
+          children: [
+            for (final group in orderedGroups)
+              if ((grouped[group] ?? const <TeamSquadItem>[]).isNotEmpty) ...[
+                _SquadGroupHeader(
+                  title: group,
+                  count: grouped[group]!.length,
                 ),
-                padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                child: Row(
-                  children: [
-                    EntityBadge(
-                      entityId: item.playerId ?? item.playerName,
-                      entityName: item.playerName,
-                      type: SportsAssetType.players,
-                      resolver: resolver,
-                      size: 40,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            item.playerName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF1A2230),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item.position ?? 'Unknown position',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF6B7381),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      item.shirtNumber?.toString() ?? '--',
-                      style: const TextStyle(
-                        color: Color(0xFF131B28),
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 8),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: columns >= 3 ? 1.78 : 1.6,
+                  ),
+                  itemCount: grouped[group]!.length,
+                  itemBuilder: (context, index) {
+                    final item = grouped[group]![index];
+                    return _SquadPlayerCard(item: item, resolver: resolver);
+                  },
                 ),
-              ),
-            );
-          },
+                const SizedBox(height: 12),
+              ],
+          ],
         );
       },
     );
+  }
+
+  String _squadGroupLabel(String? position) {
+    final value = (position ?? '').toUpperCase();
+    if (value.startsWith('GK')) {
+      return 'Goalkeepers';
+    }
+    if (value.startsWith('CB') ||
+        value.startsWith('LCB') ||
+        value.startsWith('RCB') ||
+        value.startsWith('LB') ||
+        value.startsWith('RB') ||
+        value.startsWith('LWB') ||
+        value.startsWith('RWB') ||
+        value.startsWith('DEF')) {
+      return 'Defenders';
+    }
+    if (value.startsWith('DM') ||
+        value.startsWith('CM') ||
+        value.startsWith('RM') ||
+        value.startsWith('LM') ||
+        value.startsWith('AM') ||
+        value.startsWith('MID')) {
+      return 'Midfielders';
+    }
+    if (value.startsWith('RW') ||
+        value.startsWith('LW') ||
+        value.startsWith('CF') ||
+        value.startsWith('FW') ||
+        value.startsWith('ST') ||
+        value.startsWith('ATT')) {
+      return 'Forwards';
+    }
+    return 'Other';
+  }
+}
+
+class _SquadGroupHeader extends StatelessWidget {
+  const _SquadGroupHeader({required this.title, required this.count});
+
+  final String title;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: Color(0xFF3F495C),
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0F3F8),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: const Color(0xFFDCE2EA)),
+          ),
+          child: Text(
+            '$count',
+            style: const TextStyle(
+              color: Color(0xFF5D6778),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SquadPlayerCard extends StatelessWidget {
+  const _SquadPlayerCard({required this.item, required this.resolver});
+
+  final TeamSquadItem item;
+  final dynamic resolver;
+
+  @override
+  Widget build(BuildContext context) {
+    final positionLabel = _positionLabel(item.position);
+    final shirtLabel = item.shirtNumber == null ? '--' : '#${item.shirtNumber}';
+
+    return InkWell(
+      onTap:
+          item.playerId == null
+              ? null
+              : () => context.push('/player/${item.playerId}'),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE1E5EB)),
+        ),
+        padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
+        child: Row(
+          children: [
+            EntityBadge(
+              entityId: item.playerId ?? item.playerName,
+              entityName: item.playerName,
+              type: SportsAssetType.players,
+              resolver: resolver,
+              size: 46,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    item.playerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF1A2230),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAF0FA),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          positionLabel,
+                          style: const TextStyle(
+                            color: Color(0xFF2A3A56),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        shirtLabel,
+                        style: const TextStyle(
+                          color: Color(0xFF5A6578),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _positionLabel(String? position) {
+    final value = (position ?? '').trim();
+    if (value.isEmpty) {
+      return '-';
+    }
+    return value.toUpperCase();
   }
 }
 

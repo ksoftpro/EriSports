@@ -895,7 +895,26 @@ List<TeamSquadItem> _extractSquadItems(
         (item.playerId != null && item.playerId!.trim().isNotEmpty)
             ? 'id:${item.playerId!.trim()}'
             : 'name:${item.playerName.toLowerCase()}';
-    deduped[key] = item;
+
+    final existing = deduped[key];
+    if (existing == null) {
+      deduped[key] = item;
+      return;
+    }
+
+    final mergedName =
+        existing.playerName.length >= item.playerName.length
+            ? existing.playerName
+            : item.playerName;
+    final mergedPosition = _preferSquadPosition(existing.position, item.position);
+
+    deduped[key] = TeamSquadItem(
+      playerId: existing.playerId ?? item.playerId,
+      playerName: mergedName,
+      position: mergedPosition,
+      shirtNumber: existing.shirtNumber ?? item.shirtNumber,
+      teamId: existing.teamId ?? item.teamId,
+    );
   }
 
   if (squadMap != null) {
@@ -907,13 +926,7 @@ List<TeamSquadItem> _extractSquadItems(
       if (name == null) {
         continue;
       }
-
-      final positionMap = _asMap(map['position']);
-      final position =
-          _stringValue(positionMap?['label']) ??
-          _stringValue(positionMap?['key']) ??
-          _stringValue(map['position']) ??
-          _stringValue(map['role']);
+      final position = _extractSquadPosition(map);
 
       addItem(
         TeamSquadItem(
@@ -934,18 +947,16 @@ List<TeamSquadItem> _extractSquadItems(
     }
   }
 
-  if (deduped.isEmpty) {
-    for (final row in fallback) {
-      addItem(
-        TeamSquadItem(
-          playerId: row.id,
-          playerName: row.name,
-          position: row.position,
-          shirtNumber: row.jerseyNumber,
-          teamId: row.teamId,
-        ),
-      );
-    }
+  for (final row in fallback) {
+    addItem(
+      TeamSquadItem(
+        playerId: row.id,
+        playerName: row.name,
+        position: _normalizeSquadPosition(row.position),
+        shirtNumber: row.jerseyNumber,
+        teamId: row.teamId,
+      ),
+    );
   }
 
   final items = deduped.values.toList(growable: false)..sort((a, b) {
@@ -962,6 +973,226 @@ List<TeamSquadItem> _extractSquadItems(
   });
 
   return List.unmodifiable(items);
+}
+
+String? _extractSquadPosition(Map<String, dynamic> map) {
+  final positionMap = _asMap(map['position']);
+  final playingPositionMap = _asMap(map['playingPosition']);
+  final preferredPositionMap = _asMap(map['preferredPosition']);
+  final usualPlayingPositionMap = _asMap(map['usualPlayingPosition']);
+  final roleMap = _asMap(map['role']);
+  final positions = _asList(map['positions']);
+  final firstPositionMap =
+      positions.map(_asMap).whereType<Map<String, dynamic>>().firstOrNull;
+
+  final raw =
+      _stringValue(positionMap?['label']) ??
+      _stringValue(positionMap?['key']) ??
+      _stringValue(positionMap?['short']) ??
+      _stringValue(positionMap?['shortName']) ??
+        _stringValue(positionMap?['abbreviation']) ??
+        _stringValue(positionMap?['code']) ??
+      _stringValue(positionMap?['name']) ??
+      _stringValue(positionMap?['displayName']) ??
+      _stringValue(positionMap?['title']) ??
+        _stringValue(playingPositionMap?['short']) ??
+      _stringValue(playingPositionMap?['label']) ??
+      _stringValue(playingPositionMap?['shortName']) ??
+        _stringValue(playingPositionMap?['abbreviation']) ??
+      _stringValue(playingPositionMap?['name']) ??
+        _stringValue(preferredPositionMap?['short']) ??
+      _stringValue(preferredPositionMap?['label']) ??
+      _stringValue(preferredPositionMap?['shortName']) ??
+        _stringValue(preferredPositionMap?['abbreviation']) ??
+      _stringValue(preferredPositionMap?['name']) ??
+        _stringValue(usualPlayingPositionMap?['short']) ??
+        _stringValue(usualPlayingPositionMap?['shortName']) ??
+        _stringValue(usualPlayingPositionMap?['abbreviation']) ??
+        _stringValue(usualPlayingPositionMap?['label']) ??
+        _stringValue(usualPlayingPositionMap?['name']) ??
+      _stringValue(firstPositionMap?['label']) ??
+        _stringValue(firstPositionMap?['short']) ??
+      _stringValue(firstPositionMap?['shortName']) ??
+        _stringValue(firstPositionMap?['abbreviation']) ??
+        _stringValue(firstPositionMap?['displayName']) ??
+        _stringValue(firstPositionMap?['title']) ??
+      _stringValue(firstPositionMap?['name']) ??
+      _stringValue(map['position']) ??
+      _stringValue(map['positionLabel']) ??
+      _stringValue(map['positionName']) ??
+      _stringValue(map['positionShort']) ??
+        _stringValue(map['positionCode']) ??
+        _stringValue(map['positionType']) ??
+        _stringValue(map['positionAbbreviation']) ??
+      _stringValue(map['playerPosition']) ??
+        _stringValue(roleMap?['label']) ??
+        _stringValue(roleMap?['shortName']) ??
+        _stringValue(roleMap?['name']) ??
+      _stringValue(map['role']) ??
+      _stringValue(map['usualPlayingPosition']);
+
+  final id =
+      _intValue(map['usualPlayingPositionId']) ??
+        _intValue(usualPlayingPositionMap?['id']) ??
+        _intValue(playingPositionMap?['id']) ??
+        _intValue(preferredPositionMap?['id']) ??
+      _intValue(positionMap?['id']) ??
+        _intValue(firstPositionMap?['id']) ??
+        _intValue(map['positionId']);
+
+  return _normalizeSquadPosition(raw ?? _positionFromId(id));
+}
+
+String? _preferSquadPosition(String? current, String? candidate) {
+  final currentQuality = _positionQuality(current);
+  final candidateQuality = _positionQuality(candidate);
+  if (candidateQuality > currentQuality) {
+    return candidate;
+  }
+  return current;
+}
+
+int _positionQuality(String? value) {
+  if (value == null || value.trim().isEmpty) {
+    return 0;
+  }
+
+  final normalized = value.trim().toUpperCase();
+  if (normalized.length <= 4 && !normalized.contains(' ')) {
+    return 2;
+  }
+  return 1;
+}
+
+String? _normalizeSquadPosition(String? raw) {
+  if (raw == null || raw.trim().isEmpty) {
+    return null;
+  }
+
+  var upper = raw.trim().toUpperCase().replaceAll('-', ' ');
+  if (upper.contains('/')) {
+    upper = upper.split('/').first.trim();
+  }
+  if (upper.contains(',')) {
+    upper = upper.split(',').first.trim();
+  }
+
+  const direct = {
+    'GK',
+    'RB',
+    'RWB',
+    'CB',
+    'RCB',
+    'LCB',
+    'LB',
+    'LWB',
+    'DM',
+    'CM',
+    'RM',
+    'LM',
+    'AM',
+    'RW',
+    'LW',
+    'ST',
+    'CF',
+    'FW',
+    'ATT',
+    'DEF',
+    'MID',
+  };
+  if (direct.contains(upper)) {
+    return upper;
+  }
+
+  if (upper.contains('GOAL')) {
+    return 'GK';
+  }
+  if (upper.contains('RIGHT CENTRE BACK') || upper.contains('RIGHT CENTER BACK')) {
+    return 'RCB';
+  }
+  if (upper.contains('LEFT CENTRE BACK') || upper.contains('LEFT CENTER BACK')) {
+    return 'LCB';
+  }
+  if (upper.contains('CENTRE BACK') || upper.contains('CENTER BACK')) {
+    return 'CB';
+  }
+  if (upper.contains('RIGHT BACK')) {
+    return 'RB';
+  }
+  if (upper.contains('LEFT BACK')) {
+    return 'LB';
+  }
+  if (upper.contains('RIGHT WING BACK')) {
+    return 'RWB';
+  }
+  if (upper.contains('LEFT WING BACK')) {
+    return 'LWB';
+  }
+  if (upper.contains('DEFENSIVE MID')) {
+    return 'DM';
+  }
+  if (upper.contains('ATTACKING MID')) {
+    return 'AM';
+  }
+  if (upper.contains('CENTRAL MID')) {
+    return 'CM';
+  }
+  if (upper.contains('RIGHT MID')) {
+    return 'RM';
+  }
+  if (upper.contains('LEFT MID')) {
+    return 'LM';
+  }
+  if (upper.contains('RIGHT WING')) {
+    return 'RW';
+  }
+  if (upper.contains('LEFT WING')) {
+    return 'LW';
+  }
+  if (upper.contains('STRIKER') ||
+      upper.contains('CENTRE FORWARD') ||
+      upper.contains('CENTER FORWARD')) {
+    return 'ST';
+  }
+  if (upper.contains('WINGER')) {
+    return 'FW';
+  }
+  if (upper.contains('FORWARD') || upper.contains('ATTACK')) {
+    return 'FW';
+  }
+  if (upper.contains('DEF')) {
+    return 'DEF';
+  }
+  if (upper.contains('MID')) {
+    return 'MID';
+  }
+
+  return upper;
+}
+
+String? _positionFromId(int? value) {
+  if (value == null) {
+    return null;
+  }
+
+  const mapping = {
+    1: 'GK',
+    2: 'RB',
+    3: 'RWB',
+    4: 'CB',
+    5: 'LB',
+    6: 'LWB',
+    7: 'DM',
+    8: 'CM',
+    9: 'RM',
+    10: 'LM',
+    11: 'RW',
+    12: 'AM',
+    13: 'LW',
+    14: 'ST',
+  };
+
+  return mapping[value];
 }
 
 void _collectPlayerNodes(
@@ -1535,11 +1766,15 @@ int _positionRank(String? rawPosition) {
   if (position.startsWith('CB') ||
       position.startsWith('LB') ||
       position.startsWith('RB') ||
+      position.startsWith('LWB') ||
+      position.startsWith('RWB') ||
       position.startsWith('DEF')) {
     return 1;
   }
   if (position.startsWith('DM') ||
       position.startsWith('CM') ||
+      position.startsWith('RM') ||
+      position.startsWith('LM') ||
       position.startsWith('AM') ||
       position.startsWith('MID')) {
     return 2;
