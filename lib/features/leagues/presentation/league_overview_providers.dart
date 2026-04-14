@@ -118,6 +118,8 @@ class LeagueOverviewState {
     required this.standings,
     required this.overallStandingsRows,
     required this.fixtureRows,
+    required this.playerStatCategories,
+    required this.playerStatsByType,
     required this.goalLeaders,
     required this.assistsLeaders,
     required this.newsItems,
@@ -132,6 +134,8 @@ class LeagueOverviewState {
   final LeagueStandingsLeague? standings;
   final List<LeagueStandingsRow> overallStandingsRows;
   final List<HomeMatchView> fixtureRows;
+  final List<TopStatCategoryView> playerStatCategories;
+  final Map<String, List<TopPlayerLeaderboardEntryView>> playerStatsByType;
   final List<TopPlayerLeaderboardEntryView> goalLeaders;
   final List<TopPlayerLeaderboardEntryView> assistsLeaders;
   final List<LeagueNewsItem> newsItems;
@@ -154,33 +158,19 @@ final leagueOverviewProvider = FutureProvider.family<
       .readLeagueDatasetByCompetitionId(
         competitionId,
         competitionName: competition?.name,
+        allowSharedFallback: false,
       );
   final standings = leagueDataset.standings;
-  final fallbackStandingsRows = await services.database.readStandingsTableView(
-    competitionId,
-  );
-  final overallRows = _resolveOverallStandingsRows(
-    standings,
-    fallbackStandingsRows,
-  );
-  final fixtureRows = await services.database.readMatchesForCompetition(
-    competitionId,
-    limit: 240,
-  );
-  final goalLeaders = await services.database.readTopPlayersForCategory(
-    competitionId,
-    'goals',
-    limit: 8,
-  );
-  final assistsLeaders = await services.database.readTopPlayersForCategory(
-    competitionId,
-    'assists',
-    limit: 8,
-  );
-  final competitionPlayers = await services.database.readPlayersForCompetition(
-    competitionId,
-    limit: 420,
-  );
+  final overallRows = _resolveOverallStandingsRows(standings);
+  final fixtureRows = leagueDataset.fixtures;
+  final playerStatCategories = leagueDataset.playerStatCategories;
+  final playerStatsByType = leagueDataset.playerStatsByType;
+  final goalLeaders = (playerStatsByType['goals'] ?? const [])
+      .take(8)
+      .toList(growable: false);
+  final assistsLeaders = (playerStatsByType['assists'] ?? const [])
+      .take(8)
+      .toList(growable: false);
 
   final competitionName =
       competition?.name ?? standings?.displayName ?? 'League';
@@ -194,10 +184,7 @@ final leagueOverviewProvider = FutureProvider.family<
     fixtureRows,
     explicitSeason: standings?.meta.season,
   );
-  final transferItems = _buildTransferItems(
-    competitionPlayers,
-    transferFeed: leagueDataset.transferFeed,
-  );
+  final transferItems = _buildTransferItems(transferFeed: leagueDataset.transferFeed);
   final newsItems = _buildLeagueNews(
     competitionName: competitionName,
     standingsRows: overallRows,
@@ -214,6 +201,8 @@ final leagueOverviewProvider = FutureProvider.family<
     standings: standings,
     overallStandingsRows: overallRows,
     fixtureRows: fixtureRows,
+    playerStatCategories: playerStatCategories,
+    playerStatsByType: playerStatsByType,
     goalLeaders: goalLeaders,
     assistsLeaders: assistsLeaders,
     newsItems: newsItems,
@@ -528,73 +517,35 @@ List<LeagueNewsItem> _buildLeagueNews({
   return items;
 }
 
-List<LeagueTransferItem> _buildTransferItems(
-  List<CompetitionPlayerView> rows, {
+List<LeagueTransferItem> _buildTransferItems({
   List<LeagueTransferFeedEntry> transferFeed = const [],
 }) {
-  if (transferFeed.isNotEmpty) {
-    final fromTransferFeed = [
-      for (final item in transferFeed)
-        LeagueTransferItem(
-          playerId: item.playerId,
-          playerName: item.playerName,
-          teamId: item.teamId,
-          teamName: item.teamName,
-          position: item.position,
-          updatedAtUtc: item.transferDateUtc,
-        ),
-    ]..sort((a, b) => b.updatedAtUtc.compareTo(a.updatedAtUtc));
-
-    return fromTransferFeed;
+  if (transferFeed.isEmpty) {
+    return const [];
   }
 
-  final mapped = <String, LeagueTransferItem>{};
+  final fromTransferFeed = [
+    for (final item in transferFeed)
+      LeagueTransferItem(
+        playerId: item.playerId,
+        playerName: item.playerName,
+        teamId: item.teamId,
+        teamName: item.teamName,
+        position: item.position,
+        updatedAtUtc: item.transferDateUtc,
+      ),
+  ]..sort((a, b) => b.updatedAtUtc.compareTo(a.updatedAtUtc));
 
-  for (final row in rows) {
-    mapped[row.player.id] = LeagueTransferItem(
-      playerId: row.player.id,
-      playerName: row.player.name,
-      teamId: row.teamId,
-      teamName: row.teamName ?? 'Unknown Team',
-      position: row.player.position,
-      updatedAtUtc: row.player.updatedAtUtc,
-    );
-  }
-
-  final items = mapped.values.toList(growable: false)
-    ..sort((a, b) => b.updatedAtUtc.compareTo(a.updatedAtUtc));
-  return items;
+  return fromTransferFeed;
 }
 
 List<LeagueStandingsRow> _resolveOverallStandingsRows(
   LeagueStandingsLeague? standings,
-  List<StandingsTableView> fallbackRows,
 ) {
   final fromAll = standings?.overallMode?.rows;
   if (fromAll != null && fromAll.isNotEmpty) {
     return fromAll;
   }
 
-  final converted = fallbackRows
-    .map(
-      (item) => LeagueStandingsRow(
-        teamId: item.teamId,
-        teamName: item.teamName,
-        shortName: item.teamName,
-        position: item.row.position,
-        played: item.row.played,
-        wins: item.row.won,
-        draws: item.row.draw,
-        losses: item.row.lost,
-        scoresStr: '${item.row.goalsFor}-${item.row.goalsAgainst}',
-        goalsFor: item.row.goalsFor,
-        goalsAgainst: item.row.goalsAgainst,
-        goalConDiff: item.row.goalDiff,
-        points: item.row.points,
-        form: item.row.form,
-      ),
-    )
-    .toList(growable: false)..sort((a, b) => a.position.compareTo(b.position));
-
-  return converted;
+  return const [];
 }

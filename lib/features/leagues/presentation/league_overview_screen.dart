@@ -167,7 +167,8 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
                                   },
                                 ),
                                 _PlayerStatsBody(
-                                  competitionId: state.competitionId,
+                                  categories: state.playerStatCategories,
+                                  leadersByStatType: state.playerStatsByType,
                                   selectedStatType: _selectedPlayerStatType,
                                   onSelectedStatType: (value) {
                                     setState(() {
@@ -2406,92 +2407,65 @@ class _FixtureMatchEntry extends _FixtureEntry {
   final HomeMatchView fixture;
 }
 
-class _PlayerStatsBody extends ConsumerWidget {
+class _PlayerStatsBody extends StatelessWidget {
   const _PlayerStatsBody({
-    required this.competitionId,
+    required this.categories,
+    required this.leadersByStatType,
     required this.selectedStatType,
     required this.onSelectedStatType,
     required this.resolver,
   });
 
-  final String competitionId;
+  final List<TopStatCategoryView> categories;
+  final Map<String, List<TopPlayerLeaderboardEntryView>> leadersByStatType;
   final String? selectedStatType;
   final ValueChanged<String> onSelectedStatType;
   final LocalAssetResolver resolver;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final categoriesAsync = ref.watch(
-      leaguePlayerStatCategoriesProvider(competitionId),
-    );
+  Widget build(BuildContext context) {
+    if (categories.isEmpty) {
+      return const _EmptyTabState(
+        message: 'No player stats imported for this league file.',
+      );
+    }
 
-    return categoriesAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error:
-          (error, stackTrace) => const _EmptyTabState(
-            message: 'Unable to load player stats from local data.',
-          ),
-      data: (categories) {
-        if (categories.isEmpty) {
-          return const _EmptyTabState(
-            message: 'No player stats imported for this league.',
-          );
-        }
+    final activeStat =
+        selectedStatType != null &&
+                categories.any((item) => item.statType == selectedStatType)
+            ? selectedStatType!
+            : categories.first.statType;
+    final leaders = leadersByStatType[activeStat] ?? const [];
 
-        final activeStat =
-            selectedStatType != null &&
-                    categories.any((item) => item.statType == selectedStatType)
-                ? selectedStatType!
-                : categories.first.statType;
-
-        final leadersAsync = ref.watch(
-          leaguePlayerLeadersProvider(
-            LeaguePlayerLeadersQuery(
-              competitionId: competitionId,
-              statType: activeStat,
-              limit: 24,
-            ),
-          ),
-        );
-
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: categories
-                      .map(
-                        (category) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(statTypeLabel(category.statType)),
-                            selected: category.statType == activeStat,
-                            onSelected:
-                                (_) => onSelectedStatType(category.statType),
-                          ),
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
-              ),
-            ),
-            Expanded(
-              child: leadersAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error:
-                    (error, stackTrace) => const _EmptyTabState(
-                      message: 'Unable to load player leaderboard rows.',
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: categories
+                  .map(
+                    (category) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(statTypeLabel(category.statType)),
+                        selected: category.statType == activeStat,
+                        onSelected: (_) => onSelectedStatType(category.statType),
+                      ),
                     ),
-                data: (leaders) {
-                  if (leaders.isEmpty) {
-                    return const _EmptyTabState(
-                      message: 'No player entries found for this category.',
-                    );
-                  }
-
-                  return LayoutBuilder(
+                  )
+                  .toList(growable: false),
+            ),
+          ),
+        ),
+        Expanded(
+          child:
+              leaders.isEmpty
+                  ? const _EmptyTabState(
+                    message: 'No player entries found for this category.',
+                  )
+                  : LayoutBuilder(
                     builder: (context, constraints) {
                       final crossAxisCount = constraints.maxWidth > 980 ? 2 : 1;
                       return GridView.builder(
@@ -2513,13 +2487,9 @@ class _PlayerStatsBody extends ConsumerWidget {
                         },
                       );
                     },
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
+                  ),
+        ),
+      ],
     );
   }
 }

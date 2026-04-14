@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:flutter/foundation.dart';
@@ -26,6 +27,21 @@ const Map<String, List<String>> _fullDataFilesByCompetitionId = {
   '536': ['saudi_pro_league_full_data.json'],
 };
 
+const List<String> _preferredStatTypeOrder = [
+  'goals',
+  'assists',
+  'rating',
+  'goals_per_90',
+  'expected_goals',
+  'expected_assists',
+  'shots_on_target',
+  'big_chances_created',
+  'successful_dribbles',
+  'accurate_passes',
+  'clean_sheets',
+  'saves',
+];
+
 class LeagueTransferFeedEntry {
   const LeagueTransferFeedEntry({
     required this.playerId,
@@ -48,21 +64,39 @@ class LeagueCompetitionDataset {
   const LeagueCompetitionDataset({
     required this.standings,
     required this.transferFeed,
+    required this.fixtures,
+    required this.playerStatCategories,
+    required this.playerStatsByType,
   });
 
   const LeagueCompetitionDataset.empty()
     : standings = null,
-      transferFeed = const [];
+      transferFeed = const [],
+      fixtures = const [],
+      playerStatCategories = const [],
+      playerStatsByType = const {};
 
   final LeagueStandingsLeague? standings;
   final List<LeagueTransferFeedEntry> transferFeed;
+  final List<HomeMatchView> fixtures;
+  final List<TopStatCategoryView> playerStatCategories;
+  final Map<String, List<TopPlayerLeaderboardEntryView>> playerStatsByType;
 }
 
 class _LeagueResolvedData {
-  const _LeagueResolvedData({required this.standings, required this.transfers});
+  const _LeagueResolvedData({
+    required this.standings,
+    required this.transfers,
+    required this.fixtures,
+    required this.playerStatCategories,
+    required this.playerStatsByType,
+  });
 
   final LeagueStandingsLeague? standings;
   final List<LeagueTransferFeedEntry> transfers;
+  final List<HomeMatchView> fixtures;
+  final List<TopStatCategoryView> playerStatCategories;
+  final Map<String, List<TopPlayerLeaderboardEntryView>> playerStatsByType;
 }
 
 String standingsModeLabel(String modeKey) {
@@ -114,12 +148,19 @@ class LeagueStandingsSource {
   final Map<String, LeagueStandingsLeague?> _cachedLeaguesByCompetitionId = {};
   final Map<String, List<LeagueTransferFeedEntry>>
   _cachedLeagueTransfersByCompetitionId = {};
+  final Map<String, List<HomeMatchView>> _cachedLeagueFixturesByCompetitionId =
+      {};
+  final Map<String, List<TopStatCategoryView>>
+  _cachedLeaguePlayerStatCategoriesByCompetitionId = {};
+  final Map<String, Map<String, List<TopPlayerLeaderboardEntryView>>>
+  _cachedLeaguePlayerStatsByCompetitionId = {};
   final Map<String, String> _cachedLeagueSourcePaths = {};
   final Map<String, DateTime> _cachedLeagueModifiedAtUtc = {};
 
   Future<LeagueCompetitionDataset> readLeagueDatasetByCompetitionId(
     String competitionId, {
     String? competitionName,
+    bool allowSharedFallback = false,
   }) async {
     final normalized = _normalizeKey(competitionId);
     if (normalized.isEmpty) {
@@ -130,18 +171,27 @@ class LeagueStandingsSource {
       normalized,
       competitionName: competitionName,
     );
-    if (directData != null &&
-        (directData.standings != null || directData.transfers.isNotEmpty)) {
+    if (directData != null) {
       return LeagueCompetitionDataset(
         standings: directData.standings,
         transferFeed: directData.transfers,
+        fixtures: directData.fixtures,
+        playerStatCategories: directData.playerStatCategories,
+        playerStatsByType: directData.playerStatsByType,
       );
+    }
+
+    if (!allowSharedFallback) {
+      return const LeagueCompetitionDataset.empty();
     }
 
     final bundle = await loadBundle();
     return LeagueCompetitionDataset(
       standings: bundle.resolveLeague(normalized),
       transferFeed: const [],
+      fixtures: const [],
+      playerStatCategories: const [],
+      playerStatsByType: const {},
     );
   }
 
@@ -306,11 +356,13 @@ class LeagueStandingsSource {
     String competitionId,
     {
     String? competitionName,
+    bool allowSharedFallback = false,
   }
   ) async {
     final dataset = await readLeagueDatasetByCompetitionId(
       competitionId,
       competitionName: competitionName,
+      allowSharedFallback: allowSharedFallback,
     );
     return dataset.standings;
   }
@@ -338,6 +390,12 @@ class LeagueStandingsSource {
         standings: _cachedLeaguesByCompetitionId[competitionId],
         transfers:
             _cachedLeagueTransfersByCompetitionId[competitionId] ?? const [],
+        fixtures: _cachedLeagueFixturesByCompetitionId[competitionId] ?? const [],
+        playerStatCategories:
+            _cachedLeaguePlayerStatCategoriesByCompetitionId[competitionId] ??
+            const [],
+        playerStatsByType:
+            _cachedLeaguePlayerStatsByCompetitionId[competitionId] ?? const {},
       );
     }
 
@@ -349,7 +407,24 @@ class LeagueStandingsSource {
         fallbackLookupKey: competitionId,
       );
       final parsedTransfers = _parseTransferFeedPayload(decoded);
-      if (parsedStandings == null && parsedTransfers.isEmpty) {
+      final parsedFixtures = _parseFixturesPayload(
+        decoded,
+        competitionId: competitionId,
+        standings: parsedStandings,
+      );
+      final parsedPlayerStatsByType = _parsePlayerStatsPayload(
+        decoded,
+        competitionId: competitionId,
+        fallbackTeamNames: _buildTeamNameLookup(parsedStandings, parsedFixtures),
+      );
+      final parsedStatCategories = _buildPlayerStatCategories(
+        parsedPlayerStatsByType,
+      );
+
+      if (parsedStandings == null &&
+          parsedTransfers.isEmpty &&
+          parsedFixtures.isEmpty &&
+          parsedPlayerStatsByType.isEmpty) {
         _clearLeagueCacheFor(competitionId);
         return null;
       }
@@ -357,11 +432,25 @@ class LeagueStandingsSource {
       _cachedLeaguesByCompetitionId[competitionId] = parsedStandings;
       _cachedLeagueTransfersByCompetitionId[competitionId] =
           List.unmodifiable(parsedTransfers);
+      _cachedLeagueFixturesByCompetitionId[competitionId] = List.unmodifiable(
+        parsedFixtures,
+      );
+      _cachedLeaguePlayerStatCategoriesByCompetitionId[competitionId] =
+          List.unmodifiable(parsedStatCategories);
+      _cachedLeaguePlayerStatsByCompetitionId[competitionId] =
+          Map.unmodifiable(
+            parsedPlayerStatsByType.map(
+              (key, value) => MapEntry(key, List.unmodifiable(value)),
+            ),
+          );
       _cachedLeagueSourcePaths[competitionId] = sourceFile.path;
       _cachedLeagueModifiedAtUtc[competitionId] = lastModifiedUtc;
       return _LeagueResolvedData(
         standings: parsedStandings,
         transfers: parsedTransfers,
+        fixtures: parsedFixtures,
+        playerStatCategories: parsedStatCategories,
+        playerStatsByType: parsedPlayerStatsByType,
       );
     } catch (_) {
       _clearLeagueCacheFor(competitionId);
@@ -674,6 +763,637 @@ class LeagueStandingsSource {
     return _extractTransferFeedFromRaw(raw);
   }
 
+  List<HomeMatchView> _parseFixturesPayload(
+    dynamic decoded, {
+    required String competitionId,
+    LeagueStandingsLeague? standings,
+  }) {
+    if (decoded is! Map<String, dynamic>) {
+      return const [];
+    }
+
+    final meta = _mapValue(decoded['meta']);
+    final fallbackSeasonId =
+        _stringValue(meta?['seasonId']) ?? _stringValue(meta?['season']);
+    final fallbackTeamNames = _buildTeamNameLookup(standings, const []);
+    final nowUtc = DateTime.now().toUtc();
+    final rows = _collectFixtureRows(decoded);
+    if (rows.isEmpty) {
+      return const [];
+    }
+
+    final bestById = <String, HomeMatchView>{};
+    final qualityById = <String, int>{};
+
+    for (final row in rows) {
+      final parsed = _parseFixtureRow(
+        row,
+        fallbackCompetitionId: competitionId,
+        fallbackSeasonId: fallbackSeasonId,
+        fallbackTeamNames: fallbackTeamNames,
+        updatedAtUtc: nowUtc,
+      );
+      if (parsed == null) {
+        continue;
+      }
+
+      final matchId = parsed.match.id;
+      final quality =
+          (parsed.homeTeamName == 'Unknown Team' ? 0 : 1) +
+          (parsed.awayTeamName == 'Unknown Team' ? 0 : 1) +
+          ((parsed.match.roundLabel?.trim().isNotEmpty ?? false) ? 1 : 0);
+      final previousQuality = qualityById[matchId] ?? -1;
+      if (quality >= previousQuality) {
+        bestById[matchId] = parsed;
+        qualityById[matchId] = quality;
+      }
+    }
+
+    final fixtures = bestById.values.toList(growable: false)
+      ..sort((a, b) => a.match.kickoffUtc.compareTo(b.match.kickoffUtc));
+    return fixtures;
+  }
+
+  Map<String, String> _buildTeamNameLookup(
+    LeagueStandingsLeague? standings,
+    List<HomeMatchView> fixtures,
+  ) {
+    final lookup = <String, String>{};
+
+    final rows = standings?.overallMode?.rows ?? const <LeagueStandingsRow>[];
+    for (final row in rows) {
+      final teamId = _sanitizeTeamId(row.teamId);
+      if (teamId == null) {
+        continue;
+      }
+      lookup[teamId] = row.displayTeamName;
+    }
+
+    for (final fixture in fixtures) {
+      final homeId = _sanitizeTeamId(fixture.match.homeTeamId);
+      final awayId = _sanitizeTeamId(fixture.match.awayTeamId);
+      if (homeId != null && fixture.homeTeamName.trim().isNotEmpty) {
+        lookup[homeId] = fixture.homeTeamName;
+      }
+      if (awayId != null && fixture.awayTeamName.trim().isNotEmpty) {
+        lookup[awayId] = fixture.awayTeamName;
+      }
+    }
+
+    return lookup;
+  }
+
+  List<Map<String, dynamic>> _collectFixtureRows(dynamic root) {
+    final rows = <Map<String, dynamic>>[];
+
+    void visit(dynamic node, int depth) {
+      if (depth > 10) {
+        return;
+      }
+
+      final map = _mapValue(node);
+      if (map != null) {
+        if (_looksLikeFixtureRow(map)) {
+          rows.add(map);
+        }
+
+        final extracted = _mapValue(map['extracted']);
+        if (extracted != null) {
+          visit(extracted['allMatches'], depth + 1);
+        }
+
+        visit(map['allMatches'], depth + 1);
+        visit(map['matches'], depth + 1);
+        visit(map['fixtures'], depth + 1);
+        visit(map['data'], depth + 1);
+        visit(map['items'], depth + 1);
+        visit(map['rounds'], depth + 1);
+        visit(map['stages'], depth + 1);
+        return;
+      }
+
+      if (node is List) {
+        for (final item in node) {
+          visit(item, depth + 1);
+        }
+      }
+    }
+
+    visit(root['fixtures'], 0);
+    visit(root['raw'], 0);
+    visit(root['matches'], 0);
+    visit(root['allMatches'], 0);
+
+    final deduped = <String, Map<String, dynamic>>{};
+    for (final row in rows) {
+      final matchId =
+          _stringValue(row['matchId']) ??
+          _stringValue(row['id']) ??
+          _stringValue(row['fixtureId']);
+      if (matchId == null) {
+        continue;
+      }
+      deduped[matchId] = row;
+    }
+
+    return deduped.values.toList(growable: false);
+  }
+
+  bool _looksLikeFixtureRow(Map<String, dynamic> row) {
+    final summary = _mapValue(row['summary']);
+    final matchId =
+        _stringValue(row['matchId']) ??
+        _stringValue(row['id']) ??
+        _stringValue(row['fixtureId']) ??
+        _stringValue(summary?['matchId']);
+    if (matchId == null) {
+      return false;
+    }
+
+    final homeNode =
+        _mapValue(row['homeTeam']) ??
+        _mapValue(row['home']) ??
+        _mapValue(summary?['homeTeam']);
+    final awayNode =
+        _mapValue(row['awayTeam']) ??
+        _mapValue(row['away']) ??
+        _mapValue(summary?['awayTeam']);
+
+    final homeId =
+        _stringValue(row['homeTeamId']) ??
+        _stringValue(homeNode?['id']) ??
+        _stringValue(homeNode?['teamId']);
+    final awayId =
+        _stringValue(row['awayTeamId']) ??
+        _stringValue(awayNode?['id']) ??
+        _stringValue(awayNode?['teamId']);
+
+    return homeId != null && awayId != null;
+  }
+
+  HomeMatchView? _parseFixtureRow(
+    Map<String, dynamic> row, {
+    required String fallbackCompetitionId,
+    required String? fallbackSeasonId,
+    required Map<String, String> fallbackTeamNames,
+    required DateTime updatedAtUtc,
+  }) {
+    final summary = _mapValue(row['summary']);
+    final statusMap = _mapValue(row['status']);
+
+    final matchId =
+        _stringValue(row['matchId']) ??
+        _stringValue(row['id']) ??
+        _stringValue(row['fixtureId']) ??
+        _stringValue(summary?['matchId']) ??
+        _stringValue(summary?['id']);
+    if (matchId == null) {
+      return null;
+    }
+
+    final homeNode =
+        _mapValue(row['homeTeam']) ??
+        _mapValue(row['home']) ??
+        _mapValue(summary?['homeTeam']);
+    final awayNode =
+        _mapValue(row['awayTeam']) ??
+        _mapValue(row['away']) ??
+        _mapValue(summary?['awayTeam']);
+
+    final homeTeamId =
+        _sanitizeTeamId(
+          _stringValue(row['homeTeamId']) ??
+              _stringValue(homeNode?['id']) ??
+              _stringValue(homeNode?['teamId']),
+        ) ??
+        'home_unknown';
+    final awayTeamId =
+        _sanitizeTeamId(
+          _stringValue(row['awayTeamId']) ??
+              _stringValue(awayNode?['id']) ??
+              _stringValue(awayNode?['teamId']),
+        ) ??
+        'away_unknown';
+
+    final kickoffUtc =
+        _dateTimeValue(row['kickoffUtc']) ??
+        _dateTimeValue(row['startTime']) ??
+        _dateTimeValue(row['utcTime']) ??
+        _dateTimeValue(summary?['utcTime']) ??
+        _dateTimeFromEpochValue(row['startTimestamp']) ??
+        _dateTimeFromEpochValue(row['startTs']) ??
+        _dateTimeFromEpochValue(statusMap?['utcTime']);
+    if (kickoffUtc == null) {
+      return null;
+    }
+
+    final competitionId =
+        _stringValue(row['competitionId']) ??
+        _stringValue(row['leagueId']) ??
+        _stringValue(row['tournamentId']) ??
+        fallbackCompetitionId;
+
+    final match = MatchRow(
+      id: matchId,
+      competitionId: competitionId,
+      seasonId:
+          _stringValue(row['seasonId']) ??
+          _stringValue(row['season']) ??
+          fallbackSeasonId,
+      homeTeamId: homeTeamId,
+      awayTeamId: awayTeamId,
+      kickoffUtc: kickoffUtc,
+      status: _resolveFixtureStatus(
+        row,
+        statusMap: statusMap,
+        summary: summary,
+      ),
+      homeScore:
+          _intValue(row['homeScore']) ??
+          _intValue(row['home_score']) ??
+          _intValue(homeNode?['score']) ??
+          _intValue(summary?['homeScore']) ??
+          0,
+      awayScore:
+          _intValue(row['awayScore']) ??
+          _intValue(row['away_score']) ??
+          _intValue(awayNode?['score']) ??
+          _intValue(summary?['awayScore']) ??
+          0,
+      roundLabel:
+          _stringValue(row['round']) ??
+          _stringValue(row['roundName']) ??
+          _stringValue(summary?['roundName']) ??
+          _stringValue(row['stage']) ??
+          _stringValue(row['stageName']),
+      updatedAtUtc: updatedAtUtc,
+    );
+
+    return HomeMatchView(
+      match: match,
+      homeTeamName: _resolveFixtureTeamName(
+        explicitName:
+            _stringValue(row['homeTeamName']) ??
+            _stringValue(homeNode?['name']) ??
+            _stringValue(homeNode?['teamName']),
+        teamId: homeTeamId,
+        fallbackTeamNames: fallbackTeamNames,
+      ),
+      awayTeamName: _resolveFixtureTeamName(
+        explicitName:
+            _stringValue(row['awayTeamName']) ??
+            _stringValue(awayNode?['name']) ??
+            _stringValue(awayNode?['teamName']),
+        teamId: awayTeamId,
+        fallbackTeamNames: fallbackTeamNames,
+      ),
+    );
+  }
+
+  String _resolveFixtureStatus(
+    Map<String, dynamic> row, {
+    Map<String, dynamic>? statusMap,
+    Map<String, dynamic>? summary,
+  }) {
+    final raw =
+        _stringValue(row['status']) ??
+        _stringValue(statusMap?['type']) ??
+        _stringValue(statusMap?['state']) ??
+        _stringValue(summary?['status']) ??
+        _stringValue(summary?['state']);
+    if (raw != null) {
+      return raw;
+    }
+
+    if (_boolValue(statusMap?['finished']) == true ||
+        _boolValue(summary?['finished']) == true) {
+      return 'finished';
+    }
+    if (_boolValue(statusMap?['started']) == true ||
+        _boolValue(summary?['started']) == true) {
+      return 'live';
+    }
+
+    return 'scheduled';
+  }
+
+  String _resolveFixtureTeamName({
+    required String? explicitName,
+    required String teamId,
+    required Map<String, String> fallbackTeamNames,
+  }) {
+    if (explicitName != null && explicitName.trim().isNotEmpty) {
+      return explicitName.trim();
+    }
+
+    final fallback = fallbackTeamNames[teamId];
+    if (fallback != null && fallback.trim().isNotEmpty) {
+      return fallback.trim();
+    }
+
+    return 'Unknown Team';
+  }
+
+  Map<String, List<TopPlayerLeaderboardEntryView>> _parsePlayerStatsPayload(
+    dynamic decoded, {
+    required String competitionId,
+    required Map<String, String> fallbackTeamNames,
+  }) {
+    if (decoded is! Map<String, dynamic>) {
+      return const {};
+    }
+
+    final meta = _mapValue(decoded['meta']);
+    final seasonId =
+        _stringValue(meta?['seasonId']) ?? _stringValue(meta?['season']);
+    final nowUtc = DateTime.now().toUtc();
+    final statRoots = _collectStatRoots(decoded);
+    if (statRoots.isEmpty) {
+      return const {};
+    }
+
+    final byType = <String, Map<String, TopPlayerLeaderboardEntryView>>{};
+    var syntheticId = 1;
+
+    for (final entry in statRoots.entries) {
+      final statType = _normalizeStatType(entry.key);
+      if (statType.isEmpty) {
+        continue;
+      }
+
+      final rows = _extractTopPlayerStatRows(entry.value);
+      if (rows.isEmpty) {
+        continue;
+      }
+
+      var fallbackRank = 1;
+      for (final rawRow in rows) {
+        final row = _mapValue(rawRow);
+        if (row == null) {
+          continue;
+        }
+
+        final itemType = _normalizeKey(_stringValue(row['type']));
+        if (itemType.isNotEmpty && itemType != 'players' && itemType != 'player') {
+          continue;
+        }
+
+        final playerId = _stringValue(row['id']) ?? _stringValue(row['playerId']);
+        final playerName = _stringValue(row['name']) ?? _stringValue(row['playerName']);
+        if (playerId == null || playerName == null) {
+          continue;
+        }
+
+        final teamId = _sanitizeTeamId(
+          _stringValue(row['teamId']) ??
+              _stringValue(_mapValue(row['team'])?['id']) ??
+              _stringValue(_mapValue(row['club'])?['id']),
+        );
+        final teamName =
+            _stringValue(row['teamName']) ??
+            _stringValue(_mapValue(row['team'])?['name']) ??
+            _stringValue(_mapValue(row['club'])?['name']) ??
+            (teamId == null ? null : fallbackTeamNames[teamId]);
+
+        final statValue =
+            _extractStatValue(row['statValue']) ??
+            _extractStatValue(row['value']) ??
+            _extractStatValue(row[statType]);
+        if (statValue == null) {
+          fallbackRank += 1;
+          continue;
+        }
+
+        final subStatValue =
+            _extractStatValue(row['subStatValue']) ??
+            _extractStatValue(row['substatValue']);
+        final rank = _intValue(row['rank']) ?? fallbackRank;
+        fallbackRank += 1;
+
+        final statRow = TopPlayerStatRow(
+          id: syntheticId++,
+          competitionId: competitionId,
+          seasonId: seasonId,
+          statType: statType,
+          playerId: playerId,
+          teamId: teamId,
+          playerName: playerName,
+          rank: rank,
+          statValue: statValue,
+          subStatValue: subStatValue,
+          updatedAtUtc: nowUtc,
+        );
+
+        final parsed = TopPlayerLeaderboardEntryView(
+          stat: statRow,
+          teamName: teamName,
+        );
+
+        final scoped = byType.putIfAbsent(statType, () => {});
+        final existing = scoped[playerId];
+        if (existing == null ||
+            parsed.stat.rank < existing.stat.rank ||
+            parsed.stat.statValue > existing.stat.statValue) {
+          scoped[playerId] = parsed;
+        }
+      }
+    }
+
+    if (byType.isEmpty) {
+      return const {};
+    }
+
+    final resolved = <String, List<TopPlayerLeaderboardEntryView>>{};
+    for (final entry in byType.entries) {
+      final rows = entry.value.values.toList(growable: false)
+        ..sort((a, b) {
+          final rankOrder = a.stat.rank.compareTo(b.stat.rank);
+          if (rankOrder != 0) {
+            return rankOrder;
+          }
+          return b.stat.statValue.compareTo(a.stat.statValue);
+        });
+      resolved[entry.key] = rows;
+    }
+
+    return resolved;
+  }
+
+  Map<String, dynamic> _collectStatRoots(Map<String, dynamic> root) {
+    final collected = <String, dynamic>{};
+
+    void absorb(Map<String, dynamic>? source) {
+      if (source == null) {
+        return;
+      }
+
+      final statsMap = _mapValue(source['stats']);
+      if (statsMap != null) {
+        for (final entry in statsMap.entries) {
+          collected[_normalizeStatType(entry.key)] = entry.value;
+        }
+      }
+
+      final playerStatsMap = _mapValue(source['playerStats']);
+      if (playerStatsMap != null) {
+        for (final entry in playerStatsMap.entries) {
+          collected[_normalizeStatType(entry.key)] = entry.value;
+        }
+      }
+
+      final topScorers = source['topScorers'];
+      if (topScorers != null) {
+        collected['goals'] = topScorers;
+      }
+      final topAssists = source['topAssists'];
+      if (topAssists != null) {
+        collected['assists'] = topAssists;
+      }
+      final topRating = source['topRating'];
+      if (topRating != null) {
+        collected['rating'] = topRating;
+      }
+
+      for (final entry in source.entries) {
+        if (!_shouldTreatAsStatTypeKey(entry.key)) {
+          continue;
+        }
+        final rows = _extractTopPlayerStatRows(entry.value);
+        if (rows.isEmpty) {
+          continue;
+        }
+        collected[_normalizeStatType(entry.key)] = entry.value;
+      }
+    }
+
+    absorb(root);
+    absorb(_mapValue(root['raw']));
+    return collected;
+  }
+
+  bool _shouldTreatAsStatTypeKey(String key) {
+    final normalized = _normalizeKey(key);
+    if (normalized.isEmpty) {
+      return false;
+    }
+
+    const blocked = {
+      'meta',
+      'raw',
+      'table',
+      'tables',
+      'fixtures',
+      'matches',
+      'standings',
+      'transfers',
+      'overview',
+      'seasons',
+      'tabs',
+      'news',
+    };
+    return !blocked.contains(normalized);
+  }
+
+  List<dynamic> _extractTopPlayerStatRows(dynamic statRoot) {
+    if (statRoot is List) {
+      return statRoot;
+    }
+    if (statRoot is! Map<String, dynamic>) {
+      return const [];
+    }
+
+    final direct = statRoot['statsData'];
+    if (direct is List) {
+      return direct;
+    }
+
+    final data = _mapValue(statRoot['data']);
+    final nestedStats = data?['statsData'];
+    if (nestedStats is List) {
+      return nestedStats;
+    }
+
+    final players = statRoot['players'];
+    if (players is List) {
+      return players;
+    }
+
+    return const [];
+  }
+
+  String _normalizeStatType(String rawType) {
+    final normalized = rawType
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+
+    switch (normalized) {
+      case 'top_scorers':
+      case 'topscorers':
+      case 'scorers':
+        return 'goals';
+      case 'top_assists':
+      case 'topassists':
+      case 'assist':
+        return 'assists';
+      case 'top_rating':
+      case 'toprating':
+        return 'rating';
+      case 'xg':
+        return 'expected_goals';
+      case 'xa':
+        return 'expected_assists';
+      default:
+        return normalized;
+    }
+  }
+
+  double? _extractStatValue(dynamic raw) {
+    if (raw is Map<String, dynamic>) {
+      return _extractStatValue(raw['value']) ??
+          _extractStatValue(raw['stat']) ??
+          _extractStatValue(raw['amount']);
+    }
+    return _doubleValue(raw);
+  }
+
+  List<TopStatCategoryView> _buildPlayerStatCategories(
+    Map<String, List<TopPlayerLeaderboardEntryView>> byType,
+  ) {
+    if (byType.isEmpty) {
+      return const [];
+    }
+
+    final keys = byType.entries
+        .where((entry) => entry.value.isNotEmpty)
+        .map((entry) => entry.key)
+        .toList(growable: false)
+      ..sort((a, b) {
+        final aPriority = _preferredStatTypeOrder.indexOf(a);
+        final bPriority = _preferredStatTypeOrder.indexOf(b);
+        if (aPriority >= 0 && bPriority >= 0) {
+          return aPriority.compareTo(bPriority);
+        }
+        if (aPriority >= 0) {
+          return -1;
+        }
+        if (bPriority >= 0) {
+          return 1;
+        }
+        return a.compareTo(b);
+      });
+
+    return [
+      for (final statType in keys)
+        TopStatCategoryView(
+          statType: statType,
+          entryCount: byType[statType]?.length ?? 0,
+        ),
+    ];
+  }
+
   List<LeagueTransferFeedEntry> _extractTransferFeedFromRaw(
     Map<String, dynamic> raw,
   ) {
@@ -881,6 +1601,9 @@ class LeagueStandingsSource {
   void _clearLeagueCacheFor(String competitionId) {
     _cachedLeaguesByCompetitionId.remove(competitionId);
     _cachedLeagueTransfersByCompetitionId.remove(competitionId);
+    _cachedLeagueFixturesByCompetitionId.remove(competitionId);
+    _cachedLeaguePlayerStatCategoriesByCompetitionId.remove(competitionId);
+    _cachedLeaguePlayerStatsByCompetitionId.remove(competitionId);
     _cachedLeagueSourcePaths.remove(competitionId);
     _cachedLeagueModifiedAtUtc.remove(competitionId);
   }
@@ -896,6 +1619,9 @@ class LeagueStandingsSource {
     _cachedModifiedAtUtc = null;
     _cachedLeaguesByCompetitionId.clear();
     _cachedLeagueTransfersByCompetitionId.clear();
+    _cachedLeagueFixturesByCompetitionId.clear();
+    _cachedLeaguePlayerStatCategoriesByCompetitionId.clear();
+    _cachedLeaguePlayerStatsByCompetitionId.clear();
     _cachedLeagueSourcePaths.clear();
     _cachedLeagueModifiedAtUtc.clear();
 
@@ -1374,6 +2100,37 @@ DateTime? _dateTimeValue(dynamic value) {
   }
 
   return DateTime.tryParse(text)?.toUtc();
+}
+
+DateTime? _dateTimeFromEpochValue(dynamic value) {
+  final asInt = _intValue(value);
+  if (asInt == null) {
+    return null;
+  }
+
+  final epochMs = asInt.abs() < 1000000000000 ? asInt * 1000 : asInt;
+  return DateTime.fromMillisecondsSinceEpoch(epochMs, isUtc: true);
+}
+
+bool? _boolValue(dynamic value) {
+  if (value is bool) {
+    return value;
+  }
+  if (value is num) {
+    return value != 0;
+  }
+  if (value is String) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized == 'true' || normalized == '1' || normalized == 'yes') {
+      return true;
+    }
+    if (normalized == 'false' ||
+        normalized == '0' ||
+        normalized == 'no') {
+      return false;
+    }
+  }
+  return null;
 }
 
 int? _intValue(dynamic value) {
