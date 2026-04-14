@@ -32,6 +32,49 @@ class EncryptedMediaService {
   final List<int> _mediaKey;
   Directory? _cacheDirectory;
 
+  Future<void> warmUpCache() async {
+    final cacheDirectory = await _getOrCreateCacheDirectory();
+    await _deletePartialCacheFiles(cacheDirectory);
+  }
+
+  Future<void> prewarmPlayableFiles(
+    Iterable<File> sourceFiles, {
+    int maxItems = 6,
+  }) async {
+    if (maxItems <= 0) {
+      return;
+    }
+
+    var warmed = 0;
+    for (final file in sourceFiles) {
+      if (warmed >= maxItems) {
+        break;
+      }
+      final sourcePath = file.path;
+      if (!isEncryptedMediaPath(sourcePath)) {
+        continue;
+      }
+
+      warmed += 1;
+      try {
+        await resolvePlayableFile(file);
+      } catch (_) {
+        // Keep prewarm best-effort so UI playback flow remains resilient.
+      }
+    }
+  }
+
+  Future<void> prewarmPlayableFile(File sourceFile) async {
+    if (!isEncryptedMediaPath(sourceFile.path)) {
+      return;
+    }
+    try {
+      await resolvePlayableFile(sourceFile);
+    } catch (_) {
+      // Keep prewarm best-effort so UI playback flow remains resilient.
+    }
+  }
+
   Future<ResolvedPlayableMedia> resolvePlayableFile(File sourceFile) {
     final normalizedPath = sourceFile.path;
 
@@ -47,14 +90,28 @@ class EncryptedMediaService {
 
     return _inFlight.putIfAbsent(normalizedPath, () async {
       final sourceStat = await sourceFile.stat();
+      final cacheDirectory = await _getOrCreateCacheDirectory();
+      final sourcePrefix = _sourcePrefixForPath(normalizedPath);
+      final cacheBasePrefix = _cacheBasePrefix(sourcePrefix, sourceStat);
+
+      final cachedByPrefix = await _findCachedByBasePrefix(
+        cacheDirectory,
+        cacheBasePrefix,
+      );
+      if (cachedByPrefix != null) {
+        return ResolvedPlayableMedia(
+          file: cachedByPrefix,
+          usedCache: true,
+          wasDecrypted: false,
+        );
+      }
+
       final header = await Isolate.run(
         () => readEncryptedMediaHeaderFromPath(normalizedPath),
       );
 
-      final cacheDirectory = await _getOrCreateCacheDirectory();
-      final sourcePrefix = _sourcePrefixForPath(normalizedPath);
       final cacheName =
-          '${sourcePrefix}_${sourceStat.size}_${sourceStat.modified.millisecondsSinceEpoch}${header.originalExtension}';
+          '$cacheBasePrefix${header.originalExtension}';
       final cacheFile = File(p.join(cacheDirectory.path, cacheName));
 
       if (await cacheFile.exists()) {
@@ -127,6 +184,35 @@ class EncryptedMediaService {
     return dir;
   }
 
+  Future<File?> _findCachedByBasePrefix(
+    Directory cacheDirectory,
+    String cacheBasePrefix,
+  ) async {
+    await for (final entity in cacheDirectory.list(followLinks: false)) {
+      if (entity is! File) {
+        continue;
+      }
+
+      final name = p.basename(entity.path);
+      if (name.startsWith(cacheBasePrefix) && !name.endsWith('.part')) {
+        return entity;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _deletePartialCacheFiles(Directory cacheDirectory) async {
+    await for (final entity in cacheDirectory.list(followLinks: false)) {
+      if (entity is! File) {
+        continue;
+      }
+
+      if (entity.path.toLowerCase().endsWith('.part')) {
+        await entity.delete();
+      }
+    }
+  }
+
   Future<void> _deleteStaleCacheFiles(
     Directory cacheDirectory,
     String sourcePrefix,
@@ -147,6 +233,10 @@ class EncryptedMediaService {
   String _sourcePrefixForPath(String sourcePath) {
     final digest = sha256.convert(utf8.encode(sourcePath.toLowerCase()));
     return digest.toString().substring(0, 16);
+  }
+
+  String _cacheBasePrefix(String sourcePrefix, FileStat sourceStat) {
+    return '${sourcePrefix}_${sourceStat.size}_${sourceStat.modified.millisecondsSinceEpoch}';
   }
 
   Uint8List _keyBytes() {

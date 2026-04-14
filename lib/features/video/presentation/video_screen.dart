@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
 import 'package:eri_sports/features/media/presentation/media_playback_screen.dart';
@@ -15,6 +18,7 @@ class VideoScreen extends ConsumerStatefulWidget {
 class _VideoScreenState extends ConsumerState<VideoScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs = TabController(length: 3, vsync: this);
+  DateTime? _lastPrewarmScanAt;
 
   @override
   void dispose() {
@@ -55,20 +59,24 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
               child: Text('Unable to load local daylySport media.'),
             ),
         data: (snapshot) {
+          _scheduleEncryptedPrewarm(snapshot);
           return TabBarView(
             controller: _tabs,
             children: [
               _SectionMediaGrid(
                 title: 'Highlights',
                 section: snapshot.section(DaylySportMediaSection.highlights),
+                onOpenMedia: _openMediaItem,
               ),
               _SectionMediaGrid(
                 title: 'News',
                 section: snapshot.section(DaylySportMediaSection.news),
+                onOpenMedia: _openMediaItem,
               ),
               _SectionMediaGrid(
                 title: 'Updates',
                 section: snapshot.section(DaylySportMediaSection.updates),
+                onOpenMedia: _openMediaItem,
               ),
             ],
           );
@@ -76,13 +84,58 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
       ),
     );
   }
+
+  void _scheduleEncryptedPrewarm(DaylySportMediaSnapshot snapshot) {
+    if (_lastPrewarmScanAt == snapshot.scannedAt) {
+      return;
+    }
+    _lastPrewarmScanAt = snapshot.scannedAt;
+
+    final encryptedVideos = <DaylySportMediaItem>[];
+    for (final section in DaylySportMediaSection.values) {
+      final items = snapshot.section(section).items;
+      for (final item in items) {
+        if (item.isVideo && item.isEncrypted) {
+          encryptedVideos.add(item);
+        }
+      }
+    }
+
+    if (encryptedVideos.isEmpty) {
+      return;
+    }
+
+    final service = ref.read(appServicesProvider).encryptedMediaService;
+    unawaited(
+      service.prewarmPlayableFiles(
+        encryptedVideos.map((item) => item.file),
+        maxItems: 6,
+      ),
+    );
+  }
+
+  void _openMediaItem(DaylySportMediaItem item) {
+    if (item.isVideo && item.isEncrypted) {
+      final service = ref.read(appServicesProvider).encryptedMediaService;
+      unawaited(service.prewarmPlayableFile(item.file));
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => MediaPlaybackScreen(item: item)),
+    );
+  }
 }
 
 class _SectionMediaGrid extends StatelessWidget {
-  const _SectionMediaGrid({required this.title, required this.section});
+  const _SectionMediaGrid({
+    required this.title,
+    required this.section,
+    required this.onOpenMedia,
+  });
 
   final String title;
   final DaylySportMediaSectionSnapshot section;
+  final ValueChanged<DaylySportMediaItem> onOpenMedia;
 
   @override
   Widget build(BuildContext context) {
@@ -125,16 +178,17 @@ class _SectionMediaGrid extends StatelessWidget {
       itemCount: section.items.length,
       itemBuilder: (context, index) {
         final item = section.items[index];
-        return _MediaCard(item: item);
+        return _MediaCard(item: item, onOpen: onOpenMedia);
       },
     );
   }
 }
 
 class _MediaCard extends StatelessWidget {
-  const _MediaCard({required this.item});
+  const _MediaCard({required this.item, required this.onOpen});
 
   final DaylySportMediaItem item;
+  final ValueChanged<DaylySportMediaItem> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -147,11 +201,7 @@ class _MediaCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => MediaPlaybackScreen(item: item)),
-          );
-        },
+        onTap: () => onOpen(item),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

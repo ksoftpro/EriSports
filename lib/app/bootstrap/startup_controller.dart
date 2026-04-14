@@ -195,5 +195,6 @@ class StartupController extends Notifier<StartupState> {
         includePlayerAssets: true,
       ),
     );
+    unawaited(services.encryptedMediaService.warmUpCache());
   }
 }

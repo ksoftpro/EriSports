@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/media_playback_screen.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
@@ -5,11 +8,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-class ReelsScreen extends ConsumerWidget {
+class ReelsScreen extends ConsumerStatefulWidget {
   const ReelsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ReelsScreen> createState() => _ReelsScreenState();
+}
+
+class _ReelsScreenState extends ConsumerState<ReelsScreen> {
+  DateTime? _lastPrewarmScanAt;
+
+  @override
+  Widget build(BuildContext context) {
     final mediaAsync = ref.watch(daylySportMediaSnapshotProvider);
 
     return Scaffold(
@@ -46,6 +56,8 @@ class ReelsScreen extends ConsumerWidget {
               ? reelsSection.items
               : highlightFallback;
 
+          _scheduleEncryptedPrewarm(snapshot, items);
+
           if (items.isEmpty) {
             return _EmptyReelsState(
               title: 'No short videos found',
@@ -58,19 +70,57 @@ class ReelsScreen extends ConsumerWidget {
             scrollDirection: Axis.vertical,
             itemCount: items.length,
             itemBuilder: (context, index) {
-              return _ReelCard(item: items[index]);
+              return _ReelCard(
+                item: items[index],
+                onOpen: _openMediaItem,
+              );
             },
           );
         },
       ),
     );
   }
+
+  void _scheduleEncryptedPrewarm(
+    DaylySportMediaSnapshot snapshot,
+    List<DaylySportMediaItem> items,
+  ) {
+    if (_lastPrewarmScanAt == snapshot.scannedAt) {
+      return;
+    }
+    _lastPrewarmScanAt = snapshot.scannedAt;
+
+    final encryptedVideos = items
+        .where((item) => item.isVideo && item.isEncrypted)
+        .map((item) => item.file)
+        .toList(growable: false);
+    if (encryptedVideos.isEmpty) {
+      return;
+    }
+
+    final service = ref.read(appServicesProvider).encryptedMediaService;
+    unawaited(service.prewarmPlayableFiles(encryptedVideos, maxItems: 6));
+  }
+
+  void _openMediaItem(DaylySportMediaItem item) {
+    if (item.isVideo && item.isEncrypted) {
+      final service = ref.read(appServicesProvider).encryptedMediaService;
+      unawaited(service.prewarmPlayableFile(item.file));
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MediaPlaybackScreen(item: item),
+      ),
+    );
+  }
 }
 
 class _ReelCard extends StatelessWidget {
-  const _ReelCard({required this.item});
+  const _ReelCard({required this.item, required this.onOpen});
 
   final DaylySportMediaItem item;
+  final ValueChanged<DaylySportMediaItem> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -82,13 +132,7 @@ class _ReelCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => MediaPlaybackScreen(item: item),
-              ),
-            );
-          },
+          onTap: () => onOpen(item),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: Stack(
