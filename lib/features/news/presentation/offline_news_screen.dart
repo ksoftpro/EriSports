@@ -218,33 +218,38 @@ class _OfflineNewsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
-      color: Theme.of(context).colorScheme.surface,
+      color: colorScheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: ColoredBox(
-          color: Colors.black,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              InteractiveViewer(
-                minScale: 1,
-                maxScale: 4,
-                child: Center(
-                  child: Image.file(
-                    media.file,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
-                    gaplessPlayback: true,
-                    errorBuilder:
-                        (context, error, stackTrace) => _CorruptedImageState(
-                          fileName: media.fileName,
-                        ),
+          color: colorScheme.surfaceContainerLowest,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Scrollbar(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: SizedBox(
+                    width: constraints.maxWidth,
+                    child: Image.file(
+                      media.file,
+                      width: constraints.maxWidth,
+                      fit: BoxFit.fitWidth,
+                      alignment: Alignment.topCenter,
+                      filterQuality: FilterQuality.high,
+                      gaplessPlayback: true,
+                      errorBuilder:
+                          (context, error, stackTrace) => _CorruptedImageState(
+                            fileName: media.fileName,
+                          ),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              );
+            },
           ),
         ),
       ),
