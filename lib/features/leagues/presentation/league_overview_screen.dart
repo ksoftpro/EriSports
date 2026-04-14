@@ -1961,7 +1961,7 @@ class _TableTab extends StatelessWidget {
   }
 }
 
-class _FixturesTab extends StatelessWidget {
+class _FixturesTab extends StatefulWidget {
   const _FixturesTab({
     required this.fixtures,
     required this.filter,
@@ -1975,39 +1975,52 @@ class _FixturesTab extends StatelessWidget {
   final ValueChanged<LeagueFixtureFilter> onFilterChanged;
 
   @override
+  State<_FixturesTab> createState() => _FixturesTabState();
+}
+
+class _FixturesTabState extends State<_FixturesTab> {
+  final ScrollController _scrollController = ScrollController();
+  final Map<String, GlobalKey> _dateHeaderKeys = <String, GlobalKey>{};
+  String? _lastAnchoredLabel;
+  bool _autoScrollScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleAutoScrollToRelevantSection(force: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _FixturesTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filter != widget.filter ||
+        oldWidget.fixtures.length != widget.fixtures.length ||
+        !identical(oldWidget.fixtures, widget.fixtures)) {
+      _scheduleAutoScrollToRelevantSection(force: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final now = DateTime.now().toUtc();
-    final filtered = fixtures
-        .where((fixture) {
-          final lifecycle = MatchDisplayFormatter.lifecycle(
-            status: fixture.match.status,
-            kickoffUtc: fixture.match.kickoffUtc,
-            nowUtc: now,
-          );
-
-          switch (filter) {
-            case LeagueFixtureFilter.all:
-              return true;
-            case LeagueFixtureFilter.live:
-              return lifecycle == MatchLifecycle.live;
-            case LeagueFixtureFilter.upcoming:
-              return lifecycle == MatchLifecycle.upcoming;
-            case LeagueFixtureFilter.finished:
-              return lifecycle == MatchLifecycle.finished;
-          }
-        })
-        .toList(growable: false)
-      ..sort((a, b) => b.match.kickoffUtc.compareTo(a.match.kickoffUtc));
-
-    final entries = _buildFixtureEntries(filtered);
+    final filtered = _filterAndSortFixtures(now);
+    final entries = _buildFixtureEntries(filtered, now.toLocal());
+    _scheduleAutoScrollToRelevantSection();
 
     return Column(
       children: [
         _FilterChipBar(
           labels: const ['All', 'Live', 'Upcoming', 'Finished'],
-          selectedIndex: filter.index,
+          selectedIndex: widget.filter.index,
           onSelected:
-              (index) => onFilterChanged(LeagueFixtureFilter.values[index]),
+              (index) =>
+                  widget.onFilterChanged(LeagueFixtureFilter.values[index]),
         ),
         Expanded(
           child:
@@ -2017,12 +2030,18 @@ class _FixturesTab extends StatelessWidget {
                         'No fixtures match this filter in your offline league dataset.',
                   )
                   : ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                     itemCount: entries.length,
                     itemBuilder: (context, index) {
                       final entry = entries[index];
                       if (entry is _FixtureDateEntry) {
+                        final key = _dateHeaderKeys.putIfAbsent(
+                          entry.label,
+                          GlobalKey.new,
+                        );
                         return Padding(
+                          key: key,
                           padding: const EdgeInsets.fromLTRB(4, 10, 4, 6),
                           child: Text(
                             entry.label,
@@ -2094,15 +2113,13 @@ class _FixturesTab extends StatelessWidget {
                                       _FixtureTeamRow(
                                         teamId: item.match.homeTeamId,
                                         teamName: item.homeTeamName,
-                                        score: score.homeScoreLabel,
-                                        resolver: resolver,
+                                        resolver: widget.resolver,
                                       ),
                                       const SizedBox(height: 6),
                                       _FixtureTeamRow(
                                         teamId: item.match.awayTeamId,
                                         teamName: item.awayTeamName,
-                                        score: score.awayScoreLabel,
-                                        resolver: resolver,
+                                        resolver: widget.resolver,
                                       ),
                                     ],
                                   ),
@@ -2130,18 +2147,76 @@ class _FixturesTab extends StatelessWidget {
     );
   }
 
-  List<_FixtureEntry> _buildFixtureEntries(List<HomeMatchView> items) {
+  List<HomeMatchView> _filterAndSortFixtures(DateTime nowUtc) {
+    final filtered = widget.fixtures
+        .where((fixture) {
+          final lifecycle = MatchDisplayFormatter.lifecycle(
+            status: fixture.match.status,
+            kickoffUtc: fixture.match.kickoffUtc,
+            nowUtc: nowUtc,
+          );
+
+          switch (widget.filter) {
+            case LeagueFixtureFilter.all:
+              return true;
+            case LeagueFixtureFilter.live:
+              return lifecycle == MatchLifecycle.live;
+            case LeagueFixtureFilter.upcoming:
+              return lifecycle == MatchLifecycle.upcoming;
+            case LeagueFixtureFilter.finished:
+              return lifecycle == MatchLifecycle.finished;
+          }
+        })
+        .toList(growable: false);
+
+    if (widget.filter == LeagueFixtureFilter.upcoming) {
+      filtered.sort((a, b) => a.match.kickoffUtc.compareTo(b.match.kickoffUtc));
+      return filtered;
+    }
+
+    if (widget.filter == LeagueFixtureFilter.finished) {
+      filtered.sort((a, b) => b.match.kickoffUtc.compareTo(a.match.kickoffUtc));
+      return filtered;
+    }
+
+    if (widget.filter == LeagueFixtureFilter.live) {
+      filtered.sort((a, b) => b.match.kickoffUtc.compareTo(a.match.kickoffUtc));
+      return filtered;
+    }
+
+    final currentAndRecent = <HomeMatchView>[];
+    final upcoming = <HomeMatchView>[];
+
+    for (final fixture in filtered) {
+      final lifecycle = MatchDisplayFormatter.lifecycle(
+        status: fixture.match.status,
+        kickoffUtc: fixture.match.kickoffUtc,
+        nowUtc: nowUtc,
+      );
+      if (lifecycle == MatchLifecycle.upcoming) {
+        upcoming.add(fixture);
+      } else {
+        currentAndRecent.add(fixture);
+      }
+    }
+
+    currentAndRecent.sort(
+      (a, b) => b.match.kickoffUtc.compareTo(a.match.kickoffUtc),
+    );
+    upcoming.sort((a, b) => a.match.kickoffUtc.compareTo(b.match.kickoffUtc));
+
+    return [...currentAndRecent, ...upcoming];
+  }
+
+  List<_FixtureEntry> _buildFixtureEntries(
+    List<HomeMatchView> items,
+    DateTime nowLocal,
+  ) {
     final entries = <_FixtureEntry>[];
     String? lastDateLabel;
 
     for (final item in items) {
-      final dateLabel =
-          item.match.roundLabel != null &&
-                  item.match.roundLabel!.trim().isNotEmpty
-              ? item.match.roundLabel!.trim()
-              : DateFormat(
-                'EEEE, dd MMM',
-              ).format(item.match.kickoffUtc.toLocal());
+      final dateLabel = _fixtureDateLabel(item.match.kickoffUtc, nowLocal);
 
       if (dateLabel != lastDateLabel) {
         entries.add(_FixtureDateEntry(dateLabel));
@@ -2152,6 +2227,105 @@ class _FixturesTab extends StatelessWidget {
     }
 
     return entries;
+  }
+
+  String _fixtureDateLabel(DateTime kickoffUtc, DateTime nowLocal) {
+    final localKickoff = kickoffUtc.toLocal();
+    final kickoffDate = DateTime(
+      localKickoff.year,
+      localKickoff.month,
+      localKickoff.day,
+    );
+    final today = DateTime(nowLocal.year, nowLocal.month, nowLocal.day);
+    final deltaDays = kickoffDate.difference(today).inDays;
+
+    if (deltaDays == 0) {
+      return 'Today';
+    }
+    if (deltaDays == -1) {
+      return 'Yesterday';
+    }
+    if (deltaDays == 1) {
+      return 'Tomorrow';
+    }
+
+    return DateFormat('EEEE, dd MMM').format(localKickoff);
+  }
+
+  String? _resolveRelevantDateLabel(List<HomeMatchView> items, DateTime nowUtc) {
+    if (items.isEmpty) {
+      return null;
+    }
+
+    HomeMatchView? bestMatch;
+    int? bestAbsMinutes;
+    int? bestSignedMinutes;
+
+    for (final item in items) {
+      final signedMinutes =
+          item.match.kickoffUtc.difference(nowUtc).inMinutes;
+      final absMinutes = signedMinutes.abs();
+
+      if (bestMatch == null ||
+          bestAbsMinutes == null ||
+          absMinutes < bestAbsMinutes ||
+          (absMinutes == bestAbsMinutes &&
+              bestSignedMinutes != null &&
+              signedMinutes <= 0 &&
+              bestSignedMinutes > 0)) {
+        bestMatch = item;
+        bestAbsMinutes = absMinutes;
+        bestSignedMinutes = signedMinutes;
+      }
+    }
+
+    if (bestMatch == null) {
+      return null;
+    }
+
+    return _fixtureDateLabel(bestMatch.match.kickoffUtc, nowUtc.toLocal());
+  }
+
+  void _scheduleAutoScrollToRelevantSection({bool force = false}) {
+    if (!mounted) {
+      return;
+    }
+    if (_autoScrollScheduled && !force) {
+      return;
+    }
+    _autoScrollScheduled = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoScrollScheduled = false;
+      if (!mounted) {
+        return;
+      }
+
+      final now = DateTime.now().toUtc();
+      final sorted = _filterAndSortFixtures(now);
+      final targetLabel = _resolveRelevantDateLabel(sorted, now);
+      if (targetLabel == null) {
+        return;
+      }
+
+      if (!force && _lastAnchoredLabel == targetLabel) {
+        return;
+      }
+
+      final key = _dateHeaderKeys[targetLabel];
+      final targetContext = key?.currentContext;
+      if (targetContext == null) {
+        return;
+      }
+
+      _lastAnchoredLabel = targetLabel;
+      Scrollable.ensureVisible(
+        targetContext,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
+        alignment: 0.04,
+      );
+    });
   }
 
   String _fixtureStatusLabel(String status, DateTime kickoffUtc) {
@@ -2181,13 +2355,11 @@ class _FixtureTeamRow extends StatelessWidget {
   const _FixtureTeamRow({
     required this.teamId,
     required this.teamName,
-    required this.score,
     required this.resolver,
   });
 
   final String teamId;
   final String teamName;
-  final String? score;
   final LocalAssetResolver resolver;
 
   @override
@@ -2213,15 +2385,6 @@ class _FixtureTeamRow extends StatelessWidget {
             ),
           ),
         ),
-        if (score != null)
-          Text(
-            score!,
-            style: const TextStyle(
-              color: Color(0xFF121925),
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
       ],
     );
   }
