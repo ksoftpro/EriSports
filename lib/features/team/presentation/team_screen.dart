@@ -1876,7 +1876,7 @@ class _SquadPlayerCard extends StatelessWidget {
       onTap:
           item.playerId == null
               ? null
-              : () => context.push('/player/${item.playerId}'),
+              : () => context.openPlayerDetail(item.playerId!),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         decoration: BoxDecoration(
@@ -1984,7 +1984,7 @@ class _StatsTab extends StatelessWidget {
           onTap:
               item.playerId == null
                   ? null
-                  : () => context.push('/player/${item.playerId}'),
+                  : () => context.openPlayerDetail(item.playerId!),
           borderRadius: BorderRadius.circular(12),
           child: Container(
             decoration: BoxDecoration(

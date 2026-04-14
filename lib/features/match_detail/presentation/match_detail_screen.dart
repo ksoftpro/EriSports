@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/navigation/detail_navigation.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/features/match_detail/presentation/match_detail_providers.dart';
 import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
@@ -239,9 +240,12 @@ class MatchDetailScreen extends ConsumerWidget {
                                                 onTap:
                                                     event.event.playerId == null
                                                         ? null
-                                                        : () => context.push(
-                                                          '/player/${event.event.playerId}',
-                                                        ),
+                                                        : () => context
+                                                            .openPlayerDetail(
+                                                              event
+                                                                  .event
+                                                                  .playerId!,
+                                                            ),
                                                 child: EntityBadge(
                                                   entityId:
                                                       event.event.playerId ??

@@ -20,12 +20,62 @@ class PlayerScreen extends ConsumerWidget {
       appBar: AppBar(),
       body: playerAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error:
-            (error, stackTrace) =>
-                const Center(child: Text('Unable to load local player data.')),
+        error: (error, stackTrace) {
+          return _buildUnavailableState(
+            context,
+            requestedPlayerId: playerId,
+            reason: 'Unable to load local player data. ${error.toString().trim()}',
+            logs: const [],
+          );
+        },
         data: (state) {
+          final player = state.player;
+          if (player == null) {
+            return _buildUnavailableState(
+              context,
+              requestedPlayerId: state.requestedPlayerId,
+              resolvedPlayerId: state.resolvedPlayerId,
+              reason:
+                  'Player details unavailable in local daylysport JSON for this player id.',
+              logs: state.debugLogs,
+            );
+          }
+
           final resolver = ref.read(appServicesProvider).assetResolver;
           final scheme = Theme.of(context).colorScheme;
+          final infoRows = <({String label, String value})>[
+            (label: 'Position', value: player.position ?? 'Unknown'),
+            (label: 'Jersey', value: player.jerseyNumber?.toString() ?? '-'),
+            (label: 'Player ID', value: player.id),
+          ];
+
+          if (state.team != null) {
+            infoRows.add((label: 'Team', value: state.team!.name));
+          }
+          if (state.competition != null) {
+            infoRows.add((label: 'Competition', value: state.competition!.name));
+          }
+          if (state.profile.nationality != null) {
+            infoRows.add((label: 'Nationality', value: state.profile.nationality!));
+          }
+          if (state.profile.country != null) {
+            infoRows.add((label: 'Country', value: state.profile.country!));
+          }
+          if (state.profile.birthDate != null) {
+            infoRows.add((label: 'Birth date', value: state.profile.birthDate!));
+          }
+          if (state.profile.age != null) {
+            infoRows.add((label: 'Age', value: state.profile.age!));
+          }
+          if (state.profile.height != null) {
+            infoRows.add((label: 'Height', value: state.profile.height!));
+          }
+          if (state.profile.weight != null) {
+            infoRows.add((label: 'Weight', value: state.profile.weight!));
+          }
+          if (state.profile.preferredFoot != null) {
+            infoRows.add((label: 'Preferred foot', value: state.profile.preferredFoot!));
+          }
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
@@ -49,15 +99,15 @@ class PlayerScreen extends ConsumerWidget {
                 child: Column(
                   children: [
                     EntityBadge(
-                      entityId: state.player.id,
-                      entityName: state.player.name,
+                      entityId: player.id,
+                      entityName: player.name,
                       type: SportsAssetType.players,
                       resolver: resolver,
                       size: 96,
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      state.player.name,
+                      player.name,
                       style: Theme.of(context).textTheme.headlineSmall,
                       textAlign: TextAlign.center,
                     ),
@@ -69,14 +119,16 @@ class PlayerScreen extends ConsumerWidget {
                       children: [
                         _metaChip(
                           context,
-                          state.player.position ?? 'Unknown Position',
+                          player.position ?? 'Unknown Position',
                         ),
                         _metaChip(
                           context,
-                          state.player.jerseyNumber == null
+                          player.jerseyNumber == null
                               ? 'No jersey'
-                              : 'No. ${state.player.jerseyNumber}',
+                              : 'No. ${player.jerseyNumber}',
                         ),
+                        if (state.profile.nationality != null)
+                          _metaChip(context, state.profile.nationality!),
                       ],
                     ),
                     if (state.team != null) ...[
@@ -109,16 +161,54 @@ class PlayerScreen extends ConsumerWidget {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 8),
-                      _metaRow('Position', state.player.position ?? 'Unknown'),
-                      _metaRow(
-                        'Jersey',
-                        state.player.jerseyNumber?.toString() ?? '-',
+                      ...infoRows.map(
+                        (row) => _metaRow(row.label, row.value),
                       ),
-                      _metaRow('Player ID', state.player.id),
                     ],
                   ),
                 ),
               ),
+              if (state.profile.stats.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Stats summary',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        ...state.profile.stats.entries.map(
+                          (entry) => _metaRow(entry.key, entry.value),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (state.profile.summary != null &&
+                  state.profile.summary!.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Summary',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(state.profile.summary!),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               if (state.team != null)
                 OutlinedButton.icon(
@@ -142,6 +232,68 @@ class PlayerScreen extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildUnavailableState(
+    BuildContext context, {
+    required String requestedPlayerId,
+    String? resolvedPlayerId,
+    required String reason,
+    required List<String> logs,
+  }) {
+    final visibleLogs = logs.take(8).toList(growable: false);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Player details unavailable',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(reason),
+                const SizedBox(height: 10),
+                _metaRow('Requested player id', requestedPlayerId),
+                if (resolvedPlayerId != null)
+                  _metaRow('Resolved player id', resolvedPlayerId),
+              ],
+            ),
+          ),
+        ),
+        if (visibleLogs.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Diagnostic logs',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  for (final line in visibleLogs)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        line,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 

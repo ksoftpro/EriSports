@@ -129,9 +129,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/player/:playerId',
-        builder:
-            (context, state) =>
-                PlayerScreen(playerId: state.pathParameters['playerId']!),
+        builder: (context, state) {
+          final rawPlayerId = state.pathParameters['playerId']!;
+          String resolvedPlayerId;
+          try {
+            resolvedPlayerId = Uri.decodeComponent(rawPlayerId);
+          } catch (_) {
+            resolvedPlayerId = rawPlayerId;
+          }
+
+          return PlayerScreen(playerId: resolvedPlayerId);
+        },
       ),
       GoRoute(
         path: '/player-stats',

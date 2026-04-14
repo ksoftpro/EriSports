@@ -2538,7 +2538,7 @@ class _PlayerStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => context.push('/player/${entry.stat.playerId}'),
+      onTap: () => context.openPlayerDetail(entry.stat.playerId),
       borderRadius: BorderRadius.circular(12),
       child: Ink(
         decoration: BoxDecoration(
@@ -2876,7 +2876,7 @@ class _TransferDataRow extends StatelessWidget {
     return InkWell(
       onTap: () {
         if (item.playerId.trim().isNotEmpty) {
-          context.push('/player/${item.playerId}');
+          context.openPlayerDetail(item.playerId);
           return;
         }
         if (item.teamId != null && item.teamId!.trim().isNotEmpty) {
@@ -3608,7 +3608,7 @@ void _openNewsDestination(BuildContext context, LeagueNewsItem item) {
                     OutlinedButton.icon(
                       onPressed: () {
                         Navigator.of(sheetContext).pop();
-                        context.push('/player/${item.imagePlayerId}');
+                        context.openPlayerDetail(item.imagePlayerId!);
                       },
                       icon: const Icon(Icons.person_rounded, size: 16),
                       label: const Text('Open player'),

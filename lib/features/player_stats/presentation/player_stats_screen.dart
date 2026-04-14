@@ -1,3 +1,4 @@
+import 'package:eri_sports/app/navigation/detail_navigation.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
@@ -370,7 +371,7 @@ class _LeaderboardRow extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () => context.push('/player/${entry.stat.playerId}'),
+      onTap: () => context.openPlayerDetail(entry.stat.playerId),
       child: Ink(
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,

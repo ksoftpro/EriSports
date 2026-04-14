@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:eri_sports/app/navigation/detail_navigation.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/features/search/presentation/search_providers.dart';
@@ -113,7 +114,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       ...results.players.map(
                         (player) => ListTile(
                           dense: true,
-                          onTap: () => context.push('/player/${player.id}'),
+                          onTap: () => context.openPlayerDetail(player.id),
                           leading: EntityBadge(
                             entityId: player.id,
                             entityName: player.name,

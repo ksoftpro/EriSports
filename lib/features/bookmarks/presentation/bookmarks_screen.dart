@@ -1,3 +1,4 @@
+import 'package:eri_sports/app/navigation/detail_navigation.dart';
 import 'package:eri_sports/features/bookmarks/presentation/bookmarks_providers.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
@@ -227,7 +228,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen>
                                 color: Theme.of(context).cardColor,
                                 borderRadius: BorderRadius.circular(12),
                                 child: InkWell(
-                                  onTap: () => context.push('/player/${player.id}'),
+                                  onTap: () => context.openPlayerDetail(player.id),
                                   borderRadius: BorderRadius.circular(12),
                                   child: Padding(
                                     padding: const EdgeInsets.all(10),
