@@ -22,11 +22,28 @@ class MatchDetailScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Match Detail')),
       body: matchAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error:
-            (error, stackTrace) =>
-                const Center(child: Text('Unable to load local match detail.')),
+        error: (error, stackTrace) {
+          return _buildUnavailableState(
+            context,
+            requestedMatchId: matchId,
+            reason:
+                'Unable to load local match detail. ${error.toString().trim()}',
+            logs: const [],
+          );
+        },
         data: (state) {
           final detail = state.detail;
+          if (detail == null) {
+            return _buildUnavailableState(
+              context,
+              requestedMatchId: state.requestedMatchId,
+              resolvedMatchId: state.resolvedMatchId,
+              reason:
+                  'Match details unavailable in local daylysport JSON for this match.',
+              logs: state.debugLogs,
+            );
+          }
+
           final resolver = ref.read(appServicesProvider).assetResolver;
           final kickoff = DateFormat(
             'EEE, dd MMM • HH:mm',
@@ -408,5 +425,65 @@ class MatchDetailScreen extends ConsumerWidget {
 
   String _prettifyEventType(String type) {
     return _prettifyStatKey(type);
+  }
+
+  Widget _buildUnavailableState(
+    BuildContext context, {
+    required String requestedMatchId,
+    String? resolvedMatchId,
+    required String reason,
+    required List<String> logs,
+  }) {
+    final visibleLogs = logs.take(8).toList(growable: false);
+    final bodyStyle = Theme.of(context).textTheme.bodyMedium;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Match details unavailable',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(reason, style: bodyStyle),
+                const SizedBox(height: 10),
+                Text('Requested match id: $requestedMatchId', style: bodyStyle),
+                if (resolvedMatchId != null)
+                  Text('Resolved match id: $resolvedMatchId', style: bodyStyle),
+              ],
+            ),
+          ),
+        ),
+        if (visibleLogs.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Diagnostic logs',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  for (final line in visibleLogs)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(line, style: Theme.of(context).textTheme.bodySmall),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }

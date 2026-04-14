@@ -3,7 +3,8 @@ import 'package:go_router/go_router.dart';
 
 extension DetailNavigation on BuildContext {
   Future<void> openMatchDetail(String matchId) {
-    final nextLocation = '/match/$matchId';
+    final safeMatchId = Uri.encodeComponent(matchId);
+    final nextLocation = '/match/$safeMatchId';
     final currentPath = GoRouterState.of(this).uri.path;
 
     if (currentPath == nextLocation) {

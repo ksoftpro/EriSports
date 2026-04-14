@@ -109,9 +109,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/match/:matchId',
-        builder:
-            (context, state) =>
-                MatchDetailScreen(matchId: state.pathParameters['matchId']!),
+        builder: (context, state) {
+          final rawMatchId = state.pathParameters['matchId']!;
+          String resolvedMatchId;
+          try {
+            resolvedMatchId = Uri.decodeComponent(rawMatchId);
+          } catch (_) {
+            resolvedMatchId = rawMatchId;
+          }
+
+          return MatchDetailScreen(matchId: resolvedMatchId);
+        },
       ),
       GoRoute(
         path: '/team/:teamId',

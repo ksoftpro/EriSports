@@ -96,14 +96,18 @@ class DaylySportLocator {
     final candidates = <Directory>[];
 
     if (Platform.isAndroid) {
+      candidates.add(Directory('/storage/emulated/0/daylysport'));
       candidates.add(Directory('/storage/emulated/0/daylySport'));
+      candidates.add(Directory('/sdcard/daylysport'));
       candidates.add(Directory('/sdcard/daylySport'));
+      candidates.add(Directory('/storage/self/primary/daylysport'));
       candidates.add(Directory('/storage/self/primary/daylySport'));
 
       final externalDir = await getExternalStorageDirectory();
       if (externalDir != null) {
         final sharedRoot = _extractAndroidSharedRoot(externalDir.path);
         if (sharedRoot != null) {
+          candidates.add(Directory(p.join(sharedRoot, 'daylysport')));
           candidates.add(Directory(p.join(sharedRoot, 'daylySport')));
         }
       }
@@ -116,6 +120,7 @@ class DaylySportLocator {
     }
 
     final docsDir = await getApplicationDocumentsDirectory();
+  candidates.add(Directory(p.join(docsDir.path, 'daylysport')));
     candidates.add(Directory(p.join(docsDir.path, 'daylySport')));
 
     final unique = <String, Directory>{};
