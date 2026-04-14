@@ -24,6 +24,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   DateTime? _selectedDay;
   PageController? _dayPageController;
   List<DateTime> _controllerDays = const <DateTime>[];
+  int _dayTabScrollRequest = 0;
   bool _followingCollapsed = false;
   bool _hideAllCompetitions = false;
   final Set<String> _collapsedCompetitionIds = <String>{};
@@ -53,8 +54,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           return Column(
             children: [
               _TopBar(
-                onOpenClock: () {
-                  _selectDay(days, _todayOrClosest(days));
+                onJumpToToday: () {
+                  _selectDay(
+                    days,
+                    _todayOrClosest(days),
+                    forceTabStripSync: true,
+                  );
                 },
                 onOpenCalendar: () => context.push('/leagues'),
                 onOpenFollowing: () => context.push('/following'),
@@ -64,7 +69,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               _DayTabStrip(
                 days: days,
                 selectedDay: selectedDay,
-                onSelect: (day) => _selectDay(days, day),
+                scrollRequestId: _dayTabScrollRequest,
+                onSelect:
+                    (day) =>
+                        _selectDay(days, day, forceTabStripSync: true),
               ),
               Expanded(
                 child:
@@ -267,6 +275,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _ensurePageController(List<DateTime> days, int selectedIndex) {
+    if (days.isEmpty) {
+      _dayPageController?.dispose();
+      _dayPageController = null;
+      _controllerDays = const <DateTime>[];
+      return;
+    }
+
     final shouldRecreate =
         _dayPageController == null || !_sameDayList(_controllerDays, days);
 
@@ -274,17 +289,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _dayPageController?.dispose();
       _controllerDays = List<DateTime>.from(days, growable: false);
       _dayPageController = PageController(initialPage: selectedIndex);
-      return;
-    }
-
-    final controller = _dayPageController;
-    if (controller == null || !controller.hasClients) {
-      return;
-    }
-
-    final currentPage = controller.page?.round() ?? controller.initialPage;
-    if (currentPage != selectedIndex) {
-      controller.jumpToPage(selectedIndex);
     }
   }
 
@@ -303,27 +307,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return true;
   }
 
-  void _selectDay(List<DateTime> days, DateTime day) {
+  void _selectDay(
+    List<DateTime> days,
+    DateTime day, {
+    bool forceTabStripSync = false,
+  }) {
     if (days.isEmpty) {
       setState(() {
         _selectedDay = day;
+        if (forceTabStripSync) {
+          _dayTabScrollRequest++;
+        }
       });
       return;
     }
 
     final index = _indexForDay(days, day);
     final selected = days[index];
-    setState(() {
-      _selectedDay = selected;
-    });
+    final sameSelection =
+        _selectedDay != null && _isSameDay(_selectedDay!, selected);
+    if (!sameSelection || forceTabStripSync) {
+      setState(() {
+        _selectedDay = selected;
+        if (forceTabStripSync) {
+          _dayTabScrollRequest++;
+        }
+      });
+    }
 
     final controller = _dayPageController;
     if (controller != null && controller.hasClients) {
-      controller.animateToPage(
-        index,
-        duration: const Duration(milliseconds: 240),
-        curve: Curves.easeOutCubic,
-      );
+      final currentPage = controller.page?.round() ?? controller.initialPage;
+      if (currentPage != index) {
+        controller.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+        );
+      }
     }
   }
 
@@ -412,14 +433,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 class _TopBar extends StatelessWidget {
   const _TopBar({
-    required this.onOpenClock,
+    required this.onJumpToToday,
     required this.onOpenCalendar,
     required this.onOpenFollowing,
     required this.onOpenSearch,
     required this.onOpenMore,
   });
 
-  final VoidCallback onOpenClock;
+  final VoidCallback onJumpToToday;
   final VoidCallback onOpenCalendar;
   final VoidCallback onOpenFollowing;
   final VoidCallback onOpenSearch;
@@ -441,30 +462,56 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          IconButton(
-            tooltip: 'Recents',
-            onPressed: onOpenClock,
-            icon: const Icon(Icons.access_time_rounded, size: 22),
-          ),
-          IconButton(
-            tooltip: 'Calendar',
-            onPressed: onOpenCalendar,
-            icon: const Icon(Icons.calendar_month_outlined, size: 22),
-          ),
-          IconButton(
-            tooltip: 'Following',
-            onPressed: onOpenFollowing,
-            icon: const Icon(Icons.people_alt_outlined, size: 22),
-          ),
-          IconButton(
-            tooltip: 'Search',
-            onPressed: onOpenSearch,
-            icon: const Icon(Icons.search, size: 23),
-          ),
-          IconButton(
-            tooltip: 'Video',
-            onPressed: onOpenMore,
-            icon: const Icon(Icons.video_library_outlined, size: 23),
+          PopupMenuButton<_HeaderMenuAction>(
+            tooltip: 'Menu',
+            icon: const Icon(Icons.more_vert_rounded, size: 22),
+            onSelected: (action) {
+              switch (action) {
+                case _HeaderMenuAction.today:
+                  onJumpToToday();
+                case _HeaderMenuAction.calendar:
+                  onOpenCalendar();
+                case _HeaderMenuAction.following:
+                  onOpenFollowing();
+                case _HeaderMenuAction.search:
+                  onOpenSearch();
+                case _HeaderMenuAction.video:
+                  onOpenMore();
+              }
+            },
+            itemBuilder: (context) {
+              return const [
+                PopupMenuItem<_HeaderMenuAction>(
+                  value: _HeaderMenuAction.today,
+                  child: _HeaderMenuRow(icon: Icons.today_outlined, label: 'Today'),
+                ),
+                PopupMenuItem<_HeaderMenuAction>(
+                  value: _HeaderMenuAction.calendar,
+                  child: _HeaderMenuRow(
+                    icon: Icons.calendar_month_outlined,
+                    label: 'Calendar',
+                  ),
+                ),
+                PopupMenuItem<_HeaderMenuAction>(
+                  value: _HeaderMenuAction.following,
+                  child: _HeaderMenuRow(
+                    icon: Icons.people_alt_outlined,
+                    label: 'Following',
+                  ),
+                ),
+                PopupMenuItem<_HeaderMenuAction>(
+                  value: _HeaderMenuAction.search,
+                  child: _HeaderMenuRow(icon: Icons.search, label: 'Search'),
+                ),
+                PopupMenuItem<_HeaderMenuAction>(
+                  value: _HeaderMenuAction.video,
+                  child: _HeaderMenuRow(
+                    icon: Icons.video_library_outlined,
+                    label: 'Video',
+                  ),
+                ),
+              ];
+            },
           ),
         ],
       ),
@@ -472,20 +519,84 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-class _DayTabStrip extends StatelessWidget {
+enum _HeaderMenuAction {
+  today,
+  calendar,
+  following,
+  search,
+  video,
+}
+
+class _HeaderMenuRow extends StatelessWidget {
+  const _HeaderMenuRow({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20),
+        const SizedBox(width: 10),
+        Text(label),
+      ],
+    );
+  }
+}
+
+class _DayTabStrip extends StatefulWidget {
   const _DayTabStrip({
     required this.days,
     required this.selectedDay,
+    required this.scrollRequestId,
     required this.onSelect,
   });
 
   final List<DateTime> days;
   final DateTime selectedDay;
+  final int scrollRequestId;
   final ValueChanged<DateTime> onSelect;
 
   @override
+  State<_DayTabStrip> createState() => _DayTabStripState();
+}
+
+class _DayTabStripState extends State<_DayTabStrip> {
+  final ScrollController _scrollController = ScrollController();
+  final Map<String, GlobalKey> _dayKeys = <String, GlobalKey>{};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollSelectedIntoView(animate: false);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _DayTabStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final selectedChanged = !_isSameDay(oldWidget.selectedDay, widget.selectedDay);
+    final daysChanged = !_sameDayList(oldWidget.days, widget.days);
+    final requestChanged = oldWidget.scrollRequestId != widget.scrollRequestId;
+
+    if (selectedChanged || daysChanged || requestChanged) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollSelectedIntoView();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (days.isEmpty) {
+    if (widget.days.isEmpty) {
       return const SizedBox(height: 46);
     }
 
@@ -497,17 +608,20 @@ class _DayTabStrip extends StatelessWidget {
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: ListView.separated(
+        controller: _scrollController,
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
         ),
-        itemCount: days.length,
+        itemCount: widget.days.length,
         separatorBuilder: (_, __) => const SizedBox(width: 2),
         itemBuilder: (context, index) {
-          final day = days[index];
-          final isSelected = _isSameDay(day, selectedDay);
+          final day = widget.days[index];
+          final isSelected = _isSameDay(day, widget.selectedDay);
+          final key = _keyForDay(day);
           return InkWell(
-            onTap: () => onSelect(day),
+            key: key,
+            onTap: () => widget.onSelect(day),
             borderRadius: BorderRadius.circular(10),
             child: Container(
               constraints: const BoxConstraints(minWidth: 78),
@@ -548,6 +662,49 @@ class _DayTabStrip extends StatelessWidget {
         },
       ),
     );
+  }
+
+  void _scrollSelectedIntoView({bool animate = true}) {
+    if (!mounted || widget.days.isEmpty || !_scrollController.hasClients) {
+      return;
+    }
+
+    final selectedKey = _dayKeys[_dayId(widget.selectedDay)];
+    final selectedContext = selectedKey?.currentContext;
+    if (selectedContext == null) {
+      return;
+    }
+
+    Scrollable.ensureVisible(
+      selectedContext,
+      alignment: 0.5,
+      duration: animate ? const Duration(milliseconds: 230) : Duration.zero,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  GlobalKey _keyForDay(DateTime day) {
+    final id = _dayId(day);
+    return _dayKeys.putIfAbsent(id, () => GlobalKey());
+  }
+
+  String _dayId(DateTime day) {
+    return '${day.year}-${day.month}-${day.day}';
+  }
+
+  bool _sameDayList(List<DateTime> a, List<DateTime> b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var index = 0; index < a.length; index++) {
+      if (!_isSameDay(a[index], b[index])) {
+        return false;
+      }
+    }
+    return true;
   }
 
   bool _isSameDay(DateTime a, DateTime b) {
