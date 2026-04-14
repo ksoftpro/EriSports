@@ -328,6 +328,22 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
             ),
           ),
           const SizedBox(height: 10),
+          Card(
+            child: ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
+              leading: const Icon(Icons.info_outline_rounded),
+              title: const Text(
+                'About',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: const Text(
+                'Developer and business contact information',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => context.push('/about'),
+            ),
+          ),
+          const SizedBox(height: 10),
           FilledButton.icon(
             onPressed: () => context.push('/player-stats'),
             icon: const Icon(Icons.leaderboard),

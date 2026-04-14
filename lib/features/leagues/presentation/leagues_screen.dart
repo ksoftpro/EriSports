@@ -193,7 +193,8 @@ class _LeagueTile extends StatelessWidget {
           return;
         }
 
-        context.push('/league/$leagueId');
+        final encodedLeagueName = Uri.encodeQueryComponent(name);
+        context.push('/league/$leagueId?leagueName=$encodedLeagueName');
       },
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),

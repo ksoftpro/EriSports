@@ -491,7 +491,11 @@ class LeagueStandingsSource {
         return namedMatch;
       }
 
-      final scannedMatch = await _scanLeagueFileByMetadata(root, competitionId);
+      final scannedMatch = await _scanLeagueFileByMetadata(
+        root,
+        competitionId,
+        competitionName: competitionName,
+      );
       if (scannedMatch != null) {
         await _cacheLocatedLeagueFile(root.path, competitionId, scannedMatch);
         return scannedMatch;
@@ -519,11 +523,13 @@ class LeagueStandingsSource {
       expected.add(byName.toLowerCase());
     }
 
-    final slug = competitionId
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .replaceAll(RegExp(r'^_+|_+$'), '');
-    if (slug.isNotEmpty) {
+    final genericNameSlug = _slugify(competitionName);
+    if (genericNameSlug != null) {
+      expected.add('${genericNameSlug}_full_data.json');
+    }
+
+    final slug = _slugify(competitionId);
+    if (slug != null && slug.isNotEmpty) {
       expected.add('${slug}_full_data.json');
     }
 
@@ -573,6 +579,21 @@ class LeagueStandingsSource {
     }
 
     return null;
+  }
+
+  String? _slugify(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return null;
+    }
+
+    final slug = raw
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+
+    return slug.isEmpty ? null : slug;
   }
 
   Future<File?> _findLeagueFileByName(
@@ -634,7 +655,9 @@ class LeagueStandingsSource {
 
   Future<File?> _scanLeagueFileByMetadata(
     Directory root,
-    String competitionId,
+    String competitionId, {
+    String? competitionName,
+  }
   ) async {
     final matches = <File>[];
     await for (final entity in root.list(recursive: true, followLinks: false)) {
@@ -647,7 +670,11 @@ class LeagueStandingsSource {
         continue;
       }
 
-      final isMatch = await _fileMatchesCompetitionId(entity, competitionId);
+      final isMatch = await _fileMatchesCompetitionIdentity(
+        entity,
+        competitionId: competitionId,
+        competitionName: competitionName,
+      );
       if (isMatch) {
         matches.add(entity);
       }
@@ -681,9 +708,12 @@ class LeagueStandingsSource {
     return !lowerName.startsWith('top_standings_full_data');
   }
 
-  Future<bool> _fileMatchesCompetitionId(
+  Future<bool> _fileMatchesCompetitionIdentity(
     File file,
-    String competitionId,
+    {
+    required String competitionId,
+    String? competitionName,
+  }
   ) async {
     try {
       final decoded = await compute(jsonDecode, await file.readAsString());
@@ -697,14 +727,41 @@ class LeagueStandingsSource {
       }
 
       final leagueId = _normalizeKey(_stringValue(meta['leagueId']));
-      if (leagueId == competitionId) {
+      final normalizedCompetitionId = _normalizeKey(competitionId);
+      if (leagueId == normalizedCompetitionId) {
         return true;
       }
 
-      final slug = _normalizeKey(
+      final identityCandidates = <String>{
+        normalizedCompetitionId,
+        if (_slugify(competitionName) case final nameSlug?) nameSlug,
+      };
+
+      final slugOrKey = _normalizeKey(
         _stringValue(meta['slug']) ?? _stringValue(meta['leagueKey']),
       );
-      return slug == competitionId;
+      if (slugOrKey.isNotEmpty && identityCandidates.contains(slugOrKey)) {
+        return true;
+      }
+
+      final metaName = _normalizeKey(
+        _stringValue(meta['leagueName']) ??
+            _stringValue(meta['competitionName']) ??
+            _stringValue(meta['name']),
+      );
+      if (metaName.isNotEmpty) {
+        final normalizedTargetName = _normalizeKey(competitionName);
+        if (normalizedTargetName.isNotEmpty && metaName == normalizedTargetName) {
+          return true;
+        }
+
+        final metaNameSlug = _slugify(metaName);
+        if (metaNameSlug != null && identityCandidates.contains(metaNameSlug)) {
+          return true;
+        }
+      }
+
+      return false;
     } catch (_) {
       return false;
     }

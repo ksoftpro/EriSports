@@ -142,22 +142,45 @@ class LeagueOverviewState {
   final List<LeagueTransferItem> transferItems;
 }
 
+@immutable
+class LeagueOverviewRequest {
+  const LeagueOverviewRequest({
+    required this.competitionId,
+    this.competitionNameHint,
+  });
+
+  final String competitionId;
+  final String? competitionNameHint;
+
+  @override
+  bool operator ==(Object other) {
+    return other is LeagueOverviewRequest &&
+        other.competitionId == competitionId &&
+        other.competitionNameHint == competitionNameHint;
+  }
+
+  @override
+  int get hashCode => Object.hash(competitionId, competitionNameHint);
+}
+
 final leagueOverviewProvider = FutureProvider.family<
   LeagueOverviewState,
-  String
->((ref, competitionId) async {
+  LeagueOverviewRequest
+>((ref, request) async {
   ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.catalog));
   ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.standings));
   ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.matches));
   ref.watch(daylysportRefreshTokenProvider(DaylysportDataDomain.playerStats));
   final services = ref.read(appServicesProvider);
+  final competitionId = request.competitionId;
   final competition = await services.database.readCompetitionById(
     competitionId,
   );
+  final sourceCompetitionName = competition?.name ?? request.competitionNameHint;
   final leagueDataset = await services.leagueStandingsSource
       .readLeagueDatasetByCompetitionId(
         competitionId,
-        competitionName: competition?.name,
+        competitionName: sourceCompetitionName,
         allowSharedFallback: false,
       );
   final standings = leagueDataset.standings;
@@ -172,8 +195,8 @@ final leagueOverviewProvider = FutureProvider.family<
       .take(8)
       .toList(growable: false);
 
-  final competitionName =
-      competition?.name ?? standings?.displayName ?? 'League';
+    final competitionName =
+      sourceCompetitionName ?? standings?.displayName ?? 'League';
   final country = competition?.country;
   final visualTheme = LeagueThemeResolver.resolve(
     competitionId: competitionId,

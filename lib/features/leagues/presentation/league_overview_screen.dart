@@ -19,9 +19,14 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 class LeagueOverviewScreen extends ConsumerStatefulWidget {
-  const LeagueOverviewScreen({required this.competitionId, super.key});
+  const LeagueOverviewScreen({
+    required this.competitionId,
+    this.competitionNameHint,
+    super.key,
+  });
 
   final String competitionId;
+  final String? competitionNameHint;
 
   @override
   ConsumerState<LeagueOverviewScreen> createState() =>
@@ -39,7 +44,12 @@ class _LeagueOverviewScreenState extends ConsumerState<LeagueOverviewScreen> {
   @override
   Widget build(BuildContext context) {
     final overviewAsync = ref.watch(
-      leagueOverviewProvider(widget.competitionId),
+      leagueOverviewProvider(
+        LeagueOverviewRequest(
+          competitionId: widget.competitionId,
+          competitionNameHint: widget.competitionNameHint,
+        ),
+      ),
     );
 
     return DefaultTabController(
@@ -1954,7 +1964,18 @@ class _TableTab extends StatelessWidget {
               }
               return Colors.transparent;
             },
-            onRowTap: (row) => context.push('/team/${row.teamId}'),
+            onRowTap: (_) {
+              final messenger = ScaffoldMessenger.maybeOf(context);
+              messenger?.hideCurrentSnackBar();
+              messenger?.showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Team details are temporarily disabled from the league table.',
+                  ),
+                  duration: Duration(milliseconds: 1200),
+                ),
+              );
+            },
           ),
         ),
       ],

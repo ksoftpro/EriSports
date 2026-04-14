@@ -4,6 +4,8 @@ import 'package:eri_sports/features/home/presentation/home_screen.dart';
 import 'package:eri_sports/features/leagues/presentation/league_overview_screen.dart';
 import 'package:eri_sports/features/leagues/presentation/leagues_screen.dart';
 import 'package:eri_sports/features/match_detail/presentation/match_detail_screen.dart';
+import 'package:eri_sports/features/more/presentation/about_screen.dart';
+import 'package:eri_sports/features/more/presentation/more_screen.dart';
 import 'package:eri_sports/features/news/presentation/offline_news_screen.dart';
 import 'package:eri_sports/features/player/presentation/player_screen.dart';
 import 'package:eri_sports/features/player_stats/presentation/player_stats_screen.dart';
@@ -87,7 +89,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const BookmarksScreen(),
       ),
       GoRoute(path: '/bookmarks', redirect: (context, state) => '/following'),
-      GoRoute(path: '/more', redirect: (context, state) => '/video'),
+      GoRoute(path: '/more', redirect: (context, state) => '/settings'),
+      GoRoute(
+        path: '/settings',
+        name: 'settings',
+        builder: (context, state) => const MoreScreen(),
+      ),
+      GoRoute(
+        path: '/about',
+        name: 'about',
+        builder: (context, state) => const AboutScreen(),
+      ),
       GoRoute(
         path: '/search',
         name: 'search',
@@ -98,6 +110,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder:
             (context, state) => LeagueOverviewScreen(
               competitionId: state.pathParameters['leagueId']!,
+              competitionNameHint: state.uri.queryParameters['leagueName'],
             ),
       ),
       GoRoute(
@@ -105,6 +118,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder:
             (context, state) => LeagueOverviewScreen(
               competitionId: state.pathParameters['competitionId']!,
+              competitionNameHint: state.uri.queryParameters['leagueName'],
             ),
       ),
       GoRoute(

@@ -65,6 +65,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 onOpenFollowing: () => context.push('/following'),
                 onOpenSearch: () => context.push('/search'),
                 onOpenMore: () => context.push('/video'),
+                onOpenSettings: () => context.push('/settings'),
               ),
               _DayTabStrip(
                 days: days,
@@ -219,7 +220,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 }
               });
             },
-            onTapHeader: () => context.push('/league/${section.competitionId}'),
+            onTapHeader: () {
+              final encodedLeagueName = Uri.encodeQueryComponent(
+                section.competitionName,
+              );
+              context.push(
+                '/league/${section.competitionId}?leagueName=$encodedLeagueName',
+              );
+            },
             children: section.matches
                 .map(
                   (fixture) => _FixtureRow(
@@ -438,6 +446,7 @@ class _TopBar extends StatelessWidget {
     required this.onOpenFollowing,
     required this.onOpenSearch,
     required this.onOpenMore,
+    required this.onOpenSettings,
   });
 
   final VoidCallback onJumpToToday;
@@ -445,6 +454,7 @@ class _TopBar extends StatelessWidget {
   final VoidCallback onOpenFollowing;
   final VoidCallback onOpenSearch;
   final VoidCallback onOpenMore;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -477,6 +487,8 @@ class _TopBar extends StatelessWidget {
                   onOpenSearch();
                 case _HeaderMenuAction.video:
                   onOpenMore();
+                case _HeaderMenuAction.settings:
+                  onOpenSettings();
               }
             },
             itemBuilder: (context) {
@@ -504,6 +516,13 @@ class _TopBar extends StatelessWidget {
                   child: _HeaderMenuRow(icon: Icons.search, label: 'Search'),
                 ),
                 PopupMenuItem<_HeaderMenuAction>(
+                  value: _HeaderMenuAction.settings,
+                  child: _HeaderMenuRow(
+                    icon: Icons.settings_outlined,
+                    label: 'Settings',
+                  ),
+                ),
+                PopupMenuItem<_HeaderMenuAction>(
                   value: _HeaderMenuAction.video,
                   child: _HeaderMenuRow(
                     icon: Icons.video_library_outlined,
@@ -524,6 +543,7 @@ enum _HeaderMenuAction {
   calendar,
   following,
   search,
+  settings,
   video,
 }
 
