@@ -4,6 +4,7 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:eri_sports/data/secure_content/file_fingerprint_cache.dart';
 import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:eri_sports/features/media/security/media_crypto_config.dart';
 import 'package:path/path.dart' as p;
@@ -22,13 +23,17 @@ class ResolvedPlayableMedia {
 }
 
 class EncryptedMediaService {
-  EncryptedMediaService({String? mediaKeyBase64})
-    : _mediaKey = decodeMediaMasterKey(
+  EncryptedMediaService({
+    String? mediaKeyBase64,
+    FileFingerprintCache? fingerprintCache,
+  }) : _fingerprintCache = fingerprintCache,
+       _mediaKey = decodeMediaMasterKey(
         mediaKeyBase64 ?? configuredMediaKeyBase64(),
       );
 
   final Map<String, Future<ResolvedPlayableMedia>> _inFlight =
       <String, Future<ResolvedPlayableMedia>>{};
+  final FileFingerprintCache? _fingerprintCache;
   final List<int> _mediaKey;
   Directory? _cacheDirectory;
 
@@ -94,11 +99,33 @@ class EncryptedMediaService {
       final sourcePrefix = _sourcePrefixForPath(normalizedPath);
       final cacheBasePrefix = _cacheBasePrefix(sourcePrefix, sourceStat);
 
+      final cachedEntry = _fingerprintCache?.read('media', normalizedPath);
+      if (cachedEntry != null && cachedEntry.matches(normalizedPath, sourceStat)) {
+        final cachedFile = File(cachedEntry.cachePath);
+        if (await cachedFile.exists()) {
+          return ResolvedPlayableMedia(
+            file: cachedFile,
+            usedCache: true,
+            wasDecrypted: false,
+          );
+        }
+      }
+
       final cachedByPrefix = await _findCachedByBasePrefix(
         cacheDirectory,
         cacheBasePrefix,
       );
       if (cachedByPrefix != null) {
+        await _fingerprintCache?.write(
+          'media',
+          CachedFileFingerprintEntry(
+            sourcePath: normalizedPath,
+            sizeBytes: sourceStat.size,
+            modifiedAtEpochMs:
+                sourceStat.modified.toUtc().millisecondsSinceEpoch,
+            cachePath: cachedByPrefix.path,
+          ),
+        );
         return ResolvedPlayableMedia(
           file: cachedByPrefix,
           usedCache: true,
@@ -115,6 +142,16 @@ class EncryptedMediaService {
       final cacheFile = File(p.join(cacheDirectory.path, cacheName));
 
       if (await cacheFile.exists()) {
+        await _fingerprintCache?.write(
+          'media',
+          CachedFileFingerprintEntry(
+            sourcePath: normalizedPath,
+            sizeBytes: sourceStat.size,
+            modifiedAtEpochMs:
+                sourceStat.modified.toUtc().millisecondsSinceEpoch,
+            cachePath: cacheFile.path,
+          ),
+        );
         return ResolvedPlayableMedia(
           file: cacheFile,
           usedCache: true,
@@ -142,6 +179,16 @@ class EncryptedMediaService {
         await cacheFile.delete();
       }
       await tempOutput.rename(cacheFile.path);
+
+      await _fingerprintCache?.write(
+        'media',
+        CachedFileFingerprintEntry(
+          sourcePath: normalizedPath,
+          sizeBytes: sourceStat.size,
+          modifiedAtEpochMs: sourceStat.modified.toUtc().millisecondsSinceEpoch,
+          cachePath: cacheFile.path,
+        ),
+      );
 
       return ResolvedPlayableMedia(
         file: cacheFile,

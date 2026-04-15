@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
+import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:path/path.dart' as p;
 
@@ -11,6 +12,7 @@ const Set<String> _supportedImageExtensions = {
   '.webp',
   '.gif',
   '.bmp',
+  kEncryptedImageExtension,
 };
 
 const Set<String> _supportedVideoExtensions = {
@@ -66,11 +68,11 @@ class DaylySportMediaItem {
   final DateTime lastModified;
   final int sizeBytes;
 
-  String get fileName => p.basename(file.path);
+  String get fileName => logicalSecureContentFileName(file.path);
 
   bool get isVideo => type == DaylySportMediaType.video;
 
-  bool get isEncrypted => isEncryptedMediaPath(file.path);
+  bool get isEncrypted => isEncryptedSecureContentPath(file.path);
 }
 
 class DaylySportMediaSectionSnapshot {
@@ -155,7 +157,10 @@ class DaylySportMediaRepository {
         continue;
       }
 
-      final relativePath = p.relative(entity.path, from: rootDirectory.path);
+      final relativePath = logicalSecureContentRelativePath(
+        entity.path,
+        fromDirectory: rootDirectory.path,
+      );
       final section = _classifySection(relativePath);
       if (section == null) {
         continue;

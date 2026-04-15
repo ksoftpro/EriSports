@@ -1,6 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
+import 'package:eri_sports/data/secure_content/secure_content_crypto.dart';
+import 'package:eri_sports/data/secure_content/secure_content_crypto_config.dart';
 import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:eri_sports/features/media/security/media_crypto_config.dart';
 import 'package:path/path.dart' as p;
@@ -15,18 +19,22 @@ void main(List<String> args) {
 
   final inputPath = parsed['input']!;
   final outputPath = parsed['output']!;
-  final keyBase64 = parsed['key-base64'] ?? Platform.environment[kMediaKeyEnvName];
+  final keyBase64 =
+      parsed['key-base64'] ??
+      Platform.environment[kSecureContentKeyEnvName] ??
+      Platform.environment[kMediaKeyEnvName];
   final overwrite = parsed.containsKey('overwrite');
 
   if (keyBase64 == null || keyBase64.trim().isEmpty) {
     stderr.writeln(
-      'Missing key. Pass --key-base64 or set environment variable $kMediaKeyEnvName.',
+      'Missing key. Pass --key-base64 or set environment variable $kSecureContentKeyEnvName or $kMediaKeyEnvName.',
     );
     exitCode = 2;
     return;
   }
 
-  final masterKey = decodeMediaMasterKey(keyBase64);
+  final mediaMasterKey = decodeMediaMasterKey(keyBase64);
+  final secureContentMasterKey = decodeSecureContentMasterKey(keyBase64);
 
   final inputEntity = FileSystemEntity.typeSync(inputPath);
   if (inputEntity == FileSystemEntityType.notFound) {
@@ -40,7 +48,7 @@ void main(List<String> args) {
 
   final files = _collectSourceFiles(inputPath, inputEntity);
   if (files.isEmpty) {
-    stdout.writeln('No supported source video files found in $inputPath');
+    stdout.writeln('No supported source JSON/image/video files found in $inputPath');
     return;
   }
 
@@ -48,37 +56,46 @@ void main(List<String> args) {
   final manifest = <Map<String, dynamic>>[];
 
   for (final sourceFile in files) {
+    final target = _encryptedTargetFor(sourceFile.path);
+    if (target == null) {
+      continue;
+    }
+
     final relative = _relativeInputPath(
       sourcePath: sourceFile.path,
       inputPath: inputPath,
       inputEntity: inputEntity,
     );
 
-    final encryptedRelative = '$relative$kEncryptedMediaExtension';
+    final encryptedRelative = '$relative${target.encryptedExtension}';
     final destinationPath = p.join(outputDirectory.path, encryptedRelative);
 
-    final result = encryptMediaFileSync(
+    final sourceBytes = sourceFile.lengthSync();
+    final outputBytes = _encryptFile(
       sourcePath: sourceFile.path,
       destinationPath: destinationPath,
-      masterKey: masterKey,
+      target: target,
+      mediaMasterKey: mediaMasterKey,
+      secureContentMasterKey: secureContentMasterKey,
       overwrite: overwrite,
     );
 
     manifest.add({
+      'contentKind': target.kindLabel,
       'sourceRelativePath': relative,
       'encryptedRelativePath': encryptedRelative,
-      'sourceBytes': result.sourceBytes,
-      'encryptedBytes': result.outputBytes,
+      'sourceBytes': sourceBytes,
+      'encryptedBytes': outputBytes,
       'algorithm': 'AES-CTR + HMAC-SHA256',
-      'version': kMediaCryptoVersion,
+      'version': 1,
       'encryptedAtUtc': nowUtc,
     });
 
-    stdout.writeln('Encrypted $relative -> $encryptedRelative');
+    stdout.writeln('[${target.kindLabel}] $relative -> $encryptedRelative');
   }
 
   final manifestFile = File(
-    p.join(outputDirectory.path, 'media_encryption_manifest.json'),
+    p.join(outputDirectory.path, 'secure_content_manifest.json'),
   );
   manifestFile.writeAsStringSync(
     const JsonEncoder.withIndent('  ').convert({
@@ -92,6 +109,34 @@ void main(List<String> args) {
 
   stdout.writeln('Done. Encrypted ${manifest.length} files.');
   stdout.writeln('Manifest: ${manifestFile.path}');
+}
+
+int _encryptFile({
+  required String sourcePath,
+  required String destinationPath,
+  required _EncryptedTarget target,
+  required List<int> mediaMasterKey,
+  required List<int> secureContentMasterKey,
+  required bool overwrite,
+}) {
+  if (target.secureContentType != null) {
+    final result = encryptSecureFileSync(
+      sourcePath: sourcePath,
+      destinationPath: destinationPath,
+      masterKey: Uint8List.fromList(secureContentMasterKey),
+      contentType: target.secureContentType!,
+      overwrite: overwrite,
+    );
+    return result.outputBytes;
+  }
+
+  final result = encryptMediaFileSync(
+    sourcePath: sourcePath,
+    destinationPath: destinationPath,
+    masterKey: Uint8List.fromList(mediaMasterKey),
+    overwrite: overwrite,
+  );
+  return result.outputBytes;
 }
 
 Map<String, String>? _parseArgs(List<String> args) {
@@ -132,9 +177,7 @@ List<File> _collectSourceFiles(
 ) {
   if (inputType == FileSystemEntityType.file) {
     final file = File(inputPath);
-    final ext = p.extension(file.path).toLowerCase();
-    if (isEncryptedMediaPath(file.path) ||
-        !kSupportedPlainVideoExtensions.contains(ext)) {
+    if (_encryptedTargetFor(file.path) == null) {
       return const <File>[];
     }
     return <File>[file];
@@ -148,11 +191,7 @@ List<File> _collectSourceFiles(
       continue;
     }
 
-    final ext = p.extension(entity.path).toLowerCase();
-    if (isEncryptedMediaPath(entity.path)) {
-      continue;
-    }
-    if (!kSupportedPlainVideoExtensions.contains(ext)) {
+    if (_encryptedTargetFor(entity.path) == null) {
       continue;
     }
 
@@ -181,5 +220,52 @@ void _printUsage() {
     '  dart run tool/encrypt_media.dart --input <file-or-directory> --output <directory> [--key-base64 <base64>] [--overwrite]',
   );
   stdout.writeln('');
-  stdout.writeln('Key can also come from environment variable $kMediaKeyEnvName.');
+  stdout.writeln(
+    'Key can also come from environment variable $kSecureContentKeyEnvName or $kMediaKeyEnvName.',
+  );
+}
+
+_EncryptedTarget? _encryptedTargetFor(String sourcePath) {
+  final lower = sourcePath.toLowerCase();
+  final extension = p.extension(lower);
+  if (isEncryptedSecureContentPath(lower)) {
+    return null;
+  }
+  if (kSupportedPlainJsonExtensions.contains(extension)) {
+    return const _EncryptedTarget.json();
+  }
+  if (kSupportedPlainImageExtensions.contains(extension)) {
+    return const _EncryptedTarget.image();
+  }
+  if (kSupportedPlainVideoExtensions.contains(extension)) {
+    return const _EncryptedTarget.video();
+  }
+  return null;
+}
+
+class _EncryptedTarget {
+  const _EncryptedTarget({
+    required this.kindLabel,
+    required this.encryptedExtension,
+    required this.secureContentType,
+  });
+
+  const _EncryptedTarget.json()
+    : kindLabel = 'json',
+      encryptedExtension = kEncryptedJsonExtension,
+      secureContentType = SecureContentType.json;
+
+  const _EncryptedTarget.image()
+    : kindLabel = 'image',
+      encryptedExtension = kEncryptedImageExtension,
+      secureContentType = SecureContentType.image;
+
+  const _EncryptedTarget.video()
+    : kindLabel = 'video',
+      encryptedExtension = kEncryptedMediaExtension,
+      secureContentType = null;
+
+  final String kindLabel;
+  final String encryptedExtension;
+  final SecureContentType? secureContentType;
 }

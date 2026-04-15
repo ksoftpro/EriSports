@@ -4,19 +4,23 @@ import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
 import 'package:eri_sports/data/local_files/json_data_version_tracker.dart';
+import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 
 class DaylysportFileDiscoveryService {
   DaylysportFileDiscoveryService({
     required DaylySportLocator daylySportLocator,
     required FileInventoryScanner scanner,
     required JsonDataVersionTracker versionTracker,
+    required EncryptedFileResolver fileResolver,
   }) : _daylySportLocator = daylySportLocator,
        _scanner = scanner,
-       _versionTracker = versionTracker;
+       _versionTracker = versionTracker,
+       _fileResolver = fileResolver;
 
   final DaylySportLocator _daylySportLocator;
   final FileInventoryScanner _scanner;
   final JsonDataVersionTracker _versionTracker;
+  final EncryptedFileResolver _fileResolver;
 
   Future<DaylysportDiscoverySnapshot> discoverChanges({
     bool preferTrackedPaths = false,
@@ -57,7 +61,7 @@ class DaylysportFileDiscoveryService {
 
       return root
           .watch(recursive: true)
-          .where((event) => event.path.toLowerCase().endsWith('.json'))
+          .where((event) => _fileResolver.isSupportedJsonPath(event.path))
           .map((_) {});
     } catch (_) {
       return null;

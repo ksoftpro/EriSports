@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
+import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:path/path.dart' as p;
 
 const Set<String> _supportedImageExtensions = {
@@ -10,6 +11,7 @@ const Set<String> _supportedImageExtensions = {
   '.webp',
   '.gif',
   '.bmp',
+  kEncryptedImageExtension,
 };
 
 class OfflineNewsMediaItem {
@@ -23,7 +25,7 @@ class OfflineNewsMediaItem {
   final DateTime lastModified;
   final int sizeBytes;
 
-  String get fileName => p.basename(file.path);
+  String get fileName => logicalSecureContentFileName(file.path);
 }
 
 class OfflineNewsGallerySnapshot {

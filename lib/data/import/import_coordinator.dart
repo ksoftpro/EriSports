@@ -12,6 +12,7 @@ import 'package:eri_sports/data/import/parsers/teams_parser.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
+import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
 import 'package:flutter/foundation.dart';
 
 class ImportRunReport {
@@ -78,6 +79,7 @@ class ImportCoordinator {
     required this.daylySportLocator,
     required this.scanner,
     required this.logger,
+    required this.encryptedJsonService,
   }) : _teamsParser = TeamsParser(),
        _fixturesParser = FixturesParser(),
        _standingsParser = StandingsParser(),
@@ -88,6 +90,7 @@ class ImportCoordinator {
   final DaylySportLocator daylySportLocator;
   final FileInventoryScanner scanner;
   final AppLogger logger;
+  final EncryptedJsonService encryptedJsonService;
   final TeamsParser _teamsParser;
   final FixturesParser _fixturesParser;
   final StandingsParser _standingsParser;
@@ -1413,7 +1416,7 @@ class ImportCoordinator {
   };
 
   Future<void> _importTeamsFile(File file) async {
-    final content = await file.readAsString();
+    final content = await _readJsonText(file);
     final parsed = _teamsParser.parse(content);
     final now = DateTime.now().toUtc();
 
@@ -1448,7 +1451,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importFixturesFile(File file) async {
-    final content = await file.readAsString();
+    final content = await _readJsonText(file);
     final parsed = _fixturesParser.parse(content);
     final now = DateTime.now().toUtc();
 
@@ -1507,7 +1510,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importStandingsFile(File file) async {
-    final content = await file.readAsString();
+    final content = await _readJsonText(file);
     final parsed = _standingsParser.parse(content);
     final now = DateTime.now().toUtc();
 
@@ -1586,7 +1589,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importPlayersFile(File file) async {
-    final decoded = await _decodeJsonFile(file);
+    final decoded = await compute(jsonDecode, await _readJsonText(file));
     final parsed = _playersParser.parseDecoded(decoded);
     final now = DateTime.now().toUtc();
 
@@ -1652,7 +1655,7 @@ class ImportCoordinator {
   }
 
   Future<void> _importMatchDetailFile(File file) async {
-    final content = await file.readAsString();
+    final content = await _readJsonText(file);
     final parsed = _matchDetailParser.parse(content);
     if (parsed == null) {
       return;
@@ -1785,9 +1788,12 @@ class ImportCoordinator {
           ),
         );
   }
-}
 
-Future<dynamic> _decodeJsonFile(File file) async {
-  final raw = await file.readAsString();
-  return compute(jsonDecode, raw);
+  Future<String> _readJsonText(File file) {
+    return encryptedJsonService.readTextFile(file);
+  }
+
+  Future<dynamic> _decodeJsonFile(File file) async {
+    return compute(jsonDecode, await _readJsonText(file));
+  }
 }

@@ -4,6 +4,7 @@ import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
 import 'package:eri_sports/features/media/presentation/media_playback_screen.dart';
+import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -208,7 +209,7 @@ class _MediaCard extends StatelessWidget {
             AspectRatio(
               aspectRatio: 16 / 9,
               child: item.type == DaylySportMediaType.image
-                  ? Image.file(item.file, fit: BoxFit.cover)
+                  ? SecureFileImage(sourceFile: item.file, fit: BoxFit.cover)
                   : ColoredBox(
                       color: const Color(0xFF141A24),
                       child: Center(

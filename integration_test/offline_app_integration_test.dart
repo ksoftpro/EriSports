@@ -16,6 +16,11 @@ import 'package:eri_sports/data/local_files/daylysport_file_discovery_service.da
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
 import 'package:eri_sports/data/local_files/json_data_version_tracker.dart';
+import 'package:eri_sports/data/secure_content/daylysport_secure_content_coordinator.dart';
+import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
+import 'package:eri_sports/data/secure_content/encrypted_image_service.dart';
+import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
+import 'package:eri_sports/data/secure_content/file_fingerprint_cache.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
@@ -129,33 +134,55 @@ class _TestHarness {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final preferences = await SharedPreferences.getInstance();
     final cacheStore = DaylySportCacheStore(sharedPreferences: preferences);
+    final fileResolver = const EncryptedFileResolver();
+    final fingerprintCache = FileFingerprintCache(cacheStore: cacheStore);
+    final encryptedJsonService = EncryptedJsonService(
+      fingerprintCache: fingerprintCache,
+    );
+    final encryptedImageService = EncryptedImageService(
+      fingerprintCache: fingerprintCache,
+    );
+    final encryptedMediaService = EncryptedMediaService(
+      fingerprintCache: fingerprintCache,
+    );
     final versionTracker = JsonDataVersionTracker(cacheStore: cacheStore);
     final importCoordinator = ImportCoordinator(
       database: database,
       daylySportLocator: locator,
       scanner: scanner,
       logger: logger,
+      encryptedJsonService: encryptedJsonService,
     );
     final assetResolver = LocalAssetResolver(
       daylySportLocator: locator,
       cacheStore: cacheStore,
+      encryptedJsonService: encryptedJsonService,
     );
     final leagueStandingsSource = LeagueStandingsSource(
       daylySportLocator: locator,
       cacheStore: cacheStore,
+      encryptedJsonService: encryptedJsonService,
     );
     final teamRawSource = TeamRawSource(
       daylySportLocator: locator,
       cacheStore: cacheStore,
+      encryptedJsonService: encryptedJsonService,
     );
     final syncCoordinator = DaylysportSyncCoordinator(
       discoveryService: DaylysportFileDiscoveryService(
         daylySportLocator: locator,
         scanner: scanner,
         versionTracker: versionTracker,
+        fileResolver: fileResolver,
       ),
       versionTracker: versionTracker,
       importCoordinator: importCoordinator,
+    );
+    final secureContentCoordinator = DaylysportSecureContentCoordinator(
+      fileResolver: fileResolver,
+      encryptedJsonService: encryptedJsonService,
+      encryptedImageService: encryptedImageService,
+      encryptedMediaService: encryptedMediaService,
     );
 
     final services = AppServices(
@@ -163,7 +190,10 @@ class _TestHarness {
       daylySportLocator: locator,
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
-      encryptedMediaService: EncryptedMediaService(),
+      encryptedMediaService: encryptedMediaService,
+      encryptedJsonService: encryptedJsonService,
+      encryptedImageService: encryptedImageService,
+      secureContentCoordinator: secureContentCoordinator,
       leagueStandingsSource: leagueStandingsSource,
       teamRawSource: teamRawSource,
       daylysportSyncCoordinator: syncCoordinator,

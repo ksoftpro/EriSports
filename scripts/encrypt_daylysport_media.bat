@@ -92,7 +92,7 @@ set "OVERWRITE_FLAG=--overwrite"
 
 echo.
 echo ================================================
-echo   EriSports Media Encryption - Interactive Mode
+echo   EriSports Secure Content Encryption
 echo ================================================
 echo.
 
@@ -126,10 +126,11 @@ choice /C YN /M "Step 3/4 - Overwrite existing encrypted files?"
 if errorlevel 2 set "OVERWRITE_FLAG="
 if errorlevel 1 set "OVERWRITE_FLAG=--overwrite"
 
-set "KEY_B64=%ERI_MEDIA_KEY_B64%"
+set "KEY_B64=%ERI_SECURE_CONTENT_KEY_B64%"
+if not defined KEY_B64 set "KEY_B64=%ERI_MEDIA_KEY_B64%"
 if not defined KEY_B64 (
   echo.
-  echo Step 4/4 - Media key is required.
+  echo Step 4/4 - Secure content key is required.
   echo.
   choice /C GMQ /M "Choose: [G]enerate key, [M]anual key entry, [Q]uit"
   if errorlevel 3 (
@@ -145,7 +146,7 @@ goto :PREVIEW_AND_CONFIRM
 
 :MANUAL_KEY
 set "KEY_B64="
-set /p "KEY_B64=Enter ERI_MEDIA_KEY_B64 value: "
+set /p "KEY_B64=Enter ERI_SECURE_CONTENT_KEY_B64 value: "
 if not defined KEY_B64 (
   echo Key cannot be empty.
   goto :MANUAL_KEY
@@ -165,7 +166,7 @@ echo %KEY_B64%
 echo.
 
 :PREVIEW_AND_CONFIRM
-call :COUNT_SOURCE_VIDEOS "%INPUT_PATH%"
+call :COUNT_SOURCE_FILES "%INPUT_PATH%"
 
 echo.
 echo ---------------- Encryption Plan ----------------
@@ -177,12 +178,12 @@ if defined OVERWRITE_FLAG (
 ) else (
   echo Mode  : overwrite disabled
 )
-echo Videos detected ^(.mp4,.mov,.m4v,.webm,.mkv,.avi,.3gp^): %VIDEO_COUNT%
+echo Supported files detected ^(.json,.jpg,.jpeg,.png,.webp,.gif,.bmp,.mp4,.mov,.m4v,.webm,.mkv,.avi,.3gp^): %SOURCE_FILE_COUNT%
 echo -----------------------------------------------
 echo.
 
-if "%VIDEO_COUNT%"=="0" (
-  echo WARNING: no supported video files were found in the input path.
+if "%SOURCE_FILE_COUNT%"=="0" (
+  echo WARNING: no supported JSON, image, or video files were found in the input path.
   choice /C YN /M "Run encryption anyway?"
   if errorlevel 2 (
     echo Aborted.
@@ -237,11 +238,11 @@ if errorlevel 1 (
 )
 
 if not defined KEY_B64 (
-  echo ERROR: media key is missing.
+  echo ERROR: secure content key is missing.
   exit /b 1
 )
 
-call :COUNT_SOURCE_VIDEOS "%INPUT_PATH%"
+call :COUNT_SOURCE_FILES "%INPUT_PATH%"
 
 pushd "%REPO_ROOT%" >nul 2>&1
 if errorlevel 1 (
@@ -258,7 +259,7 @@ if defined OVERWRITE_FLAG (
 ) else (
   echo [encrypt_daylysport_media] Mode  : overwrite disabled
 )
-echo [encrypt_daylysport_media] Video files detected: %VIDEO_COUNT%
+echo [encrypt_daylysport_media] Supported files detected: %SOURCE_FILE_COUNT%
 echo.
 
 if defined OVERWRITE_FLAG (
@@ -334,11 +335,11 @@ popd >nul
 
 exit /b 0
 
-:COUNT_SOURCE_VIDEOS
-set "VIDEO_COUNT=0"
+:COUNT_SOURCE_FILES
+set "SOURCE_FILE_COUNT=0"
 set "COUNT_TARGET=%~1"
-for /f "usebackq delims=" %%C in (`powershell -NoProfile -Command "$path=$env:COUNT_TARGET; if(-not (Test-Path -LiteralPath $path)){0; exit}; $exts=@('.mp4','.mov','.m4v','.webm','.mkv','.avi','.3gp'); $item=Get-Item -LiteralPath $path; if($item.PSIsContainer){ $files=Get-ChildItem -LiteralPath $path -Recurse -File -ErrorAction SilentlyContinue; ($files.Where({ $exts -contains $_.Extension.ToLowerInvariant() })).Count } else { if($exts -contains $item.Extension.ToLowerInvariant()){1}else{0} }"`) do set "VIDEO_COUNT=%%C"
-if not defined VIDEO_COUNT set "VIDEO_COUNT=0"
+for /f "usebackq delims=" %%C in (`powershell -NoProfile -Command "$path=$env:COUNT_TARGET; if(-not (Test-Path -LiteralPath $path)){0; exit}; $exts=@('.json','.jpg','.jpeg','.png','.webp','.gif','.bmp','.mp4','.mov','.m4v','.webm','.mkv','.avi','.3gp'); $encryptedExts=@('.esj','.esi','.esv'); $item=Get-Item -LiteralPath $path; if($item.PSIsContainer){ $files=Get-ChildItem -LiteralPath $path -Recurse -File -ErrorAction SilentlyContinue; ($files.Where({ ($exts -contains $_.Extension.ToLowerInvariant()) -and -not ($encryptedExts -contains $_.Extension.ToLowerInvariant()) })).Count } else { if(($exts -contains $item.Extension.ToLowerInvariant()) -and -not ($encryptedExts -contains $item.Extension.ToLowerInvariant())){1}else{0} }"`) do set "SOURCE_FILE_COUNT=%%C"
+if not defined SOURCE_FILE_COUNT set "SOURCE_FILE_COUNT=0"
 exit /b 0
 
 :CREATE_KEY
@@ -354,11 +355,11 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Generated ERI_MEDIA_KEY_B64 value:
+echo Generated ERI_SECURE_CONTENT_KEY_B64 value:
 echo %NEW_KEY%
 echo.
 echo Set it in current shell with:
-echo   set ERI_MEDIA_KEY_B64=%NEW_KEY%
+echo   set ERI_SECURE_CONTENT_KEY_B64=%NEW_KEY%
 exit /b 0
 
 :USAGE_ERROR
@@ -376,7 +377,7 @@ echo.
 echo Options:
 echo   --overwrite         Overwrite existing encrypted output files (default).
 echo   --no-overwrite      Skip overwrite mode.
-echo   --key-b64 VALUE     Base64 media key (overrides env var).
+echo   --key-b64 VALUE     Base64 secure-content key (overrides env var).
 echo   --key-file PATH     Read base64 media key from file.
 echo   --generate-key      Generate a secure base64 key and print it.
 echo   --help              Show this help.
@@ -384,7 +385,8 @@ echo.
 echo Key source priority:
 echo   1) --key-b64
 echo   2) --key-file
-echo   3) ERI_MEDIA_KEY_B64 environment variable
+echo   3) ERI_SECURE_CONTENT_KEY_B64 environment variable
+echo   4) ERI_MEDIA_KEY_B64 environment variable
 echo.
 echo Examples:
 echo   scripts\encrypt_daylysport_media.bat "D:\media\raw" "D:\media\encrypted"

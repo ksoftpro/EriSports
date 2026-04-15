@@ -7,8 +7,8 @@ import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/import/parsers/players_parser.dart';
 import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
+import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 
 class PlayerProfileInfo {
   const PlayerProfileInfo({
@@ -289,7 +289,7 @@ Future<_HydratedPlayerResult?> _hydratePlayerFromLocalJson({
 
   final files = <File>[];
   await for (final entity in root.list(recursive: true, followLinks: false)) {
-    if (entity is File && entity.path.toLowerCase().endsWith('.json')) {
+    if (entity is File && isSupportedSecureJsonPath(entity.path)) {
       files.add(entity);
     }
   }
@@ -309,14 +309,14 @@ Future<_HydratedPlayerResult?> _hydratePlayerFromLocalJson({
   final scanFiles = files.take(_defaultMaxPlayerFilesToScan);
 
   for (final file in scanFiles) {
-    final lowerName = p.basename(file.path).toLowerCase();
+    final lowerName = logicalSecureContentFileName(file.path).toLowerCase();
     if (!_looksLikePlayerDataFile(lowerName, candidateIds)) {
       continue;
     }
 
     String raw;
     try {
-      raw = await file.readAsString();
+      raw = await services.secureContentCoordinator.readJsonText(file);
     } catch (error) {
       log('Unable to read ${file.path}: $error', warn: true);
       continue;

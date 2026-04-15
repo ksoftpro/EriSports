@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:eri_sports/core/log/app_logger.dart';
 import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
+import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
+import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
@@ -30,13 +32,16 @@ class LocalAssetResolver {
     required DaylySportLocator daylySportLocator,
     AppLogger? logger,
     DaylySportCacheStore? cacheStore,
+      EncryptedJsonService? encryptedJsonService,
   }) : _daylySportLocator = daylySportLocator,
        _logger = logger,
-       _cacheStore = cacheStore;
+      _cacheStore = cacheStore,
+      _encryptedJsonService = encryptedJsonService;
 
   final DaylySportLocator _daylySportLocator;
   final AppLogger? _logger;
   final DaylySportCacheStore? _cacheStore;
+    final EncryptedJsonService? _encryptedJsonService;
 
   bool _bundleLoaded = false;
   bool _teamManifestLoaded = false;
@@ -456,24 +461,26 @@ class LocalAssetResolver {
     try {
       final daylySportDir =
           await _daylySportLocator.getOrCreateDaylySportDirectory();
-      final candidates = [
-        File(
-          p.join(daylySportDir.path, 'manifest', 'fotmob_assets_manifest.json'),
-        ),
-        File(
-          p.join(
-            daylySportDir.path,
-            'assets',
-            'manifest',
-            'fotmob_assets_manifest.json',
-          ),
+      final candidatePaths = [
+        p.join(daylySportDir.path, 'manifest', 'fotmob_assets_manifest.json'),
+        p.join(
+          daylySportDir.path,
+          'assets',
+          'manifest',
+          'fotmob_assets_manifest.json',
         ),
       ];
 
       File? sourceFile;
-      for (final file in candidates) {
-        if (await file.exists()) {
-          sourceFile = file;
+      for (final basePath in candidatePaths) {
+        for (final candidatePath in candidateSecureJsonPaths(basePath)) {
+          final file = File(candidatePath);
+          if (await file.exists()) {
+            sourceFile = file;
+            break;
+          }
+        }
+        if (sourceFile != null) {
           break;
         }
       }
@@ -483,7 +490,7 @@ class LocalAssetResolver {
         return;
       }
 
-      final decoded = jsonDecode(await sourceFile.readAsString());
+      final decoded = jsonDecode(await _readLocalJsonText(sourceFile));
       if (decoded is! Map<String, dynamic>) {
         _bundleManifestLoaded = true;
         return;
@@ -669,31 +676,35 @@ class LocalAssetResolver {
       for (final file in teamFiles) p.basename(file).toLowerCase(): file,
     };
 
-    final manifestCandidates = [
-      File(
-        p.join(
-          daylySportDir.path,
-          'manifest',
-          'fotmob_club_badges_manifest.json',
-        ),
+    final manifestCandidatePaths = [
+      p.join(
+        daylySportDir.path,
+        'manifest',
+        'fotmob_club_badges_manifest.json',
       ),
-      File(
-        p.join(
-          daylySportDir.path,
-          'assets',
-          'manifest',
-          'fotmob_club_badges_manifest.json',
-        ),
+      p.join(
+        daylySportDir.path,
+        'assets',
+        'manifest',
+        'fotmob_club_badges_manifest.json',
       ),
     ];
 
-    for (final manifestFile in manifestCandidates) {
-      if (!await manifestFile.exists()) {
+    for (final basePath in manifestCandidatePaths) {
+      File? manifestFile;
+      for (final candidatePath in candidateSecureJsonPaths(basePath)) {
+        final file = File(candidatePath);
+        if (await file.exists()) {
+          manifestFile = file;
+          break;
+        }
+      }
+      if (manifestFile == null) {
         continue;
       }
 
       try {
-        final decoded = jsonDecode(await manifestFile.readAsString());
+        final decoded = jsonDecode(await _readLocalJsonText(manifestFile));
         if (decoded is! Map<String, dynamic>) {
           continue;
         }
@@ -782,6 +793,14 @@ class LocalAssetResolver {
     }
 
     return null;
+  }
+
+  Future<String> _readLocalJsonText(File sourceFile) {
+    final encryptedJsonService = _encryptedJsonService;
+    if (encryptedJsonService == null) {
+      return sourceFile.readAsString();
+    }
+    return encryptedJsonService.readTextFile(sourceFile);
   }
 
   String? _matchPathByName(List<String> candidates, String normalizedName) {

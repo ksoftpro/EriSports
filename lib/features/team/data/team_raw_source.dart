@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
+import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
+import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
 import 'package:flutter/foundation.dart';
 
 class TeamRawEntry {
@@ -141,11 +143,14 @@ class _CachedTeamRawEntry {
 class TeamRawSource {
   TeamRawSource({
     required DaylySportLocator daylySportLocator,
+    required EncryptedJsonService encryptedJsonService,
     this.cacheStore,
     this.cacheKey = 'team_payload_json',
-  }) : _daylySportLocator = daylySportLocator;
+  }) : _daylySportLocator = daylySportLocator,
+       _encryptedJsonService = encryptedJsonService;
 
   final DaylySportLocator _daylySportLocator;
+  final EncryptedJsonService _encryptedJsonService;
   final DaylySportCacheStore? cacheStore;
   final String cacheKey;
   static const _teamEntryCacheKey = 'team_payload_entry_cache_v1';
@@ -208,7 +213,7 @@ class TeamRawSource {
       }
 
       try {
-        final raw = await candidate.readAsString();
+        final raw = await _encryptedJsonService.readTextFile(candidate);
         final decoded = await compute(_decodeTeamPayloadJson, raw);
         final bundle = TeamRawBundle.fromJson(decoded);
         if (bundle.byTeamId.isEmpty) {
@@ -270,9 +275,13 @@ class TeamRawSource {
       }
 
       for (final name in preferredFileNames) {
-        final file = File('${directory.path}${Platform.pathSeparator}$name');
-        if (await file.exists()) {
-          candidates.add(file);
+        for (final candidatePath in candidateSecureJsonPaths(
+          '${directory.path}${Platform.pathSeparator}$name',
+        )) {
+          final file = File(candidatePath);
+          if (await file.exists()) {
+            candidates.add(file);
+          }
         }
       }
     }
@@ -514,9 +523,7 @@ class TeamRawSource {
   }
 
   String _fileName(String path) {
-    final separators = RegExp(r'[\\/]');
-    final parts = path.split(separators);
-    return parts.isEmpty ? path : parts.last;
+    return logicalSecureContentFileName(path);
   }
 
   void invalidateCache({bool clearPersistent = false}) {

@@ -1,5 +1,6 @@
 import 'package:eri_sports/features/news/data/offline_news_repository.dart';
 import 'package:eri_sports/features/news/presentation/offline_news_providers.dart';
+import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -162,8 +163,8 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                                 ),
                               ),
                               clipBehavior: Clip.antiAlias,
-                              child: Image.file(
-                                media.file,
+                              child: SecureFileImage(
+                                sourceFile: media.file,
                                 fit: BoxFit.cover,
                                 errorBuilder:
                                     (context, error, stackTrace) => Container(
@@ -234,8 +235,8 @@ class _OfflineNewsPage extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: SizedBox(
                     width: constraints.maxWidth,
-                    child: Image.file(
-                      media.file,
+                    child: SecureFileImage(
+                      sourceFile: media.file,
                       width: constraints.maxWidth,
                       fit: BoxFit.fitWidth,
                       alignment: Alignment.topCenter,

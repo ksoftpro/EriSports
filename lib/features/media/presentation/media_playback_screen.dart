@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
+import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
@@ -93,7 +94,7 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen> {
       child: InteractiveViewer(
         minScale: 1,
         maxScale: 4,
-        child: Image.file(widget.item.file, fit: BoxFit.contain),
+        child: SecureFileImage(sourceFile: widget.item.file, fit: BoxFit.contain),
       ),
     );
   }

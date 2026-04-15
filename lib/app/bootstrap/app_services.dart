@@ -7,6 +7,11 @@ import 'package:eri_sports/data/local_files/daylysport_file_discovery_service.da
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:eri_sports/data/local_files/file_inventory_scanner.dart';
 import 'package:eri_sports/data/local_files/json_data_version_tracker.dart';
+import 'package:eri_sports/data/secure_content/daylysport_secure_content_coordinator.dart';
+import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
+import 'package:eri_sports/data/secure_content/encrypted_image_service.dart';
+import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
+import 'package:eri_sports/data/secure_content/file_fingerprint_cache.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
@@ -21,6 +26,9 @@ class AppServices {
     required this.importCoordinator,
     required this.assetResolver,
     required this.encryptedMediaService,
+    required this.encryptedJsonService,
+    required this.encryptedImageService,
+    required this.secureContentCoordinator,
     required this.leagueStandingsSource,
     required this.teamRawSource,
     required this.daylysportSyncCoordinator,
@@ -32,6 +40,9 @@ class AppServices {
   final ImportCoordinator importCoordinator;
   final LocalAssetResolver assetResolver;
   final EncryptedMediaService encryptedMediaService;
+  final EncryptedJsonService encryptedJsonService;
+  final EncryptedImageService encryptedImageService;
+  final DaylysportSecureContentCoordinator secureContentCoordinator;
   final LeagueStandingsSource leagueStandingsSource;
   final TeamRawSource teamRawSource;
   final DaylysportSyncCoordinator daylysportSyncCoordinator;
@@ -48,37 +59,58 @@ class AppServices {
     final cacheStore = DaylySportCacheStore(
       sharedPreferences: sharedPreferences,
     );
+    final encryptedFileResolver = const EncryptedFileResolver();
+    final fingerprintCache = FileFingerprintCache(cacheStore: cacheStore);
+    final encryptedJsonService = EncryptedJsonService(
+      fingerprintCache: fingerprintCache,
+    );
+    final encryptedImageService = EncryptedImageService(
+      fingerprintCache: fingerprintCache,
+    );
     final scanner = FileInventoryScanner(cacheStore: cacheStore);
     final versionTracker = JsonDataVersionTracker(cacheStore: cacheStore);
     final assetResolver = LocalAssetResolver(
       daylySportLocator: daylySportLocator,
       logger: logger,
       cacheStore: cacheStore,
+      encryptedJsonService: encryptedJsonService,
     );
-    final encryptedMediaService = EncryptedMediaService();
+    final encryptedMediaService = EncryptedMediaService(
+      fingerprintCache: fingerprintCache,
+    );
     final importCoordinator = ImportCoordinator(
       database: database,
       daylySportLocator: daylySportLocator,
       scanner: scanner,
       logger: logger,
+      encryptedJsonService: encryptedJsonService,
     );
     final leagueStandingsSource = LeagueStandingsSource(
       daylySportLocator: daylySportLocator,
       cacheStore: cacheStore,
+      encryptedJsonService: encryptedJsonService,
     );
     final teamRawSource = TeamRawSource(
       daylySportLocator: daylySportLocator,
       cacheStore: cacheStore,
+      encryptedJsonService: encryptedJsonService,
     );
     final discoveryService = DaylysportFileDiscoveryService(
       daylySportLocator: daylySportLocator,
       scanner: scanner,
       versionTracker: versionTracker,
+      fileResolver: encryptedFileResolver,
     );
     final daylysportSyncCoordinator = DaylysportSyncCoordinator(
       discoveryService: discoveryService,
       versionTracker: versionTracker,
       importCoordinator: importCoordinator,
+    );
+    final secureContentCoordinator = DaylysportSecureContentCoordinator(
+      fileResolver: encryptedFileResolver,
+      encryptedJsonService: encryptedJsonService,
+      encryptedImageService: encryptedImageService,
+      encryptedMediaService: encryptedMediaService,
     );
 
     return AppServices(
@@ -87,6 +119,9 @@ class AppServices {
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
       encryptedMediaService: encryptedMediaService,
+      encryptedJsonService: encryptedJsonService,
+      encryptedImageService: encryptedImageService,
+      secureContentCoordinator: secureContentCoordinator,
       leagueStandingsSource: leagueStandingsSource,
       teamRawSource: teamRawSource,
       daylysportSyncCoordinator: daylysportSyncCoordinator,

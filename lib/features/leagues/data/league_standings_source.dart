@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
 import 'package:eri_sports/data/local_files/daylysport_locator.dart';
+import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
+import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
 import 'package:flutter/foundation.dart';
 
 const List<String> kPreferredStandingsModeOrder = [
@@ -134,11 +136,14 @@ String standingsModeLabel(String modeKey) {
 class LeagueStandingsSource {
   LeagueStandingsSource({
     required DaylySportLocator daylySportLocator,
+    required EncryptedJsonService encryptedJsonService,
     this.cacheStore,
     this.filePrefix = 'top_standings_full_data',
-  }) : _daylySportLocator = daylySportLocator;
+  }) : _daylySportLocator = daylySportLocator,
+       _encryptedJsonService = encryptedJsonService;
 
   final DaylySportLocator _daylySportLocator;
+  final EncryptedJsonService _encryptedJsonService;
   final DaylySportCacheStore? cacheStore;
   final String filePrefix;
 
@@ -215,7 +220,7 @@ class LeagueStandingsSource {
     }
 
     try {
-      final raw = await sourceFile.readAsString();
+      final raw = await _encryptedJsonService.readTextFile(sourceFile);
       final decoded = await compute(jsonDecode, raw);
       final parsed = LeagueStandingsBundle.fromJson(decoded);
       _cachedBundle = parsed;
@@ -347,9 +352,7 @@ class LeagueStandingsSource {
   }
 
   String _filename(String path) {
-    final separators = RegExp(r'[\\/]');
-    final parts = path.split(separators);
-    return parts.isEmpty ? path : parts.last;
+    return logicalSecureContentFileName(path);
   }
 
   Future<LeagueStandingsLeague?> readLeagueByCompetitionId(
@@ -400,7 +403,7 @@ class LeagueStandingsSource {
     }
 
     try {
-      final raw = await sourceFile.readAsString();
+      final raw = await _encryptedJsonService.readTextFile(sourceFile);
       final decoded = await compute(jsonDecode, raw);
       final parsedStandings = _parseSingleLeaguePayload(
         decoded,
@@ -618,9 +621,13 @@ class LeagueStandingsSource {
       }
 
       for (final expected in expectedNames) {
-        final file = File('${directory.path}${Platform.pathSeparator}$expected');
-        if (await file.exists()) {
-          matches.add(file);
+        for (final candidatePath in candidateSecureJsonPaths(
+          '${directory.path}${Platform.pathSeparator}$expected',
+        )) {
+          final file = File(candidatePath);
+          if (await file.exists()) {
+            matches.add(file);
+          }
         }
       }
     }
@@ -716,7 +723,10 @@ class LeagueStandingsSource {
   }
   ) async {
     try {
-      final decoded = await compute(jsonDecode, await file.readAsString());
+      final decoded = await compute(
+        jsonDecode,
+        await _encryptedJsonService.readTextFile(file),
+      );
       if (decoded is! Map<String, dynamic>) {
         return false;
       }
