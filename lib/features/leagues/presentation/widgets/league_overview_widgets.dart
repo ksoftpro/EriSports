@@ -491,8 +491,9 @@ class LeagueStandingsRow extends StatelessWidget {
       ]);
     }
 
+    // Navigation to TeamScreen is disabled
     return InkWell(
-      onTap: onTap,
+      onTap: null,
       child: Container(
         height: 46,
         padding: const EdgeInsets.only(left: 8, right: 12),

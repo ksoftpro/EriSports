@@ -212,7 +212,8 @@ class CompactStandingsTable extends StatelessWidget {
         defaultStripColor;
 
     return InkWell(
-      onTap: () => onRowTap(row),
+      // Navigation to TeamScreen is disabled
+      onTap: null,
       child: Container(
         height: _rowHeight,
         padding: const EdgeInsets.fromLTRB(_leftInset, 0, _rightInset, 0),

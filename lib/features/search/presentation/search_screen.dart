@@ -35,123 +35,150 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final resultsAsync = ref.watch(searchResultsProvider(_query));
     final resolver = ref.read(appServicesProvider).assetResolver;
 
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.only(top: 8),
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              controller: _controller,
-              onChanged: (value) {
-                _debounce?.cancel();
-                _debounce = Timer(const Duration(milliseconds: 150), () {
-                  if (!mounted) {
-                    return;
-                  }
-                  setState(() {
-                    _query = value;
+      child: Container(
+        color: scheme.background,
+        child: ListView(
+          padding: const EdgeInsets.only(top: 8),
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _controller,
+                onChanged: (value) {
+                  _debounce?.cancel();
+                  _debounce = Timer(const Duration(milliseconds: 150), () {
+                    if (!mounted) {
+                      return;
+                    }
+                    setState(() {
+                      _query = value;
+                    });
                   });
-                });
-              },
-              decoration: const InputDecoration(
-                hintText: 'Search teams, players, competitions',
-                prefixIcon: Icon(Icons.search),
+                },
+                style: textTheme.bodyLarge,
+                cursorColor: scheme.primary,
+                decoration: InputDecoration(
+                  hintText: 'Search teams, players, competitions',
+                  hintStyle: textTheme.bodyMedium?.copyWith(color: scheme.outline),
+                  prefixIcon: Icon(Icons.search, color: scheme.primary),
+                  filled: true,
+                  fillColor: scheme.surface,
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: scheme.outline.withOpacity(0.5)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: scheme.primary, width: 1.25),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          if (_query.trim().isEmpty) ...[
-            const DenseSectionHeader(title: 'Search Offline Data'),
-            const ListTile(
-              dense: true,
-              title: Text('Type to search teams, players and competitions.'),
-            ),
-          ] else
-            resultsAsync.when(
-              loading:
-                  () => const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-              error:
-                  (error, stackTrace) => const ListTile(
-                    dense: true,
-                    title: Text('Unable to run local search.'),
-                  ),
-              data: (results) {
-                if (results.teams.isEmpty &&
-                    results.players.isEmpty &&
-                    results.competitions.isEmpty) {
-                  return const ListTile(
-                    dense: true,
-                    title: Text('No local results found.'),
-                  );
-                }
+            const SizedBox(height: 8),
+            if (_query.trim().isEmpty) ...[
+              const DenseSectionHeader(title: 'Search Offline Data'),
+              ListTile(
+                dense: true,
+                title: Text('Type to search teams, players and competitions.', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface)),
+                tileColor: scheme.surface,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ] else
+              resultsAsync.when(
+                loading: () => Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator(color: scheme.primary)),
+                ),
+                error: (error, stackTrace) => ListTile(
+                  dense: true,
+                  title: Text('Unable to run local search.', style: textTheme.bodyMedium?.copyWith(color: scheme.error)),
+                  tileColor: scheme.surface,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                data: (results) {
+                  if (results.teams.isEmpty && results.players.isEmpty && results.competitions.isEmpty) {
+                    return ListTile(
+                      dense: true,
+                      title: Text('No local results found.', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface)),
+                      tileColor: scheme.surface,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    );
+                  }
 
-                return Column(
-                  children: [
-                    if (results.teams.isNotEmpty) ...[
-                      const DenseSectionHeader(title: 'Teams'),
-                      ...results.teams.map(
-                        (team) => ListTile(
-                          dense: true,
-                          onTap: () => context.push('/team/${team.id}'),
-                          leading: TeamBadge(
-                            teamId: team.id,
-                            teamName: team.name,
-                            resolver: resolver,
-                            source: 'search.team-result',
-                            size: 22,
+                  return Column(
+                    children: [
+                      if (results.teams.isNotEmpty) ...[
+                        const DenseSectionHeader(title: 'Teams'),
+                        ...results.teams.map(
+                          (team) => ListTile(
+                            dense: true,
+                            // Navigation to TeamScreen is disabled
+                            onTap: null,
+                            leading: TeamBadge(
+                              teamId: team.id,
+                              teamName: team.name,
+                              resolver: resolver,
+                              source: 'search.team-result',
+                              size: 22,
+                            ),
+                            title: Text(team.name, style: textTheme.bodyLarge?.copyWith(color: scheme.onSurface)),
+                            trailing: Icon(Icons.block, color: scheme.error),
+                            tileColor: scheme.surface,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          title: Text(team.name),
-                          trailing: const Icon(Icons.chevron_right),
                         ),
-                      ),
-                    ],
-                    if (results.players.isNotEmpty) ...[
-                      const DenseSectionHeader(title: 'Players'),
-                      ...results.players.map(
-                        (player) => ListTile(
-                          dense: true,
-                          onTap: () => context.openPlayerDetail(player.id),
-                          leading: EntityBadge(
-                            entityId: player.id,
-                            entityName: player.name,
-                            type: SportsAssetType.players,
-                            resolver: resolver,
-                            size: 22,
+                      ],
+                      if (results.players.isNotEmpty) ...[
+                        const DenseSectionHeader(title: 'Players'),
+                        ...results.players.map(
+                          (player) => ListTile(
+                            dense: true,
+                            onTap: () => context.openPlayerDetail(player.id),
+                            leading: EntityBadge(
+                              entityId: player.id,
+                              entityName: player.name,
+                              type: SportsAssetType.players,
+                              resolver: resolver,
+                              size: 22,
+                            ),
+                            title: Text(player.name, style: textTheme.bodyLarge?.copyWith(color: scheme.onSurface)),
+                            subtitle: Text(player.position ?? '', style: textTheme.bodySmall?.copyWith(color: scheme.outline)),
+                            trailing: Icon(Icons.chevron_right, color: scheme.outline),
+                            tileColor: scheme.surface,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          title: Text(player.name),
-                          subtitle: Text(player.position ?? ''),
-                          trailing: const Icon(Icons.chevron_right),
                         ),
-                      ),
-                    ],
-                    if (results.competitions.isNotEmpty) ...[
-                      const DenseSectionHeader(title: 'Competitions'),
-                      ...results.competitions.map(
-                        (competition) => ListTile(
-                          dense: true,
-                          onTap:
-                              () => context.push('/league/${competition.id}'),
-                          leading: EntityBadge(
-                            entityId: competition.id,
-                            type: SportsAssetType.leagues,
-                            resolver: resolver,
-                            size: 22,
+                      ],
+                      if (results.competitions.isNotEmpty) ...[
+                        const DenseSectionHeader(title: 'Competitions'),
+                        ...results.competitions.map(
+                          (competition) => ListTile(
+                            dense: true,
+                            onTap: () => context.push('/league/${competition.id}'),
+                            leading: EntityBadge(
+                              entityId: competition.id,
+                              type: SportsAssetType.leagues,
+                              resolver: resolver,
+                              size: 22,
+                            ),
+                            title: Text(competition.name, style: textTheme.bodyLarge?.copyWith(color: scheme.onSurface)),
+                            subtitle: Text(competition.country ?? '', style: textTheme.bodySmall?.copyWith(color: scheme.outline)),
+                            trailing: Icon(Icons.chevron_right, color: scheme.outline),
+                            tileColor: scheme.surface,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          title: Text(competition.name),
-                          subtitle: Text(competition.country ?? ''),
-                          trailing: const Icon(Icons.chevron_right),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                );
-              },
-            ),
-        ],
+                  );
+                },
+              ),
+          ],
+        ),
       ),
     );
   }

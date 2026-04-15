@@ -129,24 +129,25 @@ class MatchCardCompact extends StatelessWidget {
   ]) {
     final canResolveBadge = assetResolver != null;
 
+    // Navigation to TeamScreen is disabled
     return Row(
       children: [
         canResolveBadge
             ? TeamBadge(
-              teamId: teamId,
-              teamName: name,
-              resolver: assetResolver!,
-              source: badgeSource,
-              size: 18,
-            )
+                teamId: teamId,
+                teamName: name,
+                resolver: assetResolver!,
+                source: badgeSource,
+                size: 18,
+              )
             : Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.secondary,
-                borderRadius: BorderRadius.circular(9),
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.secondary,
+                  borderRadius: BorderRadius.circular(9),
+                ),
               ),
-            ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
