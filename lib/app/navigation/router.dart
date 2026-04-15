@@ -34,7 +34,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 name: 'home',
                 pageBuilder:
                     (context, state) =>
-                        const NoTransitionPage(child: HomeScreen()),
+                        NoTransitionPage(
+                          child: HomeScreen(
+                            initialDateIso: state.uri.queryParameters['date'],
+                            initialDateFocusToken:
+                                state.uri.queryParameters['focus'],
+                          ),
+                        ),
               ),
             ],
           ),

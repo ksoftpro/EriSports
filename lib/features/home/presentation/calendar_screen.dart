@@ -6,6 +6,7 @@ import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
 import 'package:eri_sports/shared/widgets/team_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 class CalendarScreen extends ConsumerStatefulWidget {
@@ -58,9 +59,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                     lastDate: lastDate,
                     currentDate: DateTime.now(),
                     onDateChanged: (value) {
-                      setState(() {
-                        _selectedDay = _dayKey(value);
-                      });
+                      final picked = _dayKey(value);
+                      final dateParam = DateFormat('yyyy-MM-dd').format(picked);
+                      final focusParam =
+                          DateTime.now().microsecondsSinceEpoch.toString();
+                      context.go('/home?date=$dateParam&focus=$focusParam');
                     },
                   ),
                 ),

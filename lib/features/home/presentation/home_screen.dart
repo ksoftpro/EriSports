@@ -14,7 +14,14 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    this.initialDateIso,
+    this.initialDateFocusToken,
+    super.key,
+  });
+
+  final String? initialDateIso;
+  final String? initialDateFocusToken;
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
@@ -28,6 +35,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _followingCollapsed = false;
   bool _hideAllCompetitions = false;
   final Set<String> _collapsedCompetitionIds = <String>{};
+  String? _lastAppliedRouteSelectionKey;
 
   @override
   void dispose() {
@@ -45,6 +53,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         error: (_, __) => const Center(child: Text('Failed to load matches.')),
         data: (state) {
           final days = _allMatchDays(state.all);
+          _scheduleRouteDateSelectionIfNeeded(days);
           final selectedDay = _resolvePreferredDay(days);
           final selectedIndex = _indexForDay(days, selectedDay);
           _ensurePageController(days, selectedIndex);
@@ -354,6 +363,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       }
     }
+  }
+
+  void _scheduleRouteDateSelectionIfNeeded(List<DateTime> days) {
+    final rawDate = widget.initialDateIso?.trim();
+    if (rawDate == null || rawDate.isEmpty) {
+      _lastAppliedRouteSelectionKey = null;
+      return;
+    }
+
+    final focus = widget.initialDateFocusToken?.trim() ?? '';
+    final selectionKey = '$rawDate|$focus';
+    if (_lastAppliedRouteSelectionKey == selectionKey) {
+      return;
+    }
+
+    _lastAppliedRouteSelectionKey = selectionKey;
+    final parsed = _parseDateOnly(rawDate);
+    if (parsed == null || days.isEmpty) {
+      return;
+    }
+
+    final target = _closestDayTo(parsed, days);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _selectDay(days, target, forceTabStripSync: true);
+    });
+  }
+
+  DateTime? _parseDateOnly(String raw) {
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) {
+      return null;
+    }
+    final local = parsed.toLocal();
+    return _dayKey(local);
+  }
+
+  DateTime _closestDayTo(DateTime target, List<DateTime> days) {
+    if (days.isEmpty) {
+      return target;
+    }
+
+    for (final day in days) {
+      if (_isSameDay(day, target)) {
+        return day;
+      }
+    }
+
+    DateTime? nearest;
+    int? nearestDistanceMinutes;
+    for (final day in days) {
+      final distance = day.difference(target).inMinutes.abs();
+      if (nearest == null ||
+          nearestDistanceMinutes == null ||
+          distance < nearestDistanceMinutes) {
+        nearest = day;
+        nearestDistanceMinutes = distance;
+      }
+    }
+
+    return nearest ?? days.first;
   }
 
   List<DateTime> _allMatchDays(List<HomeMatchView> matches) {
