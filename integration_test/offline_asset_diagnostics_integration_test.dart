@@ -32,6 +32,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../test/test_helpers/daylysport_db_seed_helper.dart';
 import '../test/test_helpers/sqlite_test_helper.dart';
 
 void main() {
@@ -154,9 +155,7 @@ class _TestHarness {
       logger: logger,
     );
 
-    final startupReport = await services.importCoordinator.runLocalImport(
-      triggerType: 'startup',
-    );
+    final startupReport = await seedOfflineDbForTests(database);
 
     await tester.pumpWidget(
       ProviderScope(

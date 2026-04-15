@@ -32,6 +32,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'test_helpers/daylysport_db_seed_helper.dart';
 import 'test_helpers/sqlite_test_helper.dart';
 
 void main() {
@@ -40,18 +41,14 @@ void main() {
   testWidgets(
     'offline startup imports and match center renders timeline/stats',
     (tester) async {
-      debugPrint('test1:start');
       final harness = await _WidgetHarness.create(tester);
-      debugPrint('test1:harness-created');
       addTearDown(() => harness.dispose(tester));
 
       expect(find.text('Arsenal'), findsWidgets);
       expect(find.text('Liverpool'), findsWidgets);
 
       await tester.tap(find.text('2 - 1').first.hitTestable());
-      debugPrint('test1:tapped-score');
       await _pumpForStability(tester);
-      debugPrint('test1:after-pump');
 
       expect(find.text('Match Detail'), findsOneWidget);
       expect(find.text('Timeline'), findsOneWidget);
@@ -75,7 +72,7 @@ void main() {
     await tester.tap(find.text('Premier League').first.hitTestable());
     await _pumpForStability(tester);
 
-    expect(find.text('Standings'), findsOneWidget);
+    expect(find.text('Table'), findsOneWidget);
     expect(find.text('Arsenal').first, findsOneWidget);
     expect(find.text('Overall'), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
@@ -135,7 +132,6 @@ class _WidgetHarness {
   final Directory tempRoot;
 
   static Future<_WidgetHarness> create(WidgetTester tester) async {
-    debugPrint('harness:create:start');
     tester.view.physicalSize = const Size(1080, 1920);
     tester.view.devicePixelRatio = 1.0;
 
@@ -146,13 +142,11 @@ class _WidgetHarness {
       ),
     );
     tempRoot.createSync(recursive: true);
-    debugPrint('harness:create:temp-root');
     await _installPathProviderMock(tempRoot);
     final daylySportDir = Directory(p.join(tempRoot.path, 'daylySport'));
     daylySportDir.createSync(recursive: true);
 
     await _seedOfflineJson(daylySportDir);
-    debugPrint('harness:create:seeded-json');
 
     final locator = _TestDaylySportLocator(daylySportDir);
     final logger = AppLogger();
@@ -161,7 +155,6 @@ class _WidgetHarness {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final preferences = await SharedPreferences.getInstance();
-    debugPrint('harness:create:shared-preferences');
     final cacheStore = DaylySportCacheStore(sharedPreferences: preferences);
     final fileResolver = const EncryptedFileResolver();
     final fingerprintCache = FileFingerprintCache(cacheStore: cacheStore);
@@ -228,17 +221,8 @@ class _WidgetHarness {
       daylysportSyncCoordinator: syncCoordinator,
       logger: logger,
     );
-    debugPrint('harness:create:services-ready');
 
-    final startupReport = await services.importCoordinator.runLocalImport(
-      triggerType: 'startup',
-      onProgress: (update) {
-        debugPrint(
-          'harness:create:import-progress:${update.stage}:${update.processedFiles}/${update.totalFiles}:${update.currentRelativePath ?? '-'}',
-        );
-      },
-    );
-    debugPrint('harness:create:imported');
+    final startupReport = await seedOfflineDbForTests(database);
 
     await tester.pumpWidget(
       ProviderScope(
@@ -253,9 +237,7 @@ class _WidgetHarness {
         child: const EriSportsApp(),
       ),
     );
-    debugPrint('harness:create:pumped-widget');
     await _pumpForStability(tester);
-    debugPrint('harness:create:stable');
 
     return _WidgetHarness(database: database, tempRoot: tempRoot);
   }
