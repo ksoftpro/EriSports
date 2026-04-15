@@ -6,79 +6,78 @@ class AboutScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
       appBar: AppBar(title: const Text('About')),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF6F7FB), Color(0xFFFFFFFF)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-          children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF111827),
-                borderRadius: BorderRadius.circular(16),
-              ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          // App Title Card
+          Card(
+            color: scheme.primary,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'EriSports',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: Colors.white,
+                    style: textTheme.headlineMedium?.copyWith(
+                      color: scheme.onPrimary,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Developer and business information',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w500,
+                    'Your gateway to Eritrean sports scores, stats, and more.',
+                    style: textTheme.bodyLarge?.copyWith(
+                      color: scheme.onPrimary.withOpacity(0.85),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-            Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: BorderSide(color: scheme.outline.withValues(alpha: 0.24)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Column(
-                  children: const [
-                    _AboutInfoRow(label: 'Developer', value: 'Sharpeth'),
-                    _AboutInfoDivider(),
-                    _AboutInfoRow(label: 'Gmail', value: 'sharpeth@gmail.com'),
-                    _AboutInfoDivider(),
-                    _AboutInfoRow(label: 'Telephone', value: '+2917606100'),
-                    _AboutInfoDivider(),
-                    _AboutInfoRow(
-                      label: 'Incorporation',
-                      value: 'Golden Movies Store Distribution',
-                    ),
-                    _AboutInfoDivider(),
-                    _AboutInfoRow(
-                      label: 'Business Email',
-                      value: 'goldenMovies@gmail.com',
-                    ),
-                  ],
-                ),
+          ),
+          const SizedBox(height: 18),
+          // Developer Card
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  _AboutInfoRow(label: 'Developer', value: 'Sharpeth'),
+                  _AboutInfoDivider(),
+                  _AboutInfoRow(label: 'Gmail', value: 'sharpeth@gmail.com'),
+                  _AboutInfoDivider(),
+                  _AboutInfoRow(label: 'Telephone', value: '+2917606100'),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 14),
+          // Business Card
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  _AboutInfoRow(label: 'Incorporation', value: 'Golden Movies Store Distribution'),
+                  _AboutInfoDivider(),
+                  _AboutInfoRow(label: 'Business Email', value: 'goldenMovies@gmail.com'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          // FAQ Section
+          _FaqSection(),
+        ],
       ),
     );
   }
@@ -92,6 +91,8 @@ class _AboutInfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -101,8 +102,8 @@ class _AboutInfoRow extends StatelessWidget {
             width: 124,
             child: Text(
               label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF5B6473),
+              style: textTheme.bodyMedium?.copyWith(
+                color: scheme.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -111,8 +112,8 @@ class _AboutInfoRow extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: const Color(0xFF111827),
+              style: textTheme.bodyLarge?.copyWith(
+                color: scheme.onSurface,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -128,6 +129,81 @@ class _AboutInfoDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Divider(height: 1, color: Color(0xFFE8ECF3));
+    final scheme = Theme.of(context).colorScheme;
+    return Divider(height: 1, color: scheme.outline.withOpacity(0.18));
+  }
+}
+
+class _FaqSection extends StatefulWidget {
+  @override
+  State<_FaqSection> createState() => _FaqSectionState();
+}
+
+class _FaqSectionState extends State<_FaqSection> {
+  final List<bool> _expanded = [false, false, false];
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('FAQ', style: textTheme.titleLarge?.copyWith(color: scheme.primary)),
+            const SizedBox(height: 8),
+            ExpansionPanelList(
+              elevation: 0,
+              expandedHeaderPadding: EdgeInsets.zero,
+              expansionCallback: (i, isOpen) => setState(() => _expanded[i] = !isOpen),
+              children: [
+                ExpansionPanel(
+                  canTapOnHeader: true,
+                  isExpanded: _expanded[0],
+                  headerBuilder: (context, isOpen) => ListTile(
+                    title: Text('How do I change the app theme?', style: textTheme.bodyLarge),
+                  ),
+                  body: ListTile(
+                    title: Text(
+                      'Go to Settings > Appearance and select System, Light, or Dark mode. The app will instantly update.',
+                      style: textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+                ExpansionPanel(
+                  canTapOnHeader: true,
+                  isExpanded: _expanded[1],
+                  headerBuilder: (context, isOpen) => ListTile(
+                    title: Text('How do I update data or sync?', style: textTheme.bodyLarge),
+                  ),
+                  body: ListTile(
+                    title: Text(
+                      'Use the Synchronize Data button in Settings to refresh all scores, teams, and players from the latest offline files.',
+                      style: textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+                ExpansionPanel(
+                  canTapOnHeader: true,
+                  isExpanded: _expanded[2],
+                  headerBuilder: (context, isOpen) => ListTile(
+                    title: Text('Who do I contact for support?', style: textTheme.bodyLarge),
+                  ),
+                  body: ListTile(
+                    title: Text(
+                      'For any issues, email sharpeth@gmail.com or goldenMovies@gmail.com. We are happy to help!',
+                      style: textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

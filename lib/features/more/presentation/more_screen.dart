@@ -277,9 +277,11 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Settings', style: Theme.of(context).textTheme.headlineMedium),
+          Text('Settings', style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: Theme.of(context).colorScheme.primary)),
           const SizedBox(height: 12),
           Card(
+            color: Theme.of(context).cardColor,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -287,7 +289,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 children: [
                   Text(
                     'Appearance',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).colorScheme.primary),
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -298,28 +300,19 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         context: context,
                         label: 'System',
                         selected: themeMode == ThemeMode.system,
-                        onTap:
-                            () => ref
-                                .read(themeModeProvider.notifier)
-                                .setThemeMode(ThemeMode.system),
+                        onTap: () => ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.system),
                       ),
                       _themeChip(
                         context: context,
                         label: 'Light',
                         selected: themeMode == ThemeMode.light,
-                        onTap:
-                            () => ref
-                                .read(themeModeProvider.notifier)
-                                .setThemeMode(ThemeMode.light),
+                        onTap: () => ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.light),
                       ),
                       _themeChip(
                         context: context,
                         label: 'Dark',
                         selected: themeMode == ThemeMode.dark,
-                        onTap:
-                            () => ref
-                                .read(themeModeProvider.notifier)
-                                .setThemeMode(ThemeMode.dark),
+                        onTap: () => ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.dark),
                       ),
                     ],
                   ),
@@ -329,34 +322,39 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
           ),
           const SizedBox(height: 10),
           Card(
+            color: Theme.of(context).cardColor,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             child: ListTile(
               contentPadding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
-              leading: const Icon(Icons.info_outline_rounded),
-              title: const Text(
+              leading: Icon(Icons.info_outline_rounded, color: Theme.of(context).colorScheme.primary),
+              title: Text(
                 'About',
-                style: TextStyle(fontWeight: FontWeight.w700),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 'Developer and business contact information',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              trailing: Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.outline),
               onTap: () => context.push('/about'),
             ),
           ),
           const SizedBox(height: 10),
           FilledButton.icon(
             onPressed: () => context.push('/player-stats'),
-            icon: const Icon(Icons.leaderboard),
-            label: const Text('Open offline player leaderboards'),
+            icon: Icon(Icons.leaderboard, color: Theme.of(context).colorScheme.onPrimary),
+            label: Text('Open offline player leaderboards', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.onPrimary)),
           ),
           const SizedBox(height: 10),
           FilledButton.icon(
             onPressed: () => context.push('/sync'),
-            icon: const Icon(Icons.sync),
-            label: const Text('Open Synchronize Data'),
+            icon: Icon(Icons.sync, color: Theme.of(context).colorScheme.onPrimary),
+            label: Text('Open Synchronize Data', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.onPrimary)),
           ),
           const SizedBox(height: 10),
           Card(
+            color: Theme.of(context).cardColor,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -364,12 +362,13 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 children: [
                   Text(
                     'JSON data directory',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).colorScheme.primary),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     selectedJsonFolder ??
                         'Default: /storage/emulated/0/daylySport (or platform fallback)',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 10),
                   Wrap(
@@ -378,11 +377,12 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     children: [
                       FilledButton.icon(
                         onPressed: _isPickingJsonFolder ? null : _pickJsonDirectory,
-                        icon: const Icon(Icons.folder_open),
+                        icon: Icon(Icons.folder_open, color: Theme.of(context).colorScheme.onPrimary),
                         label: Text(
                           _isPickingJsonFolder
                               ? 'Applying folder...'
                               : 'Browse data JSONs directory',
+                          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.onPrimary),
                         ),
                       ),
                       OutlinedButton.icon(
@@ -390,23 +390,23 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                             _isPickingJsonFolder
                                 ? null
                                 : () => _openManualPathDialog(selectedJsonFolder),
-                        icon: const Icon(Icons.edit_location_alt),
-                        label: const Text('Set path manually'),
+                        icon: Icon(Icons.edit_location_alt, color: Theme.of(context).colorScheme.primary),
+                        label: Text('Set path manually', style: Theme.of(context).textTheme.labelLarge),
                       ),
                       OutlinedButton.icon(
                         onPressed:
                             _isPickingJsonFolder || selectedJsonFolder == null
                                 ? null
                                 : _clearCustomJsonDirectory,
-                        icon: const Icon(Icons.restart_alt),
-                        label: const Text('Use default folder'),
+                        icon: Icon(Icons.restart_alt, color: Theme.of(context).colorScheme.primary),
+                        label: Text('Use default folder', style: Theme.of(context).textTheme.labelLarge),
                       ),
                     ],
                   ),
                   if (_folderSelectionMessage != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
-                      child: Text(_folderSelectionMessage!),
+                      child: Text(_folderSelectionMessage!, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error)),
                     ),
                 ],
               ),
@@ -415,11 +415,12 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
           const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: _isDiagnosingAssets ? null : _runAssetDiagnostics,
-            icon: const Icon(Icons.image_search),
+            icon: Icon(Icons.image_search, color: Theme.of(context).colorScheme.primary),
             label: Text(
               _isDiagnosingAssets
                   ? 'Checking local image coverage...'
                   : 'Run offline asset diagnostics',
+              style: Theme.of(context).textTheme.labelLarge,
             ),
           ),
           const SizedBox(height: 16),
