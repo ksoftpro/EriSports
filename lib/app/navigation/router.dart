@@ -1,5 +1,6 @@
 import 'package:eri_sports/app/navigation/app_shell.dart';
 import 'package:eri_sports/features/bookmarks/presentation/bookmarks_screen.dart';
+import 'package:eri_sports/features/home/presentation/calendar_screen.dart';
 import 'package:eri_sports/features/home/presentation/home_screen.dart';
 import 'package:eri_sports/features/leagues/presentation/league_overview_screen.dart';
 import 'package:eri_sports/features/leagues/presentation/leagues_screen.dart';
@@ -104,6 +105,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/search',
         name: 'search',
         builder: (context, state) => const SearchScreen(),
+      ),
+      GoRoute(
+        path: '/calendar',
+        name: 'calendar',
+        builder: (context, state) => const CalendarScreen(),
       ),
       GoRoute(
         path: '/league/:leagueId',

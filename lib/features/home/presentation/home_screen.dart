@@ -61,7 +61,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     forceTabStripSync: true,
                   );
                 },
-                onOpenCalendar: () => context.push('/leagues'),
+                onOpenCalendar: () => context.push('/calendar'),
                 onOpenFollowing: () => context.push('/following'),
                 onOpenSearch: () => context.push('/search'),
                 onOpenMore: () => context.push('/video'),
@@ -585,6 +585,9 @@ class _DayTabStrip extends StatefulWidget {
 class _DayTabStripState extends State<_DayTabStrip> {
   final ScrollController _scrollController = ScrollController();
   final Map<String, GlobalKey> _dayKeys = <String, GlobalKey>{};
+  static const double _separatorWidth = 2;
+  static const double _minimumTabWidth = 78;
+  static const double _horizontalTabPadding = 10;
 
   @override
   void initState() {
@@ -689,18 +692,58 @@ class _DayTabStripState extends State<_DayTabStrip> {
       return;
     }
 
-    final selectedKey = _dayKeys[_dayId(widget.selectedDay)];
-    final selectedContext = selectedKey?.currentContext;
-    if (selectedContext == null) {
+    final selectedIndex = widget.days.indexWhere(
+      (day) => _isSameDay(day, widget.selectedDay),
+    );
+    if (selectedIndex < 0) {
       return;
     }
 
-    Scrollable.ensureVisible(
-      selectedContext,
-      alignment: 0.5,
-      duration: animate ? const Duration(milliseconds: 230) : Duration.zero,
-      curve: Curves.easeOutCubic,
-    );
+    final position = _scrollController.position;
+    final viewportWidth = position.viewportDimension;
+    final maxOffset = position.maxScrollExtent;
+    final targetOffset = _targetOffsetForIndex(selectedIndex, viewportWidth);
+    final clampedOffset = targetOffset.clamp(0.0, maxOffset);
+
+    if (animate) {
+      _scrollController.animateTo(
+        clampedOffset,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+
+    _scrollController.jumpTo(clampedOffset);
+  }
+
+  double _targetOffsetForIndex(int targetIndex, double viewportWidth) {
+    final tabTextStyle =
+        Theme.of(context).textTheme.titleSmall ?? const TextStyle();
+
+    var leadingWidth = 0.0;
+    for (var index = 0; index < targetIndex; index++) {
+      leadingWidth += _tabWidthForIndex(index, tabTextStyle) + _separatorWidth;
+    }
+
+    final selectedWidth = _tabWidthForIndex(targetIndex, tabTextStyle);
+    return leadingWidth + (selectedWidth / 2) - (viewportWidth / 2);
+  }
+
+  double _tabWidthForIndex(int index, TextStyle style) {
+    final label = _labelForDay(widget.days[index]);
+    final textWidth = _measureTextWidth(label, style);
+    final padded = textWidth + (_horizontalTabPadding * 2);
+    return padded < _minimumTabWidth ? _minimumTabWidth : padded;
+  }
+
+  double _measureTextWidth(String text, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+    )..layout(minWidth: 0, maxWidth: double.infinity);
+    return painter.width;
   }
 
   GlobalKey _keyForDay(DateTime day) {
