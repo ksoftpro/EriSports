@@ -32,6 +32,8 @@ import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../test/test_helpers/sqlite_test_helper.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -81,6 +83,7 @@ class _TestHarness {
     final locator = _TestDaylySportLocator(daylySportDir);
     final logger = AppLogger();
     final scanner = FileInventoryScanner();
+    initSqlite3ForTests();
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final preferences = await SharedPreferences.getInstance();

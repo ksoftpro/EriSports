@@ -231,7 +231,7 @@ class FileInventoryScanner {
   }
 
   Future<String> _sha256For(File file) async {
-    final digest = await sha256.bind(file.openRead()).first;
-    return digest.toString();
+    final bytes = await file.readAsBytes();
+    return sha256.convert(bytes).toString();
   }
 }

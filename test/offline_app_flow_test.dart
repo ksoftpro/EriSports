@@ -27,9 +27,12 @@ import 'package:eri_sports/features/media/security/encrypted_media_service.dart'
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'test_helpers/sqlite_test_helper.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -37,14 +40,18 @@ void main() {
   testWidgets(
     'offline startup imports and match center renders timeline/stats',
     (tester) async {
+      debugPrint('test1:start');
       final harness = await _WidgetHarness.create(tester);
+      debugPrint('test1:harness-created');
       addTearDown(() => harness.dispose(tester));
 
       expect(find.text('Arsenal'), findsWidgets);
       expect(find.text('Liverpool'), findsWidgets);
 
       await tester.tap(find.text('2 - 1').first.hitTestable());
+      debugPrint('test1:tapped-score');
       await _pumpForStability(tester);
+      debugPrint('test1:after-pump');
 
       expect(find.text('Match Detail'), findsOneWidget);
       expect(find.text('Timeline'), findsOneWidget);
@@ -128,21 +135,33 @@ class _WidgetHarness {
   final Directory tempRoot;
 
   static Future<_WidgetHarness> create(WidgetTester tester) async {
+    debugPrint('harness:create:start');
     tester.view.physicalSize = const Size(1080, 1920);
     tester.view.devicePixelRatio = 1.0;
 
-    final tempRoot = await Directory.systemTemp.createTemp('erisports_wt_');
+    final tempRoot = Directory(
+      p.join(
+        Directory.systemTemp.path,
+        'erisports_wt_${DateTime.now().microsecondsSinceEpoch}',
+      ),
+    );
+    tempRoot.createSync(recursive: true);
+    debugPrint('harness:create:temp-root');
+    await _installPathProviderMock(tempRoot);
     final daylySportDir = Directory(p.join(tempRoot.path, 'daylySport'));
-    await daylySportDir.create(recursive: true);
+    daylySportDir.createSync(recursive: true);
 
     await _seedOfflineJson(daylySportDir);
+    debugPrint('harness:create:seeded-json');
 
     final locator = _TestDaylySportLocator(daylySportDir);
     final logger = AppLogger();
     final scanner = FileInventoryScanner();
+    initSqlite3ForTests();
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final preferences = await SharedPreferences.getInstance();
+    debugPrint('harness:create:shared-preferences');
     final cacheStore = DaylySportCacheStore(sharedPreferences: preferences);
     final fileResolver = const EncryptedFileResolver();
     final fingerprintCache = FileFingerprintCache(cacheStore: cacheStore);
@@ -209,10 +228,17 @@ class _WidgetHarness {
       daylysportSyncCoordinator: syncCoordinator,
       logger: logger,
     );
+    debugPrint('harness:create:services-ready');
 
     final startupReport = await services.importCoordinator.runLocalImport(
       triggerType: 'startup',
+      onProgress: (update) {
+        debugPrint(
+          'harness:create:import-progress:${update.stage}:${update.processedFiles}/${update.totalFiles}:${update.currentRelativePath ?? '-'}',
+        );
+      },
     );
+    debugPrint('harness:create:imported');
 
     await tester.pumpWidget(
       ProviderScope(
@@ -227,7 +253,9 @@ class _WidgetHarness {
         child: const EriSportsApp(),
       ),
     );
+    debugPrint('harness:create:pumped-widget');
     await _pumpForStability(tester);
+    debugPrint('harness:create:stable');
 
     return _WidgetHarness(database: database, tempRoot: tempRoot);
   }
@@ -237,13 +265,14 @@ class _WidgetHarness {
     await tester.pump();
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
+    await _clearPathProviderMock();
     await database.close();
     if (await tempRoot.exists()) {
       await tempRoot.delete(recursive: true);
     }
   }
 
-  static Future<void> _seedOfflineJson(Directory daylySportDir) async {
+  static Future<void> _seedOfflineJson(Directory daylySportDir) {
     final teamsJson = {
       'teams': [
         {
@@ -524,20 +553,21 @@ class _WidgetHarness {
       },
     };
 
-    Future<void> writeJson(String filename, Map<String, dynamic> data) async {
+    void writeJson(String filename, Map<String, dynamic> data) {
       final file = File(p.join(daylySportDir.path, filename));
-      await file.writeAsString(jsonEncode(data));
+      file.writeAsStringSync(jsonEncode(data));
     }
 
-    await writeJson('teams_2026_04_03.json', teamsJson);
-    await writeJson('fixtures_2026_04_03.json', fixturesJson);
-    await writeJson('standings_2026_04_03.json', standingsJson);
-    await writeJson(
+    writeJson('teams_2026_04_03.json', teamsJson);
+    writeJson('fixtures_2026_04_03.json', fixturesJson);
+    writeJson('standings_2026_04_03.json', standingsJson);
+    writeJson(
       'top_standings_full_data_2026_04_03.json',
       topStandingsFullJson,
     );
-    await writeJson('players_2026_04_03.json', playersJson);
-    await writeJson('match_detail_1001.json', matchDetailJson);
+    writeJson('players_2026_04_03.json', playersJson);
+    writeJson('match_detail_1001.json', matchDetailJson);
+    return Future<void>.value();
   }
 }
 
@@ -571,6 +601,39 @@ Future<void> _pumpForStability(WidgetTester tester) async {
       break;
     }
   }
+}
+
+const MethodChannel _pathProviderChannel = MethodChannel(
+  'plugins.flutter.io/path_provider',
+);
+
+Future<void> _installPathProviderMock(Directory tempRoot) {
+  final tempPath = tempRoot.path;
+  TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(_pathProviderChannel, (call) async {
+        switch (call.method) {
+          case 'getTemporaryDirectory':
+          case 'getApplicationDocumentsDirectory':
+          case 'getApplicationSupportDirectory':
+          case 'getLibraryDirectory':
+          case 'getDownloadsDirectory':
+          case 'getExternalStorageDirectory':
+            return tempPath;
+          case 'getExternalCacheDirectories':
+          case 'getExternalStorageDirectories':
+            return <String>[tempPath];
+        }
+        return tempPath;
+      });
+  return Future<void>.value();
+}
+
+Future<void> _clearPathProviderMock() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(_pathProviderChannel, null);
+  return Future<void>.value();
 }
 
 class _TestDaylySportLocator extends DaylySportLocator {
