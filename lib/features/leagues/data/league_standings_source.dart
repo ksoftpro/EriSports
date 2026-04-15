@@ -262,10 +262,7 @@ class LeagueStandingsSource {
       }
 
       final matches = <File>[];
-      await for (final entity in root.list(
-        recursive: true,
-        followLinks: false,
-      )) {
+      for (final entity in root.listSync(recursive: true, followLinks: false)) {
         if (entity is! File) {
           continue;
         }
@@ -307,10 +304,8 @@ class LeagueStandingsSource {
         continue;
       }
 
-      await for (final entity in directory.list(
-        recursive: false,
-        followLinks: false,
-      )) {
+      for (final entity
+          in directory.listSync(recursive: false, followLinks: false)) {
         if (entity is! File) {
           continue;
         }
@@ -633,10 +628,7 @@ class LeagueStandingsSource {
     }
 
     if (matches.isEmpty) {
-      await for (final entity in root.list(
-        recursive: true,
-        followLinks: false,
-      )) {
+      for (final entity in root.listSync(recursive: true, followLinks: false)) {
         if (entity is! File) {
           continue;
         }
@@ -667,7 +659,7 @@ class LeagueStandingsSource {
   }
   ) async {
     final matches = <File>[];
-    await for (final entity in root.list(recursive: true, followLinks: false)) {
+    for (final entity in root.listSync(recursive: true, followLinks: false)) {
       if (entity is! File) {
         continue;
       }

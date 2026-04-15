@@ -644,11 +644,11 @@ class _OverviewTab extends StatelessWidget {
     final fixtures = state.fixtureItems;
     final upcoming = fixtures
         .where((item) => item.kickoffUtc.isAfter(now))
-        .toList(growable: false)
+        .toList()
       ..sort((a, b) => a.kickoffUtc.compareTo(b.kickoffUtc));
     final recent = fixtures
         .where((item) => item.kickoffUtc.isBefore(now))
-        .toList(growable: false)
+        .toList()
       ..sort((a, b) => b.kickoffUtc.compareTo(a.kickoffUtc));
     final tableSnapshot = _findTableSnapshot(
       state.tableData,
@@ -661,9 +661,9 @@ class _OverviewTab extends StatelessWidget {
     final latestHistory = state.historyItems.firstOrNull;
     final allTableRows =
         state.tableData == null
-            ? const <TeamTableRowItem>[]
-            : List<TeamTableRowItem>.from(state.tableData!.rowsForMode('all'))
-              ..sort((a, b) => a.position.compareTo(b.position));
+            ? <TeamTableRowItem>[]
+            : List<TeamTableRowItem>.from(state.tableData!.rowsForMode('all'));
+    allTableRows.sort((a, b) => a.position.compareTo(b.position));
     final tablePreviewRows = _buildTablePreviewRows(
       allTableRows,
       state.identity.teamId,
@@ -1366,6 +1366,7 @@ class _FixturesTab extends StatelessWidget {
     }
     final orderedDates = grouped.keys.toList(growable: false)
       ..sort((a, b) => b.compareTo(a));
+
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),

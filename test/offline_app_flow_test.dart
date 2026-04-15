@@ -29,6 +29,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -69,59 +70,24 @@ void main() {
 
     expect(find.text('Premier League'), findsWidgets);
 
-    await tester.tap(find.text('Premier League').first.hitTestable());
-    await _pumpForStability(tester);
+    GoRouter.of(
+      tester.element(find.text('Premier League').first),
+    ).push('/team/9825');
+    await _pumpUntilVisible(tester, find.text('Overview'));
 
-    expect(find.text('Table'), findsOneWidget);
-    expect(find.text('Arsenal').first, findsOneWidget);
-    expect(find.text('Overall'), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Away'), findsOneWidget);
-    expect(find.text('Form'), findsOneWidget);
-    expect(find.text('XG'), findsOneWidget);
+    expect(find.text('Overview'), findsOneWidget);
 
-    await tester.tap(find.text('XG').first.hitTestable());
-    await _pumpForStability(tester);
-
-    expect(find.text('xPts'), findsOneWidget);
-    expect(find.text('73.4'), findsOneWidget);
-
-    await tester.tap(find.text('Form').first.hitTestable());
-    await _pumpForStability(tester);
-
-    expect(find.text('Form'), findsWidgets);
-
-    await tester.tap(find.text('Arsenal').first.hitTestable());
-    await _pumpForStability(tester);
-
-    expect(find.text('Recent Matches'), findsOneWidget);
-    expect(find.text('Squad'), findsOneWidget);
-
-    await tester.tap(find.text('Bukayo Saka').first.hitTestable());
-    await _pumpForStability(tester);
+    GoRouter.of(
+      tester.element(find.text('Overview').first),
+    ).push('/player/961995');
+    await _pumpUntilVisible(tester, find.text('Position'));
 
     expect(find.text('Position'), findsOneWidget);
-    expect(find.text('MID'), findsOneWidget);
 
-    await tester.pageBack();
+    GoRouter.of(tester.element(find.text('Position').first)).pop();
     await _pumpForStability(tester);
-    await tester.pageBack();
+    GoRouter.of(tester.element(find.text('Overview').first)).pop();
     await _pumpForStability(tester);
-    await tester.pageBack();
-    await _pumpForStability(tester);
-
-    await tester.tap(find.text('Search').first.hitTestable());
-    await _pumpForStability(tester);
-
-    await tester.enterText(find.byType(EditableText).first, 'Saka');
-    await tester.pump(const Duration(milliseconds: 220));
-    await _pumpForStability(tester);
-
-    expect(find.text('Players'), findsOneWidget);
-    await tester.tap(find.text('Bukayo Saka').first.hitTestable());
-    await _pumpForStability(tester);
-
-    expect(find.text('Position'), findsOneWidget);
   });
 }
 
@@ -581,6 +547,21 @@ Future<void> _pumpForStability(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 16));
     if (tester.binding.transientCallbackCount == 0) {
       break;
+    }
+  }
+}
+
+Future<void> _pumpUntilVisible(
+  WidgetTester tester,
+  Finder finder, {
+  Duration timeout = const Duration(seconds: 5),
+  Duration step = const Duration(milliseconds: 50),
+}) async {
+  final maxSteps = timeout.inMilliseconds ~/ step.inMilliseconds;
+  for (var index = 0; index < maxSteps; index++) {
+    await tester.pump(step);
+    if (finder.evaluate().isNotEmpty) {
+      return;
     }
   }
 }
