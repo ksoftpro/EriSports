@@ -53,7 +53,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         error: (_, __) => const Center(child: Text('Failed to load matches.')),
         data: (state) {
           final days = _allMatchDays(state.all);
-          _scheduleRouteDateSelectionIfNeeded(days);
+          final routeState = GoRouterState.of(context);
+          _scheduleRouteDateSelectionIfNeeded(
+            days,
+            initialDateIso:
+                routeState.uri.queryParameters['date'] ?? widget.initialDateIso,
+            initialDateFocusToken:
+                routeState.uri.queryParameters['focus'] ??
+                widget.initialDateFocusToken,
+          );
           final selectedDay = _resolvePreferredDay(days);
           final selectedIndex = _indexForDay(days, selectedDay);
           _ensurePageController(days, selectedIndex);
@@ -388,14 +396,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  void _scheduleRouteDateSelectionIfNeeded(List<DateTime> days) {
-    final rawDate = widget.initialDateIso?.trim();
+  void _scheduleRouteDateSelectionIfNeeded(
+    List<DateTime> days, {
+    String? initialDateIso,
+    String? initialDateFocusToken,
+  }) {
+    final rawDate = initialDateIso?.trim();
     if (rawDate == null || rawDate.isEmpty) {
       _lastAppliedRouteSelectionKey = null;
       return;
     }
 
-    final focus = widget.initialDateFocusToken?.trim() ?? '';
+    final focus = initialDateFocusToken?.trim() ?? '';
     final selectionKey = '$rawDate|$focus';
     if (_lastAppliedRouteSelectionKey == selectionKey) {
       return;
@@ -717,63 +729,73 @@ class _DayTabStripState extends State<_DayTabStrip> {
       context,
     ).textTheme.bodySmall?.color?.withValues(alpha: 0.66);
 
-    return Container(
-      key: _viewportKey,
-      height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: ListView.separated(
-        controller: _scrollController,
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
+    return KeyedSubtree(
+      key: const ValueKey('home-day-tab-strip'),
+      child: Container(
+        key: _viewportKey,
+        height: 46,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          child: Row(
+            children: [
+              for (var index = 0; index < widget.days.length; index++) ...[
+                if (index > 0) const SizedBox(width: 2),
+                Builder(
+                  builder: (context) {
+                    final day = widget.days[index];
+                    final isSelected = _isSameDay(day, widget.selectedDay);
+                    final key = _keyForDay(day);
+                    return InkWell(
+                      key: key,
+                      onTap: () => widget.onSelect(day),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 78),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _labelForDay(day),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                color:
+                                    isSelected
+                                        ? Theme.of(context).colorScheme.onSurface
+                                        : inactiveColor,
+                                fontWeight:
+                                    isSelected ? FontWeight.w700 : FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 140),
+                              height: 2.2,
+                              width: 52,
+                              decoration: BoxDecoration(
+                                color:
+                                    isSelected
+                                        ? Theme.of(context).colorScheme.onSurface
+                                        : Colors.transparent,
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
         ),
-        itemCount: widget.days.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 2),
-        itemBuilder: (context, index) {
-          final day = widget.days[index];
-          final isSelected = _isSameDay(day, widget.selectedDay);
-          final key = _keyForDay(day);
-          return InkWell(
-            key: key,
-            onTap: () => widget.onSelect(day),
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 78),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    _labelForDay(day),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color:
-                          isSelected
-                              ? Theme.of(context).colorScheme.onSurface
-                              : inactiveColor,
-                      fontWeight:
-                          isSelected ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 140),
-                    height: 2.2,
-                    width: 52,
-                    decoration: BoxDecoration(
-                      color:
-                          isSelected
-                              ? Theme.of(context).colorScheme.onSurface
-                              : Colors.transparent,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
       ),
     );
   }

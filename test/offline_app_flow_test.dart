@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:eri_sports/app/app.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
@@ -23,6 +24,7 @@ import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
 import 'package:eri_sports/data/secure_content/file_fingerprint_cache.dart';
 import 'package:eri_sports/data/secure_content/secure_content_encryption_job_manager.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
+import 'package:eri_sports/features/home/presentation/home_screen.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
@@ -133,6 +135,28 @@ void main() {
       ),
     );
   });
+
+  testWidgets('home date strip centers active day on load and date changes', (
+    tester,
+  ) async {
+    final harness = await _WidgetHarness.create(
+      tester,
+      homeDayOffsets: [for (var dayOffset = -6; dayOffset <= 6; dayOffset++) dayOffset],
+    );
+    addTearDown(() => harness.dispose(tester));
+
+    await _expectDateTabCentered(tester, 'Today');
+
+    await tester.fling(find.byType(PageView), const Offset(-700, 0), 1200);
+    await _pumpForStability(tester);
+    await _expectDateTabCentered(tester, 'Tomorrow');
+
+    await tester.tap(find.byIcon(Icons.more_vert_rounded).hitTestable());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Today').last.hitTestable());
+    await _pumpForStability(tester);
+    await _expectDateTabCentered(tester, 'Today');
+  });
 }
 
 class _WidgetHarness {
@@ -146,7 +170,10 @@ class _WidgetHarness {
   final SharedPreferences preferences;
   final Directory tempRoot;
 
-  static Future<_WidgetHarness> create(WidgetTester tester) async {
+  static Future<_WidgetHarness> create(
+    WidgetTester tester, {
+    List<int> homeDayOffsets = const <int>[],
+  }) async {
     tester.view.physicalSize = const Size(1080, 1920);
     tester.view.devicePixelRatio = 1.0;
 
@@ -243,6 +270,7 @@ class _WidgetHarness {
     );
 
     final startupReport = await seedOfflineDbForTests(database);
+  await _seedExtraHomeFeedDays(database, homeDayOffsets);
 
     await tester.pumpWidget(
       ProviderScope(
@@ -618,6 +646,65 @@ Future<void> _pumpUntilVisible(
     if (finder.evaluate().isNotEmpty) {
       return;
     }
+  }
+}
+
+Future<void> _expectDateTabCentered(
+  WidgetTester tester,
+  String label,
+) async {
+  final stripFinder = find.byKey(const ValueKey('home-day-tab-strip'));
+  expect(stripFinder, findsOneWidget);
+
+  final tabFinder = find.descendant(
+    of: stripFinder,
+    matching: find.text(label),
+  );
+  expect(tabFinder, findsOneWidget);
+
+  double? lastDelta;
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await tester.pump(const Duration(milliseconds: 50));
+    final tabCenter = tester.getCenter(tabFinder);
+    final stripCenter = tester.getCenter(stripFinder);
+    lastDelta = (tabCenter.dx - stripCenter.dx).abs();
+    if (lastDelta <= 60) {
+      return;
+    }
+  }
+
+  fail('Expected "$label" tab to center within 60px, got ${lastDelta?.toStringAsFixed(1)}px.');
+}
+
+Future<void> _seedExtraHomeFeedDays(
+  AppDatabase database,
+  Iterable<int> dayOffsets,
+) async {
+  final today = DateTime.now().toUtc();
+  for (final dayOffset in dayOffsets) {
+    final kickoff = DateTime.utc(
+      today.year,
+      today.month,
+      today.day + dayOffset,
+      15,
+    );
+    final matchId = 'seed-home-$dayOffset';
+
+    await database.into(database.matches).insertOnConflictUpdate(
+      MatchesCompanion.insert(
+        id: matchId,
+        competitionId: '47',
+        seasonId: const Value('2025/2026'),
+        homeTeamId: '9825',
+        awayTeamId: '8650',
+        kickoffUtc: kickoff,
+        status: const Value('scheduled'),
+        homeScore: const Value(0),
+        awayScore: const Value(0),
+        roundLabel: Value('Day ${dayOffset + 7}'),
+        updatedAtUtc: DateTime.now().toUtc(),
+      ),
+    );
   }
 }
 
