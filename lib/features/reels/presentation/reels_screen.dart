@@ -1,13 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
-import 'package:eri_sports/features/media/presentation/media_playback_screen.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
-import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:video_player/video_player.dart';
 
 class ReelsScreen extends ConsumerStatefulWidget {
   const ReelsScreen({super.key});
@@ -47,14 +47,11 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> {
             ),
         data: (snapshot) {
           final reelsSection = snapshot.section(DaylySportMediaSection.reels);
-          final highlightFallback = snapshot
-              .section(DaylySportMediaSection.highlights)
-              .items
-              .where((item) => item.isVideo)
-              .toList(growable: false);
+          final highlightFallback =
+            snapshot.section(DaylySportMediaSection.highlights).videoItems;
 
-          final items = reelsSection.hasItems
-              ? reelsSection.items
+          final items = reelsSection.hasVideoItems
+            ? reelsSection.videoItems
               : highlightFallback;
 
           _scheduleEncryptedPrewarm(snapshot, items);
@@ -67,15 +64,8 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> {
             );
           }
 
-          return PageView.builder(
-            scrollDirection: Axis.vertical,
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              return _ReelCard(
-                item: items[index],
-                onOpen: _openMediaItem,
-              );
-            },
+          return ReelsFeed(
+            items: items,
           );
         },
       ),
@@ -102,26 +92,90 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> {
     final service = ref.read(appServicesProvider).encryptedMediaService;
     unawaited(service.prewarmPlayableFiles(encryptedVideos, maxItems: 6));
   }
+}
 
-  void _openMediaItem(DaylySportMediaItem item) {
-    if (item.isVideo && item.isEncrypted) {
-      final service = ref.read(appServicesProvider).encryptedMediaService;
-      unawaited(service.prewarmPlayableFile(item.file));
+typedef ReelsFeedItemBuilder = Widget Function(
+  BuildContext context,
+  DaylySportMediaItem item,
+  bool isActive,
+);
+
+class ReelsFeed extends StatefulWidget {
+  const ReelsFeed({
+    required this.items,
+    this.itemBuilder,
+    super.key,
+  });
+
+  final List<DaylySportMediaItem> items;
+  final ReelsFeedItemBuilder? itemBuilder;
+
+  @override
+  State<ReelsFeed> createState() => _ReelsFeedState();
+}
+
+class _ReelsFeedState extends State<ReelsFeed> {
+  late final PageController _pageController = PageController();
+  int _activeIndex = 0;
+
+  @override
+  void didUpdateWidget(covariant ReelsFeed oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.items.isEmpty) {
+      if (_activeIndex != 0) {
+        setState(() {
+          _activeIndex = 0;
+        });
+      }
+      return;
     }
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => MediaPlaybackScreen(item: item),
-      ),
+    final maxIndex = widget.items.length - 1;
+    if (_activeIndex > maxIndex) {
+      setState(() {
+        _activeIndex = maxIndex;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView.builder(
+      controller: _pageController,
+      scrollDirection: Axis.vertical,
+      itemCount: widget.items.length,
+      onPageChanged: (index) {
+        if (_activeIndex == index) {
+          return;
+        }
+        setState(() {
+          _activeIndex = index;
+        });
+      },
+      itemBuilder: (context, index) {
+        final item = widget.items[index];
+        final isActive = index == _activeIndex;
+        final builder = widget.itemBuilder;
+        if (builder != null) {
+          return builder(context, item, isActive);
+        }
+        return _ReelCard(item: item, isActive: isActive);
+      },
     );
   }
 }
 
 class _ReelCard extends StatelessWidget {
-  const _ReelCard({required this.item, required this.onOpen});
+  const _ReelCard({required this.item, required this.isActive});
 
   final DaylySportMediaItem item;
-  final ValueChanged<DaylySportMediaItem> onOpen;
+  final bool isActive;
 
   @override
   Widget build(BuildContext context) {
@@ -131,34 +185,14 @@ class _ReelCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 16),
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
+        child: ClipRRect(
           borderRadius: BorderRadius.circular(20),
-          onTap: () => onOpen(item),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (item.type == DaylySportMediaType.image)
-                  SecureFileImage(sourceFile: item.file, fit: BoxFit.cover)
-                else
-                  DecoratedBox(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0xFF1E232D), Color(0xFF0E1118)],
-                      ),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.play_circle_fill_rounded,
-                        size: 84,
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ),
-                DecoratedBox(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _InlineReelVideo(item: item, isActive: isActive),
+              IgnorePointer(
+                child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
@@ -170,40 +204,254 @@ class _ReelCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                Positioned(
-                  left: 14,
-                  right: 14,
-                  bottom: 14,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.fileName,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.titleMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
+              ),
+              Positioned(
+                left: 14,
+                right: 14,
+                bottom: 14,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.fileName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${item.relativePath} • ${DateFormat('EEE d MMM HH:mm').format(item.lastModified.toLocal())}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.labelMedium?.copyWith(
-                          color: Colors.white70,
-                        ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${item.relativePath} • ${DateFormat('EEE d MMM HH:mm').format(item.lastModified.toLocal())}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.labelMedium?.copyWith(
+                        color: Colors.white70,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+}
+
+class _InlineReelVideo extends ConsumerStatefulWidget {
+  const _InlineReelVideo({required this.item, required this.isActive});
+
+  final DaylySportMediaItem item;
+  final bool isActive;
+
+  @override
+  ConsumerState<_InlineReelVideo> createState() => _InlineReelVideoState();
+}
+
+class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
+  VideoPlayerController? _controller;
+  bool _isPreparing = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isActive) {
+      _ensurePrepared();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _InlineReelVideo oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.item.file.path != widget.item.file.path) {
+      _disposeController();
+      _errorMessage = null;
+      if (widget.isActive) {
+        _ensurePrepared();
+      }
+      return;
+    }
+
+    if (widget.isActive) {
+      _ensurePrepared();
+      unawaited(_playIfReady());
+    } else {
+      unawaited(_pauseIfReady());
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeController();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    final isReady = controller != null && controller.value.isInitialized;
+    final isPlaying = isReady && controller.value.isPlaying;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: isReady ? _togglePlayback : null,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (isReady)
+            FittedBox(
+              fit: BoxFit.cover,
+              clipBehavior: Clip.hardEdge,
+              child: SizedBox(
+                width: controller.value.size.width,
+                height: controller.value.size.height,
+                child: VideoPlayer(controller),
+              ),
+            )
+          else
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF1E232D), Color(0xFF0E1118)],
+                ),
+              ),
+              child: SizedBox.expand(),
+            ),
+          if (_isPreparing)
+            const Center(child: CircularProgressIndicator())
+          else if (_errorMessage != null)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  'Unable to play this reel.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            )
+          else if (!isPlaying)
+            const Center(
+              child: Icon(
+                Icons.play_circle_fill_rounded,
+                size: 84,
+                color: Colors.white70,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _ensurePrepared() async {
+    if (_controller != null || _isPreparing || !widget.item.isVideo) {
+      return;
+    }
+
+    setState(() {
+      _isPreparing = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final services = ref.read(appServicesProvider);
+      final playable = await services.encryptedMediaService.resolvePlayableFile(
+        widget.item.file,
+      );
+      final controller = VideoPlayerController.file(File(playable.file.path));
+      await controller.initialize();
+      await controller.setLooping(true);
+      if (widget.isActive) {
+        await controller.play();
+      }
+
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+
+      final previousController = _controller;
+      setState(() {
+        _controller = controller;
+        _isPreparing = false;
+      });
+      if (previousController != null) {
+        unawaited(previousController.dispose());
+      }
+
+      if (!widget.isActive) {
+        await controller.pause();
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isPreparing = false;
+        _errorMessage = 'Unable to play this reel.';
+      });
+    }
+  }
+
+  Future<void> _togglePlayback() async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+    if (controller.value.isPlaying) {
+      await controller.pause();
+    } else {
+      await controller.play();
+    }
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _playIfReady() async {
+    final controller = _controller;
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        controller.value.isPlaying) {
+      return;
+    }
+    await controller.play();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _pauseIfReady() async {
+    final controller = _controller;
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        !controller.value.isPlaying) {
+      return;
+    }
+    await controller.pause();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _disposeController() {
+    final controller = _controller;
+    _controller = null;
+    if (controller != null) {
+      unawaited(controller.dispose());
+    }
   }
 }
 

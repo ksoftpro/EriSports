@@ -23,7 +23,14 @@ const Map<DaylySportMediaSection, List<String>> _sectionDirectories = {
     'video',
   ],
   DaylySportMediaSection.highlights: ['highlights', 'highlight'],
-  DaylySportMediaSection.news: ['news'],
+  DaylySportMediaSection.news: [
+    'video-news',
+    'video_news',
+    'news-videos',
+    'news_videos',
+    'video/news',
+    'videos/news',
+  ],
   DaylySportMediaSection.updates: ['updates', 'update'],
 };
 
@@ -72,6 +79,11 @@ class DaylySportMediaSectionSnapshot {
   final List<String> scannedDirectories;
 
   bool get hasItems => items.isNotEmpty;
+
+  List<DaylySportMediaItem> get videoItems =>
+      items.where((item) => item.isVideo).toList(growable: false);
+
+  bool get hasVideoItems => items.any((item) => item.isVideo);
 
   bool get hasSectionDirectory => existingDirectories.isNotEmpty;
 }
@@ -144,7 +156,7 @@ class DaylySportMediaRepository {
         entity.path,
         fromDirectory: rootDirectory.path,
       );
-      final section = _classifySection(relativePath);
+      final section = _classifySection(relativePath, mediaType);
       if (section == null) {
         continue;
       }
@@ -219,7 +231,10 @@ class DaylySportMediaRepository {
     return null;
   }
 
-  DaylySportMediaSection? _classifySection(String relativePath) {
+  DaylySportMediaSection? _classifySection(
+    String relativePath,
+    DaylySportMediaType mediaType,
+  ) {
     final normalized = relativePath.replaceAll('\\', '/').toLowerCase();
     final fileName = p.basename(normalized);
 
@@ -230,7 +245,7 @@ class DaylySportMediaRepository {
     }
 
     for (final section in DaylySportMediaSection.values) {
-      if (_matchesSectionByKeyword(fileName, section)) {
+      if (_matchesSectionByKeyword(fileName, section, mediaType)) {
         return section;
       }
     }
@@ -249,7 +264,14 @@ class DaylySportMediaRepository {
     return false;
   }
 
-  bool _matchesSectionByKeyword(String fileName, DaylySportMediaSection section) {
+  bool _matchesSectionByKeyword(
+    String fileName,
+    DaylySportMediaSection section,
+    DaylySportMediaType mediaType,
+  ) {
+    if (mediaType != DaylySportMediaType.video) {
+      return false;
+    }
     final keywords = _sectionKeywords[section] ?? const <String>[];
     for (final keyword in keywords) {
       if (fileName.contains(keyword)) {

@@ -77,6 +77,51 @@ void main() {
       expect(highlights.single.file.path, endsWith('.esi'));
       expect(highlights.single.isEncrypted, isTrue);
     });
+
+    test('keeps video news separate from image news gallery files', () async {
+      final imageNewsDir = Directory(
+        '${daylySportDir.path}${Platform.pathSeparator}news',
+      )..createSync(recursive: true);
+      final videoNewsDir = Directory(
+        '${daylySportDir.path}${Platform.pathSeparator}video-news',
+      )..createSync(recursive: true);
+
+      final sourceVideo = File(
+        '${tempDir.path}${Platform.pathSeparator}headline.mp4',
+      )..writeAsBytesSync(List<int>.generate(4096, (index) => index % 239));
+      final sourceImage = File(
+        '${tempDir.path}${Platform.pathSeparator}story.png',
+      )..writeAsBytesSync(<int>[137, 80, 78, 71, 10, 11, 12, 13]);
+
+      encryptMediaFileSync(
+        sourcePath: sourceVideo.path,
+        destinationPath:
+            '${videoNewsDir.path}${Platform.pathSeparator}headline.mp4.esv',
+        masterKey: masterKey,
+      );
+      encryptSecureFileSync(
+        sourcePath: sourceImage.path,
+        destinationPath:
+            '${imageNewsDir.path}${Platform.pathSeparator}story.png.esi',
+        masterKey: masterKey,
+        contentType: SecureContentType.image,
+      );
+
+      final repository = DaylySportMediaRepository(
+        daylySportLocator: _TestDaylySportLocator(daylySportDir),
+      );
+
+      final snapshot = await repository.loadSnapshot();
+      final newsSection = snapshot.section(DaylySportMediaSection.news);
+
+      expect(newsSection.items, hasLength(1));
+      expect(newsSection.videoItems, hasLength(1));
+      expect(newsSection.items.single.isVideo, isTrue);
+      expect(
+        newsSection.items.single.relativePath.replaceAll('\\', '/'),
+        startsWith('video-news/'),
+      );
+    });
   });
 }
 

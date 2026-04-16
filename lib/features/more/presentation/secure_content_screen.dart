@@ -799,7 +799,13 @@ class _EncryptionImportPanel extends StatelessWidget {
       <SecureContentKind, List<String>>{
         SecureContentKind.json: <String>['json', 'imports/json', 'catalog'],
         SecureContentKind.image: <String>['news', 'teams', 'players', 'images'],
-        SecureContentKind.video: <String>['reels', 'highlights', 'updates', 'video'],
+        SecureContentKind.video: <String>[
+          'reels',
+          'highlights',
+          'video-news',
+          'updates',
+          'video',
+        ],
       };
 
   @override
@@ -854,7 +860,7 @@ class _EncryptionImportPanel extends StatelessWidget {
           _DestinationPresetEditor(
             kind: SecureContentKind.video,
             label: 'Video destination',
-            hintText: 'reels or highlights',
+            hintText: 'reels, highlights, or video-news',
             controller: videoDestinationController,
             presets: _presetsByKind[SecureContentKind.video]!,
             onApplyPreset: onApplyPreset,

@@ -140,7 +140,9 @@ class _SectionMediaGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (section.items.isEmpty) {
+    final items = section.videoItems;
+
+    if (items.isEmpty) {
       return Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
@@ -152,12 +154,12 @@ class _SectionMediaGrid extends StatelessWidget {
                 const Icon(Icons.video_collection_outlined, size: 44),
                 const SizedBox(height: 12),
                 Text(
-                  'No $title media yet',
+                  'No $title videos yet',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Drop encrypted media into ${section.scannedDirectories.join(' or ')} and refresh.',
+                  'Drop encrypted videos into ${section.scannedDirectories.join(' or ')} and refresh.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
@@ -176,9 +178,9 @@ class _SectionMediaGrid extends StatelessWidget {
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
       ),
-      itemCount: section.items.length,
+      itemCount: items.length,
       itemBuilder: (context, index) {
-        final item = section.items[index];
+        final item = items[index];
         return _MediaCard(item: item, onOpen: onOpenMedia);
       },
     );
