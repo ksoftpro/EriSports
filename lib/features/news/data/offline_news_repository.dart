@@ -4,15 +4,7 @@ import 'package:eri_sports/data/local_files/daylysport_locator.dart';
 import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:path/path.dart' as p;
 
-const Set<String> _supportedImageExtensions = {
-  '.jpg',
-  '.jpeg',
-  '.png',
-  '.webp',
-  '.gif',
-  '.bmp',
-  kEncryptedImageExtension,
-};
+const Set<String> _supportedImageExtensions = {kEncryptedImageExtension};
 
 class OfflineNewsMediaItem {
   const OfflineNewsMediaItem({
@@ -57,6 +49,7 @@ class OfflineNewsRepository {
     : _daylySportLocator = daylySportLocator;
 
   final DaylySportLocator _daylySportLocator;
+  final EncryptedFileResolver _fileResolver = const EncryptedFileResolver();
 
   OfflineNewsGallerySnapshot? _cachedSnapshot;
   DateTime? _cachedNewsDirectoryModifiedUtc;
@@ -115,8 +108,8 @@ class OfflineNewsRepository {
           continue;
         }
 
-        final extension = p.extension(entity.path).toLowerCase();
-        if (!_supportedImageExtensions.contains(extension)) {
+        final descriptor = _fileResolver.describePath(entity.path);
+        if (descriptor.kind != SecureContentKind.image || !descriptor.isEncrypted) {
           skippedUnsupported += 1;
           continue;
         }

@@ -42,7 +42,7 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
         title: const Text('Offline News'),
         actions: [
           IconButton(
-            tooltip: 'Refresh news folder',
+            tooltip: 'Refresh encrypted news',
             onPressed: _onRefresh,
             icon: const Icon(Icons.refresh),
           ),
@@ -66,7 +66,7 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                 icon: Icons.folder_off,
                 title: 'No news folder found',
                 message:
-                    'Create this folder and add images: ${snapshot.newsDirectory.path}',
+                    'Create this folder and add encrypted news images: ${snapshot.newsDirectory.path}',
                 ctaLabel: 'Refresh',
                 onPressed: _onRefresh,
               );
@@ -74,20 +74,20 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
 
             if (!snapshot.hasImages) {
               final details = StringBuffer(
-                'No supported images were found in ${snapshot.newsDirectory.path}.',
+                'No encrypted news images were found in ${snapshot.newsDirectory.path}.',
               );
               if (snapshot.skippedUnsupportedCount > 0) {
                 details.write(
-                  '\n\nSkipped unsupported files: ${snapshot.skippedUnsupportedCount}.',
+                  '\n\nSkipped non-encrypted or unsupported files: ${snapshot.skippedUnsupportedCount}.',
                 );
               }
               details.write(
-                '\nSupported formats: ${snapshot.supportedFormats.join(', ')}',
+                '\nSupported encrypted formats: ${snapshot.supportedFormats.join(', ')}',
               );
 
               return _OfflineNewsEmptyState(
                 icon: Icons.image_not_supported_outlined,
-                title: 'No offline news images yet',
+                title: 'No encrypted news images yet',
                 message: details.toString(),
                 ctaLabel: 'Refresh',
                 onPressed: _onRefresh,
