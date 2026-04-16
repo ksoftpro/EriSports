@@ -45,8 +45,8 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       final services = ref.read(appServicesProvider);
       final directory =
           await services.daylySportLocator.getOrCreateDaylySportDirectory();
-      final inventory = await Isolate.run(
-        () => scanSecureContentInventory(directory.path),
+      final inventory = await scanSecureContentInventoryInIsolate(
+        directory.path,
       );
 
       if (!mounted) {
@@ -283,6 +283,12 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       ),
     );
   }
+}
+
+Future<SecureContentInventory> scanSecureContentInventoryInIsolate(
+  String rootPath,
+) {
+  return Isolate.run(() => scanSecureContentInventory(rootPath));
 }
 
 class SecureContentInventory {
