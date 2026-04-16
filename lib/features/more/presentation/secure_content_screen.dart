@@ -5,6 +5,7 @@ import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/data/secure_content/daylysport_secure_content_coordinator.dart';
 import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
+import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +22,7 @@ class SecureContentScreen extends ConsumerStatefulWidget {
 }
 
 class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
+  static const int _bulkRemoveConfirmationThreshold = 5;
   static const List<String> _allowedSourceExtensions = <String>[
     'json',
     'jpg',
@@ -49,8 +51,12 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
   bool _isEncrypting = false;
   bool _overwriteExisting = true;
   String? _selectedSourceRoot;
-  final TextEditingController _destinationController =
-      TextEditingController(text: 'imports');
+    final TextEditingController _jsonDestinationController =
+      TextEditingController(text: 'json');
+    final TextEditingController _imageDestinationController =
+      TextEditingController(text: 'news');
+    final TextEditingController _videoDestinationController =
+      TextEditingController(text: 'reels');
   final List<_PendingSecureSource> _selectedSources = <_PendingSecureSource>[];
 
   @override
@@ -61,7 +67,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
 
   @override
   void dispose() {
-    _destinationController.dispose();
+    _jsonDestinationController.dispose();
+    _imageDestinationController.dispose();
+    _videoDestinationController.dispose();
     super.dispose();
   }
 
@@ -321,17 +329,85 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     });
   }
 
+  void _removeSelectedSource(_PendingSecureSource source) {
+    if (_isEncrypting) {
+      return;
+    }
+
+    setState(() {
+      _selectedSources.remove(source);
+      if (_selectedSources.isEmpty) {
+        _selectedSourceRoot = null;
+      }
+      _statusMessage = 'Removed ${p.basename(source.sourcePath)} from the import list.';
+      _statusIsError = false;
+    });
+  }
+
+  Future<void> _removeSourcesByKind(SecureContentKind kind) async {
+    if (_isEncrypting) {
+      return;
+    }
+
+    final removedCount =
+        _selectedSources.where((source) => source.kind == kind).length;
+    if (removedCount == 0) {
+      return;
+    }
+
+    if (removedCount >= _bulkRemoveConfirmationThreshold) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text('Remove all ${_kindLabel(kind)}?'),
+            content: Text(
+              'This will remove $removedCount ${_kindLabel(kind)} item${removedCount == 1 ? '' : 's'} from the pending import list.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Remove'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed != true || !mounted) {
+        return;
+      }
+    }
+
+    setState(() {
+      _selectedSources.removeWhere((source) => source.kind == kind);
+      if (_selectedSources.isEmpty) {
+        _selectedSourceRoot = null;
+      }
+      _statusMessage = 'Removed $removedCount ${_kindLabel(kind)} item${removedCount == 1 ? '' : 's'} from the import list.';
+      _statusIsError = false;
+    });
+  }
+
   Future<void> _encryptSelection() async {
     if (_isEncrypting || _selectedSources.isEmpty) {
       return;
     }
 
-    final normalizedDestination = _normalizeDestinationRoot(
-      _destinationController.text,
-    );
-    if (normalizedDestination.isEmpty) {
+    final destinationByKind = _buildDestinationByKind();
+    final missingDestinationKinds = _selectedSources
+        .map((source) => source.kind)
+        .where((kind) => (destinationByKind[kind] ?? '').isEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (missingDestinationKinds.isNotEmpty) {
       setState(() {
-        _statusMessage = 'Enter a valid destination folder inside daylySport.';
+        _statusMessage =
+            'Enter valid destination folders for ${missingDestinationKinds.map(_kindLabel).join(', ')}.';
         _statusIsError = true;
       });
       return;
@@ -350,7 +426,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
             (source) => SecureContentEncryptionRequest(
               sourcePath: source.sourcePath,
               relativeOutputPath: p.join(
-                normalizedDestination,
+                destinationByKind[source.kind]!,
                 source.relativeOutputPath,
               ),
             ),
@@ -409,6 +485,33 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         .where((segment) => segment.isNotEmpty && segment != '.' && segment != '..')
         .join('/');
     return sanitized;
+  }
+
+  Map<SecureContentKind, String> _buildDestinationByKind() {
+    return <SecureContentKind, String>{
+      SecureContentKind.json: _normalizeDestinationRoot(
+        _jsonDestinationController.text,
+      ),
+      SecureContentKind.image: _normalizeDestinationRoot(
+        _imageDestinationController.text,
+      ),
+      SecureContentKind.video: _normalizeDestinationRoot(
+        _videoDestinationController.text,
+      ),
+    };
+  }
+
+  String _kindLabel(SecureContentKind kind) {
+    switch (kind) {
+      case SecureContentKind.json:
+        return 'JSON';
+      case SecureContentKind.image:
+        return 'images';
+      case SecureContentKind.video:
+        return 'video';
+      case SecureContentKind.other:
+        return 'other';
+    }
   }
 
   String _buildEncryptionStatusMessage(SecureContentEncryptionBatchResult result) {
@@ -537,14 +640,32 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                     _EncryptionImportPanel(
                       selectedSources: _selectedSources,
                       selectedSourceRoot: _selectedSourceRoot,
-                      destinationController: _destinationController,
+                      destinationByKind: _buildDestinationByKind(),
+                      jsonDestinationController: _jsonDestinationController,
+                      imageDestinationController: _imageDestinationController,
+                      videoDestinationController: _videoDestinationController,
                       overwriteExisting: _overwriteExisting,
                       isEncrypting: _isEncrypting,
+                      onApplyPreset: (kind, value) {
+                        final controller = switch (kind) {
+                          SecureContentKind.json => _jsonDestinationController,
+                          SecureContentKind.image => _imageDestinationController,
+                          SecureContentKind.video => _videoDestinationController,
+                          SecureContentKind.other => _jsonDestinationController,
+                        };
+                        controller.text = value;
+                        controller.selection = TextSelection.fromPosition(
+                          TextPosition(offset: controller.text.length),
+                        );
+                        setState(() {});
+                      },
                       onOverwriteChanged: (value) {
                         setState(() {
                           _overwriteExisting = value;
                         });
                       },
+                      onRemoveAllByKind: _removeSourcesByKind,
+                      onRemoveSource: _removeSelectedSource,
                       onImport: _encryptSelection,
                     ),
                     if (_statusMessage != null) ...[
@@ -620,20 +741,39 @@ class _EncryptionImportPanel extends StatelessWidget {
   const _EncryptionImportPanel({
     required this.selectedSources,
     required this.selectedSourceRoot,
-    required this.destinationController,
+    required this.destinationByKind,
+    required this.jsonDestinationController,
+    required this.imageDestinationController,
+    required this.videoDestinationController,
     required this.overwriteExisting,
     required this.isEncrypting,
+    required this.onApplyPreset,
     required this.onOverwriteChanged,
+    required this.onRemoveAllByKind,
+    required this.onRemoveSource,
     required this.onImport,
   });
 
   final List<_PendingSecureSource> selectedSources;
   final String? selectedSourceRoot;
-  final TextEditingController destinationController;
+  final Map<SecureContentKind, String> destinationByKind;
+  final TextEditingController jsonDestinationController;
+  final TextEditingController imageDestinationController;
+  final TextEditingController videoDestinationController;
   final bool overwriteExisting;
   final bool isEncrypting;
+  final void Function(SecureContentKind kind, String value) onApplyPreset;
   final ValueChanged<bool> onOverwriteChanged;
+  final Future<void> Function(SecureContentKind kind) onRemoveAllByKind;
+  final ValueChanged<_PendingSecureSource> onRemoveSource;
   final VoidCallback onImport;
+
+  static const Map<SecureContentKind, List<String>> _presetsByKind =
+      <SecureContentKind, List<String>>{
+        SecureContentKind.json: <String>['json', 'imports/json', 'catalog'],
+        SecureContentKind.image: <String>['news', 'teams', 'players', 'images'],
+        SecureContentKind.video: <String>['reels', 'highlights', 'updates', 'video'],
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -666,29 +806,31 @@ class _EncryptionImportPanel extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: destinationController,
-            decoration: const InputDecoration(
-              labelText: 'Destination folder inside daylySport',
-              hintText: 'imports or reels/season_2026',
-            ),
+          _DestinationPresetEditor(
+            kind: SecureContentKind.json,
+            label: 'JSON destination',
+            hintText: 'json or imports/json',
+            controller: jsonDestinationController,
+            presets: _presetsByKind[SecureContentKind.json]!,
+            onApplyPreset: onApplyPreset,
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final preset in const ['imports', 'json', 'news', 'highlights', 'updates', 'reels'])
-                ActionChip(
-                  label: Text(preset),
-                  onPressed: () {
-                    destinationController.text = preset;
-                    destinationController.selection = TextSelection.fromPosition(
-                      TextPosition(offset: destinationController.text.length),
-                    );
-                  },
-                ),
-            ],
+          _DestinationPresetEditor(
+            kind: SecureContentKind.image,
+            label: 'Image destination',
+            hintText: 'news or teams',
+            controller: imageDestinationController,
+            presets: _presetsByKind[SecureContentKind.image]!,
+            onApplyPreset: onApplyPreset,
+          ),
+          const SizedBox(height: 10),
+          _DestinationPresetEditor(
+            kind: SecureContentKind.video,
+            label: 'Video destination',
+            hintText: 'reels or highlights',
+            controller: videoDestinationController,
+            presets: _presetsByKind[SecureContentKind.video]!,
+            onApplyPreset: onApplyPreset,
           ),
           const SizedBox(height: 10),
           SwitchListTile.adaptive(
@@ -711,6 +853,48 @@ class _EncryptionImportPanel extends StatelessWidget {
               _StatChip(label: 'Video', value: '$videoCount'),
             ],
           ),
+          if (selectedSources.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (jsonCount > 0)
+                  ActionChip(
+                    avatar: const Icon(Icons.data_object_rounded, size: 18),
+                    label: Text('Remove all JSON ($jsonCount)'),
+                    onPressed:
+                        isEncrypting
+                            ? null
+                            : () {
+                              onRemoveAllByKind(SecureContentKind.json);
+                            },
+                  ),
+                if (imageCount > 0)
+                  ActionChip(
+                    avatar: const Icon(Icons.image_outlined, size: 18),
+                    label: Text('Remove all images ($imageCount)'),
+                    onPressed:
+                        isEncrypting
+                            ? null
+                            : () {
+                              onRemoveAllByKind(SecureContentKind.image);
+                            },
+                  ),
+                if (videoCount > 0)
+                  ActionChip(
+                    avatar: const Icon(Icons.video_library_outlined, size: 18),
+                    label: Text('Remove all videos ($videoCount)'),
+                    onPressed:
+                        isEncrypting
+                            ? null
+                            : () {
+                              onRemoveAllByKind(SecureContentKind.video);
+                            },
+                  ),
+              ],
+            ),
+          ],
           if (selectedSourceRoot != null) ...[
             const SizedBox(height: 10),
             Text(
@@ -725,27 +909,10 @@ class _EncryptionImportPanel extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             )
           else
-            ...selectedSources.take(6).map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      _iconForKind(item.kind),
-                      size: 18,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(item.relativeOutputPath)),
-                  ],
-                ),
-              ),
-            ),
-          if (selectedSources.length > 6)
-            Text(
-              '${selectedSources.length - 6} more files selected.',
-              style: Theme.of(context).textTheme.bodySmall,
+            _SelectedSourcesReviewTable(
+              selectedSources: selectedSources,
+              destinationByKind: destinationByKind,
+              onRemoveSource: onRemoveSource,
             ),
           const SizedBox(height: 14),
           FilledButton.icon(
@@ -759,8 +926,140 @@ class _EncryptionImportPanel extends StatelessWidget {
       ),
     );
   }
+}
 
-  IconData _iconForKind(SecureContentKind kind) {
+class _DestinationPresetEditor extends StatelessWidget {
+  const _DestinationPresetEditor({
+    required this.kind,
+    required this.label,
+    required this.hintText,
+    required this.controller,
+    required this.presets,
+    required this.onApplyPreset,
+  });
+
+  final SecureContentKind kind;
+  final String label;
+  final String hintText;
+  final TextEditingController controller;
+  final List<String> presets;
+  final void Function(SecureContentKind kind, String value) onApplyPreset;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            labelText: label,
+            hintText: hintText,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final preset in presets)
+              ActionChip(
+                label: Text(preset),
+                onPressed: () => onApplyPreset(kind, preset),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SelectedSourcesReviewTable extends StatelessWidget {
+  const _SelectedSourcesReviewTable({
+    required this.selectedSources,
+    required this.destinationByKind,
+    required this.onRemoveSource,
+  });
+
+  final List<_PendingSecureSource> selectedSources;
+  final Map<SecureContentKind, String> destinationByKind;
+  final ValueChanged<_PendingSecureSource> onRemoveSource;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Review before import',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            columnSpacing: 18,
+            columns: const [
+              DataColumn(label: Text('Type')),
+              DataColumn(label: Text('Source')),
+              DataColumn(label: Text('Encrypted output')),
+              DataColumn(label: Text('Remove')),
+            ],
+            rows: selectedSources.map((source) {
+              final destinationRoot = destinationByKind[source.kind] ?? '';
+              final outputPath = destinationRoot.isEmpty
+                  ? source.relativeOutputPath
+                  : p.join(destinationRoot, source.relativeOutputPath);
+              return DataRow(
+                cells: [
+                  DataCell(
+                    Row(
+                      children: [
+                        Icon(
+                          _iconForKind(source.kind),
+                          size: 18,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(_kindText(source.kind)),
+                      ],
+                    ),
+                  ),
+                  DataCell(
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 220),
+                      child: Text(
+                        source.relativeOutputPath,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 280),
+                      child: Text(
+                        _encryptedPreviewPath(outputPath, source.kind),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    IconButton(
+                      tooltip: 'Remove file',
+                      onPressed: () => onRemoveSource(source),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                    ),
+                  ),
+                ],
+              );
+            }).toList(growable: false),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static IconData _iconForKind(SecureContentKind kind) {
     switch (kind) {
       case SecureContentKind.json:
         return Icons.data_object_rounded;
@@ -770,6 +1069,32 @@ class _EncryptionImportPanel extends StatelessWidget {
         return Icons.video_library_outlined;
       case SecureContentKind.other:
         return Icons.insert_drive_file_outlined;
+    }
+  }
+
+  static String _kindText(SecureContentKind kind) {
+    switch (kind) {
+      case SecureContentKind.json:
+        return 'JSON';
+      case SecureContentKind.image:
+        return 'Image';
+      case SecureContentKind.video:
+        return 'Video';
+      case SecureContentKind.other:
+        return 'Other';
+    }
+  }
+
+  static String _encryptedPreviewPath(String logicalPath, SecureContentKind kind) {
+    switch (kind) {
+      case SecureContentKind.json:
+        return '$logicalPath$kEncryptedJsonExtension';
+      case SecureContentKind.image:
+        return '$logicalPath$kEncryptedImageExtension';
+      case SecureContentKind.video:
+        return '$logicalPath$kEncryptedMediaExtension';
+      case SecureContentKind.other:
+        return logicalPath;
     }
   }
 }
