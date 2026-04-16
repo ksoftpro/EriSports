@@ -275,19 +275,20 @@ class TeamRawSource {
       }
 
       for (final name in preferredFileNames) {
-        for (final candidatePath in candidateSecureJsonPaths(
-          '${directory.path}${Platform.pathSeparator}$name',
-        )) {
-          final file = File(candidatePath);
-          if (await file.exists()) {
-            candidates.add(file);
-          }
+        final file = File(
+          '${directory.path}${Platform.pathSeparator}$name$kEncryptedJsonExtension',
+        );
+        if (await file.exists()) {
+          candidates.add(file);
         }
       }
     }
 
     await for (final entity in root.list(recursive: true, followLinks: false)) {
       if (entity is! File) {
+        continue;
+      }
+      if (!isEncryptedJsonPath(entity.path)) {
         continue;
       }
       final lowerName = _fileName(entity.path).toLowerCase();

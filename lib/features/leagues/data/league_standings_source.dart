@@ -266,6 +266,9 @@ class LeagueStandingsSource {
         if (entity is! File) {
           continue;
         }
+        if (!isEncryptedJsonPath(entity.path)) {
+          continue;
+        }
         final lowerName = _filename(entity.path).toLowerCase();
         if (lowerName.startsWith(filePrefix.toLowerCase()) &&
             lowerName.endsWith('.json')) {
@@ -307,6 +310,9 @@ class LeagueStandingsSource {
       for (final entity
           in directory.listSync(recursive: false, followLinks: false)) {
         if (entity is! File) {
+          continue;
+        }
+        if (!isEncryptedJsonPath(entity.path)) {
           continue;
         }
 
@@ -616,13 +622,11 @@ class LeagueStandingsSource {
       }
 
       for (final expected in expectedNames) {
-        for (final candidatePath in candidateSecureJsonPaths(
-          '${directory.path}${Platform.pathSeparator}$expected',
-        )) {
-          final file = File(candidatePath);
-          if (await file.exists()) {
-            matches.add(file);
-          }
+        final file = File(
+          '${directory.path}${Platform.pathSeparator}$expected$kEncryptedJsonExtension',
+        );
+        if (await file.exists()) {
+          matches.add(file);
         }
       }
     }
@@ -630,6 +634,9 @@ class LeagueStandingsSource {
     if (matches.isEmpty) {
       for (final entity in root.listSync(recursive: true, followLinks: false)) {
         if (entity is! File) {
+          continue;
+        }
+        if (!isEncryptedJsonPath(entity.path)) {
           continue;
         }
 
@@ -661,6 +668,9 @@ class LeagueStandingsSource {
     final matches = <File>[];
     for (final entity in root.listSync(recursive: true, followLinks: false)) {
       if (entity is! File) {
+        continue;
+      }
+      if (!isEncryptedJsonPath(entity.path)) {
         continue;
       }
 

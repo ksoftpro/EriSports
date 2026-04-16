@@ -63,7 +63,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> {
             return _EmptyReelsState(
               title: 'No short videos found',
               message:
-                  'Add files in ${reelsSection.scannedDirectories.join(' or ')} to populate reels.',
+                  'Add encrypted files in ${reelsSection.scannedDirectories.join(' or ')} to populate reels.',
             );
           }
 

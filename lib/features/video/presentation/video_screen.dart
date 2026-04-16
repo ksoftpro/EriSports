@@ -157,7 +157,7 @@ class _SectionMediaGrid extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Drop local files into ${section.scannedDirectories.join(' or ')} and refresh.',
+                  'Drop encrypted media into ${section.scannedDirectories.join(' or ')} and refresh.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),

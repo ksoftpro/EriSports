@@ -5,26 +5,9 @@ import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:path/path.dart' as p;
 
-const Set<String> _supportedImageExtensions = {
-  '.jpg',
-  '.jpeg',
-  '.png',
-  '.webp',
-  '.gif',
-  '.bmp',
-  kEncryptedImageExtension,
-};
+const Set<String> _supportedImageExtensions = {kEncryptedImageExtension};
 
-const Set<String> _supportedVideoExtensions = {
-  '.mp4',
-  '.mov',
-  '.m4v',
-  '.webm',
-  '.mkv',
-  '.avi',
-  '.3gp',
-  kEncryptedMediaExtension,
-};
+const Set<String> _supportedVideoExtensions = {kEncryptedMediaExtension};
 
 enum DaylySportMediaSection { reels, highlights, news, updates }
 

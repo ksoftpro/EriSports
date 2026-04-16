@@ -289,13 +289,13 @@ Future<_HydratedPlayerResult?> _hydratePlayerFromLocalJson({
 
   final files = <File>[];
   await for (final entity in root.list(recursive: true, followLinks: false)) {
-    if (entity is File && isSupportedSecureJsonPath(entity.path)) {
+    if (entity is File && isEncryptedJsonPath(entity.path)) {
       files.add(entity);
     }
   }
 
   if (files.isEmpty) {
-    log('No JSON files found under daylysport path.', warn: true);
+    log('No encrypted JSON files found under daylysport path.', warn: true);
     return null;
   }
 
