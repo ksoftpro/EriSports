@@ -102,9 +102,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 _isSameDay(_selectedDay!, day)) {
                               return;
                             }
-                            setState(() {
-                              _selectedDay = day;
-                            });
+                            _selectDay(
+                              days,
+                              day,
+                              forceTabStripSync: true,
+                            );
                           },
                           itemBuilder: (context, index) {
                             final day = days[index];
@@ -353,15 +355,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     final controller = _dayPageController;
-    if (controller != null && controller.hasClients) {
-      final currentPage = controller.page?.round() ?? controller.initialPage;
+    if (controller == null) {
+      return;
+    }
+
+    void syncPageController() {
+      if (!mounted) {
+        return;
+      }
+      final currentController = _dayPageController;
+      if (currentController == null || !currentController.hasClients) {
+        return;
+      }
+
+      final currentPage =
+          currentController.page?.round() ?? currentController.initialPage;
       if (currentPage != index) {
-        controller.animateToPage(
+        currentController.animateToPage(
           index,
           duration: const Duration(milliseconds: 240),
           curve: Curves.easeOutCubic,
         );
       }
+    }
+
+    if (controller.hasClients) {
+      syncPageController();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        syncPageController();
+      });
     }
   }
 
@@ -663,9 +686,7 @@ class _DayTabStripState extends State<_DayTabStrip> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollSelectedIntoView(animate: false);
-    });
+    _scheduleCenterSelectedTab(animate: false);
   }
 
   @override
@@ -676,9 +697,7 @@ class _DayTabStripState extends State<_DayTabStrip> {
     final requestChanged = oldWidget.scrollRequestId != widget.scrollRequestId;
 
     if (selectedChanged || daysChanged || requestChanged) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollSelectedIntoView();
-      });
+      _scheduleCenterSelectedTab();
     }
   }
 
@@ -768,11 +787,7 @@ class _DayTabStripState extends State<_DayTabStrip> {
     final targetContext = selectedKey?.currentContext;
     final viewportContext = _viewportKey.currentContext;
     if (targetContext == null || viewportContext == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _scrollSelectedIntoView(animate: animate);
-        }
-      });
+      _scheduleCenterSelectedTab(animate: animate);
       return;
     }
 
@@ -810,6 +825,20 @@ class _DayTabStripState extends State<_DayTabStrip> {
     } else {
       _scrollController.jumpTo(clampedOffset);
     }
+  }
+
+  void _scheduleCenterSelectedTab({bool animate = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      if (!_scrollController.hasClients ||
+          !_scrollController.position.hasContentDimensions) {
+        _scheduleCenterSelectedTab(animate: animate);
+        return;
+      }
+      _scrollSelectedIntoView(animate: animate);
+    });
   }
 
   GlobalKey _keyForDay(DateTime day) {
