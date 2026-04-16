@@ -657,6 +657,7 @@ class _DayTabStrip extends StatefulWidget {
 class _DayTabStripState extends State<_DayTabStrip> {
   final ScrollController _scrollController = ScrollController();
   final Map<String, GlobalKey> _dayKeys = <String, GlobalKey>{};
+  static const Duration _tabCenterDuration = Duration(milliseconds: 180);
 
   @override
   void initState() {
@@ -770,9 +771,8 @@ class _DayTabStripState extends State<_DayTabStrip> {
     Scrollable.ensureVisible(
       targetContext,
       alignment: 0.5,
-      duration:
-          animate ? const Duration(milliseconds: 240) : Duration.zero,
-      curve: Curves.easeOutCubic,
+      duration: animate ? _tabCenterDuration : Duration.zero,
+      curve: Curves.easeOutQuart,
     );
   }
 
