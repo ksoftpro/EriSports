@@ -89,12 +89,60 @@ void main() {
     GoRouter.of(tester.element(find.text('Overview').first)).pop();
     await _pumpForStability(tester);
   });
+
+  testWidgets('settings theme controls and secure content tools work', (
+    tester,
+  ) async {
+    final harness = await _WidgetHarness.create(tester);
+    addTearDown(() => harness.dispose(tester));
+
+    GoRouter.of(tester.element(find.text('Arsenal').first)).go('/settings');
+    await _pumpUntilVisible(tester, find.text('Appearance'));
+
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Offline Content Security'), findsOneWidget);
+
+    await tester.tap(find.text('Dark').first.hitTestable());
+    await _pumpForStability(tester);
+
+    expect(harness.preferences.getString('app_theme_mode'), 'dark');
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
+
+    await tester.tap(find.text('Open secure content').first.hitTestable());
+    await _pumpUntilVisible(tester, find.text('Encrypted offline runtime'));
+    await _pumpUntilVisible(tester, find.text('Inventory overview'));
+
+    expect(find.text('Warm secure caches'), findsOneWidget);
+    expect(find.text('Clear decrypted caches'), findsOneWidget);
+
+    await tester.tap(find.text('Warm secure caches').first.hitTestable());
+    await _pumpUntilVisible(
+      tester,
+      find.text('Secure runtime caches are ready for JSON, images, and video.'),
+    );
+
+    await tester.tap(find.text('Clear decrypted caches').first.hitTestable());
+    await _pumpUntilVisible(
+      tester,
+      find.text(
+        'Decrypted cache files were removed. Encrypted source files were not changed.',
+      ),
+    );
+  });
 }
 
 class _WidgetHarness {
-  _WidgetHarness({required this.database, required this.tempRoot});
+  _WidgetHarness({
+    required this.database,
+    required this.preferences,
+    required this.tempRoot,
+  });
 
   final AppDatabase database;
+  final SharedPreferences preferences;
   final Directory tempRoot;
 
   static Future<_WidgetHarness> create(WidgetTester tester) async {
@@ -205,7 +253,11 @@ class _WidgetHarness {
     );
     await _pumpForStability(tester);
 
-    return _WidgetHarness(database: database, tempRoot: tempRoot);
+    return _WidgetHarness(
+      database: database,
+      preferences: preferences,
+      tempRoot: tempRoot,
+    );
   }
 
   Future<void> dispose(WidgetTester tester) async {
@@ -509,10 +561,7 @@ class _WidgetHarness {
     writeJson('teams_2026_04_03.json', teamsJson);
     writeJson('fixtures_2026_04_03.json', fixturesJson);
     writeJson('standings_2026_04_03.json', standingsJson);
-    writeJson(
-      'top_standings_full_data_2026_04_03.json',
-      topStandingsFullJson,
-    );
+    writeJson('top_standings_full_data_2026_04_03.json', topStandingsFullJson);
     writeJson('players_2026_04_03.json', playersJson);
     writeJson('match_detail_1001.json', matchDetailJson);
     return Future<void>.value();

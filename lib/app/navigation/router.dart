@@ -7,6 +7,7 @@ import 'package:eri_sports/features/leagues/presentation/leagues_screen.dart';
 import 'package:eri_sports/features/match_detail/presentation/match_detail_screen.dart';
 import 'package:eri_sports/features/more/presentation/about_screen.dart';
 import 'package:eri_sports/features/more/presentation/more_screen.dart';
+import 'package:eri_sports/features/more/presentation/secure_content_screen.dart';
 import 'package:eri_sports/features/news/presentation/offline_news_screen.dart';
 import 'package:eri_sports/features/player/presentation/player_screen.dart';
 import 'package:eri_sports/features/player_stats/presentation/player_stats_screen.dart';
@@ -33,14 +34,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/home',
                 name: 'home',
                 pageBuilder:
-                    (context, state) =>
-                        NoTransitionPage(
-                          child: HomeScreen(
-                            initialDateIso: state.uri.queryParameters['date'],
-                            initialDateFocusToken:
-                                state.uri.queryParameters['focus'],
-                          ),
-                        ),
+                    (context, state) => NoTransitionPage(
+                      child: HomeScreen(
+                        initialDateIso: state.uri.queryParameters['date'],
+                        initialDateFocusToken:
+                            state.uri.queryParameters['focus'],
+                      ),
+                    ),
               ),
             ],
           ),
@@ -106,6 +106,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/about',
         name: 'about',
         builder: (context, state) => const AboutScreen(),
+      ),
+      GoRoute(
+        path: '/secure-content',
+        name: 'secure-content',
+        builder: (context, state) => const SecureContentScreen(),
       ),
       GoRoute(
         path: '/search',

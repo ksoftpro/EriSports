@@ -42,6 +42,18 @@ class EncryptedImageService {
     await _deletePartialCacheFiles(cacheDirectory);
   }
 
+  Future<void> clearCache() async {
+    final cacheDirectory = await _getOrCreateCacheDirectory();
+    if (await cacheDirectory.exists()) {
+      await for (final entity in cacheDirectory.list(followLinks: false)) {
+        if (entity is File) {
+          await entity.delete();
+        }
+      }
+    }
+    await _fingerprintCache.clearNamespace('image');
+  }
+
   Future<ResolvedSecureImage> resolveImageFile(File sourceFile) {
     final normalizedPath = sourceFile.path;
     if (!isEncryptedImagePath(normalizedPath)) {
@@ -54,93 +66,100 @@ class EncryptedImageService {
       );
     }
 
-    return _inFlight.putIfAbsent(normalizedPath, () async {
-      final sourceStat = await sourceFile.stat();
-      final cacheDirectory = await _getOrCreateCacheDirectory();
-      final cachedEntry = _fingerprintCache.read('image', normalizedPath);
-      if (cachedEntry != null && cachedEntry.matches(normalizedPath, sourceStat)) {
-        final cachedFile = File(cachedEntry.cachePath);
-        if (await cachedFile.exists()) {
-          return ResolvedSecureImage(
-            file: cachedFile,
-            usedCache: true,
-            wasDecrypted: false,
+    return _inFlight
+        .putIfAbsent(normalizedPath, () async {
+          final sourceStat = await sourceFile.stat();
+          final cacheDirectory = await _getOrCreateCacheDirectory();
+          final cachedEntry = _fingerprintCache.read('image', normalizedPath);
+          if (cachedEntry != null &&
+              cachedEntry.matches(normalizedPath, sourceStat)) {
+            final cachedFile = File(cachedEntry.cachePath);
+            if (await cachedFile.exists()) {
+              return ResolvedSecureImage(
+                file: cachedFile,
+                usedCache: true,
+                wasDecrypted: false,
+              );
+            }
+          }
+
+          final header = await Isolate.run(
+            () => readEncryptedSecureContentHeaderFromPath(normalizedPath),
           );
-        }
-      }
+          final sourcePrefix = _sourcePrefixForPath(normalizedPath);
+          final cacheBasePrefix = _cacheBasePrefix(sourcePrefix, sourceStat);
+          final cacheFile = File(
+            p.join(
+              cacheDirectory.path,
+              '$cacheBasePrefix${header.originalExtension}',
+            ),
+          );
 
-      final header = await Isolate.run(
-        () => readEncryptedSecureContentHeaderFromPath(normalizedPath),
-      );
-      final sourcePrefix = _sourcePrefixForPath(normalizedPath);
-      final cacheBasePrefix = _cacheBasePrefix(sourcePrefix, sourceStat);
-      final cacheFile = File(
-        p.join(cacheDirectory.path, '$cacheBasePrefix${header.originalExtension}'),
-      );
+          if (await cacheFile.exists()) {
+            await _fingerprintCache.write(
+              'image',
+              CachedFileFingerprintEntry(
+                sourcePath: normalizedPath,
+                sizeBytes: sourceStat.size,
+                modifiedAtEpochMs:
+                    sourceStat.modified.toUtc().millisecondsSinceEpoch,
+                cachePath: cacheFile.path,
+              ),
+            );
+            return ResolvedSecureImage(
+              file: cacheFile,
+              usedCache: true,
+              wasDecrypted: false,
+            );
+          }
 
-      if (await cacheFile.exists()) {
-        await _fingerprintCache.write(
-          'image',
-          CachedFileFingerprintEntry(
-            sourcePath: normalizedPath,
-            sizeBytes: sourceStat.size,
-            modifiedAtEpochMs:
-                sourceStat.modified.toUtc().millisecondsSinceEpoch,
-            cachePath: cacheFile.path,
-          ),
-        );
-        return ResolvedSecureImage(
-          file: cacheFile,
-          usedCache: true,
-          wasDecrypted: false,
-        );
-      }
+          await _deleteStaleCacheFiles(cacheDirectory, sourcePrefix);
+          if (cachedEntry != null && cachedEntry.cachePath != cacheFile.path) {
+            final staleFile = File(cachedEntry.cachePath);
+            if (await staleFile.exists()) {
+              await staleFile.delete();
+            }
+          }
 
-      await _deleteStaleCacheFiles(cacheDirectory, sourcePrefix);
-      if (cachedEntry != null && cachedEntry.cachePath != cacheFile.path) {
-        final staleFile = File(cachedEntry.cachePath);
-        if (await staleFile.exists()) {
-          await staleFile.delete();
-        }
-      }
+          final tempOutput = File('${cacheFile.path}.part');
+          if (await tempOutput.exists()) {
+            await tempOutput.delete();
+          }
 
-      final tempOutput = File('${cacheFile.path}.part');
-      if (await tempOutput.exists()) {
-        await tempOutput.delete();
-      }
+          await Isolate.run(
+            () => decryptSecureFileSync(
+              sourcePath: normalizedPath,
+              destinationPath: tempOutput.path,
+              masterKey: _masterKey,
+              overwrite: true,
+            ),
+          );
 
-      await Isolate.run(
-        () => decryptSecureFileSync(
-          sourcePath: normalizedPath,
-          destinationPath: tempOutput.path,
-          masterKey: _masterKey,
-          overwrite: true,
-        ),
-      );
+          if (await cacheFile.exists()) {
+            await cacheFile.delete();
+          }
+          await tempOutput.rename(cacheFile.path);
 
-      if (await cacheFile.exists()) {
-        await cacheFile.delete();
-      }
-      await tempOutput.rename(cacheFile.path);
+          await _fingerprintCache.write(
+            'image',
+            CachedFileFingerprintEntry(
+              sourcePath: normalizedPath,
+              sizeBytes: sourceStat.size,
+              modifiedAtEpochMs:
+                  sourceStat.modified.toUtc().millisecondsSinceEpoch,
+              cachePath: cacheFile.path,
+            ),
+          );
 
-      await _fingerprintCache.write(
-        'image',
-        CachedFileFingerprintEntry(
-          sourcePath: normalizedPath,
-          sizeBytes: sourceStat.size,
-          modifiedAtEpochMs: sourceStat.modified.toUtc().millisecondsSinceEpoch,
-          cachePath: cacheFile.path,
-        ),
-      );
-
-      return ResolvedSecureImage(
-        file: cacheFile,
-        usedCache: false,
-        wasDecrypted: true,
-      );
-    }).whenComplete(() {
-      _inFlight.remove(normalizedPath);
-    });
+          return ResolvedSecureImage(
+            file: cacheFile,
+            usedCache: false,
+            wasDecrypted: true,
+          );
+        })
+        .whenComplete(() {
+          _inFlight.remove(normalizedPath);
+        });
   }
 
   Future<Directory> _getOrCreateCacheDirectory() async {
@@ -149,7 +168,9 @@ class EncryptedImageService {
     }
 
     final temporaryDirectory = await getTemporaryDirectory();
-    final dir = Directory(p.join(temporaryDirectory.path, 'eri_sports_image_cache'));
+    final dir = Directory(
+      p.join(temporaryDirectory.path, 'eri_sports_image_cache'),
+    );
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -182,7 +203,10 @@ class EncryptedImageService {
   }
 
   String _sourcePrefixForPath(String sourcePath) {
-    return sha256.convert(sourcePath.toLowerCase().codeUnits).toString().substring(0, 16);
+    return sha256
+        .convert(sourcePath.toLowerCase().codeUnits)
+        .toString()
+        .substring(0, 16);
   }
 
   String _cacheBasePrefix(String sourcePrefix, FileStat sourceStat) {

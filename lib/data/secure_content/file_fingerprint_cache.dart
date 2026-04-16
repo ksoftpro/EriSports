@@ -75,7 +75,9 @@ class FileFingerprintCache {
         .where((entry) => entry.sourcePath != value.sourcePath)
         .toList(growable: true);
     entries.insert(0, value);
-    final trimmed = entries.take(_maxEntriesPerNamespace).toList(growable: false);
+    final trimmed = entries
+        .take(_maxEntriesPerNamespace)
+        .toList(growable: false);
     await _cacheStore.writeJsonObjectList(
       kSecureContentCacheScope,
       _keyForNamespace(namespace),
@@ -92,6 +94,14 @@ class FileFingerprintCache {
       kSecureContentCacheScope,
       _keyForNamespace(namespace),
       remaining,
+    );
+  }
+
+  Future<void> clearNamespace(String namespace) async {
+    await _cacheStore.writeJsonObjectList(
+      kSecureContentCacheScope,
+      _keyForNamespace(namespace),
+      const <Map<String, dynamic>>[],
     );
   }
 

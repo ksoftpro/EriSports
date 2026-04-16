@@ -26,6 +26,14 @@ class DaylysportSecureContentCoordinator {
     ]);
   }
 
+  Future<void> clearCaches() async {
+    await Future.wait<void>([
+      encryptedJsonService.clearCache(),
+      encryptedImageService.clearCache(),
+      encryptedMediaService.clearCache(),
+    ]);
+  }
+
   Future<String> readJsonText(File sourceFile) {
     return encryptedJsonService.readTextFile(sourceFile);
   }

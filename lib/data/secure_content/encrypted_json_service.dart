@@ -45,6 +45,19 @@ class EncryptedJsonService {
     await _deletePartialCacheFiles(cacheDirectory);
   }
 
+  Future<void> clearCache() async {
+    _decodedCache.clear();
+    final cacheDirectory = await _getOrCreateCacheDirectory();
+    if (await cacheDirectory.exists()) {
+      await for (final entity in cacheDirectory.list(followLinks: false)) {
+        if (entity is File) {
+          await entity.delete();
+        }
+      }
+    }
+    await _fingerprintCache.clearNamespace('json');
+  }
+
   Future<ResolvedPlainJsonFile> resolvePlaintextFile(File sourceFile) {
     final normalizedPath = sourceFile.path;
     if (!isEncryptedJsonPath(normalizedPath)) {
@@ -57,88 +70,94 @@ class EncryptedJsonService {
       );
     }
 
-    return _inFlight.putIfAbsent(normalizedPath, () async {
-      final sourceStat = await sourceFile.stat();
-      final cacheDirectory = await _getOrCreateCacheDirectory();
-      final cachedEntry = _fingerprintCache.read('json', normalizedPath);
-      if (cachedEntry != null && cachedEntry.matches(normalizedPath, sourceStat)) {
-        final cachedFile = File(cachedEntry.cachePath);
-        if (await cachedFile.exists()) {
-          return ResolvedPlainJsonFile(
-            file: cachedFile,
-            usedCache: true,
-            wasDecrypted: false,
+    return _inFlight
+        .putIfAbsent(normalizedPath, () async {
+          final sourceStat = await sourceFile.stat();
+          final cacheDirectory = await _getOrCreateCacheDirectory();
+          final cachedEntry = _fingerprintCache.read('json', normalizedPath);
+          if (cachedEntry != null &&
+              cachedEntry.matches(normalizedPath, sourceStat)) {
+            final cachedFile = File(cachedEntry.cachePath);
+            if (await cachedFile.exists()) {
+              return ResolvedPlainJsonFile(
+                file: cachedFile,
+                usedCache: true,
+                wasDecrypted: false,
+              );
+            }
+          }
+
+          final sourcePrefix = _sourcePrefixForPath(normalizedPath);
+          final cacheBasePrefix = _cacheBasePrefix(sourcePrefix, sourceStat);
+          final cacheFile = File(
+            p.join(cacheDirectory.path, '$cacheBasePrefix.json'),
           );
-        }
-      }
 
-      final sourcePrefix = _sourcePrefixForPath(normalizedPath);
-      final cacheBasePrefix = _cacheBasePrefix(sourcePrefix, sourceStat);
-      final cacheFile = File(p.join(cacheDirectory.path, '$cacheBasePrefix.json'));
+          if (await cacheFile.exists()) {
+            await _fingerprintCache.write(
+              'json',
+              CachedFileFingerprintEntry(
+                sourcePath: normalizedPath,
+                sizeBytes: sourceStat.size,
+                modifiedAtEpochMs:
+                    sourceStat.modified.toUtc().millisecondsSinceEpoch,
+                cachePath: cacheFile.path,
+              ),
+            );
+            return ResolvedPlainJsonFile(
+              file: cacheFile,
+              usedCache: true,
+              wasDecrypted: false,
+            );
+          }
 
-      if (await cacheFile.exists()) {
-        await _fingerprintCache.write(
-          'json',
-          CachedFileFingerprintEntry(
-            sourcePath: normalizedPath,
-            sizeBytes: sourceStat.size,
-            modifiedAtEpochMs:
-                sourceStat.modified.toUtc().millisecondsSinceEpoch,
-            cachePath: cacheFile.path,
-          ),
-        );
-        return ResolvedPlainJsonFile(
-          file: cacheFile,
-          usedCache: true,
-          wasDecrypted: false,
-        );
-      }
+          await _deleteStaleCacheFiles(cacheDirectory, sourcePrefix);
+          if (cachedEntry != null && cachedEntry.cachePath != cacheFile.path) {
+            final staleFile = File(cachedEntry.cachePath);
+            if (await staleFile.exists()) {
+              await staleFile.delete();
+            }
+          }
 
-      await _deleteStaleCacheFiles(cacheDirectory, sourcePrefix);
-      if (cachedEntry != null && cachedEntry.cachePath != cacheFile.path) {
-        final staleFile = File(cachedEntry.cachePath);
-        if (await staleFile.exists()) {
-          await staleFile.delete();
-        }
-      }
+          final tempOutput = File('${cacheFile.path}.part');
+          if (await tempOutput.exists()) {
+            await tempOutput.delete();
+          }
 
-      final tempOutput = File('${cacheFile.path}.part');
-      if (await tempOutput.exists()) {
-        await tempOutput.delete();
-      }
+          await Isolate.run(
+            () => decryptSecureFileSync(
+              sourcePath: normalizedPath,
+              destinationPath: tempOutput.path,
+              masterKey: _masterKey,
+              overwrite: true,
+            ),
+          );
 
-      await Isolate.run(
-        () => decryptSecureFileSync(
-          sourcePath: normalizedPath,
-          destinationPath: tempOutput.path,
-          masterKey: _masterKey,
-          overwrite: true,
-        ),
-      );
+          if (await cacheFile.exists()) {
+            await cacheFile.delete();
+          }
+          await tempOutput.rename(cacheFile.path);
 
-      if (await cacheFile.exists()) {
-        await cacheFile.delete();
-      }
-      await tempOutput.rename(cacheFile.path);
+          await _fingerprintCache.write(
+            'json',
+            CachedFileFingerprintEntry(
+              sourcePath: normalizedPath,
+              sizeBytes: sourceStat.size,
+              modifiedAtEpochMs:
+                  sourceStat.modified.toUtc().millisecondsSinceEpoch,
+              cachePath: cacheFile.path,
+            ),
+          );
 
-      await _fingerprintCache.write(
-        'json',
-        CachedFileFingerprintEntry(
-          sourcePath: normalizedPath,
-          sizeBytes: sourceStat.size,
-          modifiedAtEpochMs: sourceStat.modified.toUtc().millisecondsSinceEpoch,
-          cachePath: cacheFile.path,
-        ),
-      );
-
-      return ResolvedPlainJsonFile(
-        file: cacheFile,
-        usedCache: false,
-        wasDecrypted: true,
-      );
-    }).whenComplete(() {
-      _inFlight.remove(normalizedPath);
-    });
+          return ResolvedPlainJsonFile(
+            file: cacheFile,
+            usedCache: false,
+            wasDecrypted: true,
+          );
+        })
+        .whenComplete(() {
+          _inFlight.remove(normalizedPath);
+        });
   }
 
   Future<String> readTextFile(File sourceFile) async {
@@ -166,7 +185,9 @@ class EncryptedJsonService {
     }
 
     final temporaryDirectory = await getTemporaryDirectory();
-    final dir = Directory(p.join(temporaryDirectory.path, 'eri_sports_json_cache'));
+    final dir = Directory(
+      p.join(temporaryDirectory.path, 'eri_sports_json_cache'),
+    );
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -199,7 +220,10 @@ class EncryptedJsonService {
   }
 
   String _sourcePrefixForPath(String sourcePath) {
-    return sha256.convert(utf8.encode(sourcePath.toLowerCase())).toString().substring(0, 16);
+    return sha256
+        .convert(utf8.encode(sourcePath.toLowerCase()))
+        .toString()
+        .substring(0, 16);
   }
 
   String _cacheBasePrefix(String sourcePrefix, FileStat sourceStat) {

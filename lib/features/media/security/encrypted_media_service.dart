@@ -28,8 +28,8 @@ class EncryptedMediaService {
     FileFingerprintCache? fingerprintCache,
   }) : _fingerprintCache = fingerprintCache,
        _mediaKey = decodeMediaMasterKey(
-        mediaKeyBase64 ?? configuredMediaKeyBase64(),
-      );
+         mediaKeyBase64 ?? configuredMediaKeyBase64(),
+       );
 
   final Map<String, Future<ResolvedPlayableMedia>> _inFlight =
       <String, Future<ResolvedPlayableMedia>>{};
@@ -93,116 +93,120 @@ class EncryptedMediaService {
       );
     }
 
-    return _inFlight.putIfAbsent(normalizedPath, () async {
-      final sourceStat = await sourceFile.stat();
-      final cacheDirectory = await _getOrCreateCacheDirectory();
-      final sourcePrefix = _sourcePrefixForPath(normalizedPath);
-      final cacheBasePrefix = _cacheBasePrefix(sourcePrefix, sourceStat);
+    return _inFlight
+        .putIfAbsent(normalizedPath, () async {
+          final sourceStat = await sourceFile.stat();
+          final cacheDirectory = await _getOrCreateCacheDirectory();
+          final sourcePrefix = _sourcePrefixForPath(normalizedPath);
+          final cacheBasePrefix = _cacheBasePrefix(sourcePrefix, sourceStat);
 
-      final cachedEntry = _fingerprintCache?.read('media', normalizedPath);
-      if (cachedEntry != null && cachedEntry.matches(normalizedPath, sourceStat)) {
-        final cachedFile = File(cachedEntry.cachePath);
-        if (await cachedFile.exists()) {
-          return ResolvedPlayableMedia(
-            file: cachedFile,
-            usedCache: true,
-            wasDecrypted: false,
+          final cachedEntry = _fingerprintCache?.read('media', normalizedPath);
+          if (cachedEntry != null &&
+              cachedEntry.matches(normalizedPath, sourceStat)) {
+            final cachedFile = File(cachedEntry.cachePath);
+            if (await cachedFile.exists()) {
+              return ResolvedPlayableMedia(
+                file: cachedFile,
+                usedCache: true,
+                wasDecrypted: false,
+              );
+            }
+          }
+
+          final cachedByPrefix = await _findCachedByBasePrefix(
+            cacheDirectory,
+            cacheBasePrefix,
           );
-        }
-      }
+          if (cachedByPrefix != null) {
+            await _fingerprintCache?.write(
+              'media',
+              CachedFileFingerprintEntry(
+                sourcePath: normalizedPath,
+                sizeBytes: sourceStat.size,
+                modifiedAtEpochMs:
+                    sourceStat.modified.toUtc().millisecondsSinceEpoch,
+                cachePath: cachedByPrefix.path,
+              ),
+            );
+            return ResolvedPlayableMedia(
+              file: cachedByPrefix,
+              usedCache: true,
+              wasDecrypted: false,
+            );
+          }
 
-      final cachedByPrefix = await _findCachedByBasePrefix(
-        cacheDirectory,
-        cacheBasePrefix,
-      );
-      if (cachedByPrefix != null) {
-        await _fingerprintCache?.write(
-          'media',
-          CachedFileFingerprintEntry(
-            sourcePath: normalizedPath,
-            sizeBytes: sourceStat.size,
-            modifiedAtEpochMs:
-                sourceStat.modified.toUtc().millisecondsSinceEpoch,
-            cachePath: cachedByPrefix.path,
-          ),
-        );
-        return ResolvedPlayableMedia(
-          file: cachedByPrefix,
-          usedCache: true,
-          wasDecrypted: false,
-        );
-      }
+          final header = await Isolate.run(
+            () => readEncryptedMediaHeaderFromPath(normalizedPath),
+          );
 
-      final header = await Isolate.run(
-        () => readEncryptedMediaHeaderFromPath(normalizedPath),
-      );
+          final cacheName = '$cacheBasePrefix${header.originalExtension}';
+          final cacheFile = File(p.join(cacheDirectory.path, cacheName));
 
-      final cacheName =
-          '$cacheBasePrefix${header.originalExtension}';
-      final cacheFile = File(p.join(cacheDirectory.path, cacheName));
+          if (await cacheFile.exists()) {
+            await _fingerprintCache?.write(
+              'media',
+              CachedFileFingerprintEntry(
+                sourcePath: normalizedPath,
+                sizeBytes: sourceStat.size,
+                modifiedAtEpochMs:
+                    sourceStat.modified.toUtc().millisecondsSinceEpoch,
+                cachePath: cacheFile.path,
+              ),
+            );
+            return ResolvedPlayableMedia(
+              file: cacheFile,
+              usedCache: true,
+              wasDecrypted: false,
+            );
+          }
 
-      if (await cacheFile.exists()) {
-        await _fingerprintCache?.write(
-          'media',
-          CachedFileFingerprintEntry(
-            sourcePath: normalizedPath,
-            sizeBytes: sourceStat.size,
-            modifiedAtEpochMs:
-                sourceStat.modified.toUtc().millisecondsSinceEpoch,
-            cachePath: cacheFile.path,
-          ),
-        );
-        return ResolvedPlayableMedia(
-          file: cacheFile,
-          usedCache: true,
-          wasDecrypted: false,
-        );
-      }
+          await _deleteStaleCacheFiles(cacheDirectory, sourcePrefix);
 
-      await _deleteStaleCacheFiles(cacheDirectory, sourcePrefix);
+          final tempOutput = File('${cacheFile.path}.part');
+          if (await tempOutput.exists()) {
+            await tempOutput.delete();
+          }
 
-      final tempOutput = File('${cacheFile.path}.part');
-      if (await tempOutput.exists()) {
-        await tempOutput.delete();
-      }
+          await Isolate.run(
+            () => decryptMediaFileSync(
+              sourcePath: normalizedPath,
+              destinationPath: tempOutput.path,
+              masterKey: _keyBytes(),
+              overwrite: true,
+            ),
+          );
 
-      await Isolate.run(
-        () => decryptMediaFileSync(
-          sourcePath: normalizedPath,
-          destinationPath: tempOutput.path,
-          masterKey: _keyBytes(),
-          overwrite: true,
-        ),
-      );
+          if (await cacheFile.exists()) {
+            await cacheFile.delete();
+          }
+          await tempOutput.rename(cacheFile.path);
 
-      if (await cacheFile.exists()) {
-        await cacheFile.delete();
-      }
-      await tempOutput.rename(cacheFile.path);
+          await _fingerprintCache?.write(
+            'media',
+            CachedFileFingerprintEntry(
+              sourcePath: normalizedPath,
+              sizeBytes: sourceStat.size,
+              modifiedAtEpochMs:
+                  sourceStat.modified.toUtc().millisecondsSinceEpoch,
+              cachePath: cacheFile.path,
+            ),
+          );
 
-      await _fingerprintCache?.write(
-        'media',
-        CachedFileFingerprintEntry(
-          sourcePath: normalizedPath,
-          sizeBytes: sourceStat.size,
-          modifiedAtEpochMs: sourceStat.modified.toUtc().millisecondsSinceEpoch,
-          cachePath: cacheFile.path,
-        ),
-      );
-
-      return ResolvedPlayableMedia(
-        file: cacheFile,
-        usedCache: false,
-        wasDecrypted: true,
-      );
-    }).whenComplete(() {
-      _inFlight.remove(normalizedPath);
-    });
+          return ResolvedPlayableMedia(
+            file: cacheFile,
+            usedCache: false,
+            wasDecrypted: true,
+          );
+        })
+        .whenComplete(() {
+          _inFlight.remove(normalizedPath);
+        });
   }
 
   Future<void> clearCache() async {
     final cacheDirectory = await _getOrCreateCacheDirectory();
     if (!await cacheDirectory.exists()) {
+      await _fingerprintCache?.clearNamespace('media');
       return;
     }
 
@@ -211,6 +215,8 @@ class EncryptedMediaService {
         await entity.delete();
       }
     }
+
+    await _fingerprintCache?.clearNamespace('media');
   }
 
   Future<Directory> _getOrCreateCacheDirectory() async {

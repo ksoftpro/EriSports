@@ -8,8 +8,8 @@ import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 class MoreScreen extends ConsumerStatefulWidget {
   const MoreScreen({super.key});
@@ -52,9 +52,10 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
 
       final services = ref.read(appServicesProvider);
       await services.daylySportLocator.setCustomDirectoryPath(selectedPath);
-      final result = await ref
-          .read(daylysportSyncControllerProvider.notifier)
-          .runManualSync();
+      final result =
+          await ref
+              .read(daylysportSyncControllerProvider.notifier)
+              .runManualSync();
 
       if (!mounted) {
         return;
@@ -91,9 +92,10 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     try {
       final services = ref.read(appServicesProvider);
       await services.daylySportLocator.setCustomDirectoryPath(null);
-      final result = await ref
-          .read(daylysportSyncControllerProvider.notifier)
-          .runManualSync();
+      final result =
+          await ref
+              .read(daylysportSyncControllerProvider.notifier)
+              .runManualSync();
 
       if (!mounted) {
         return;
@@ -137,7 +139,8 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+              onPressed:
+                  () => Navigator.of(context).pop(controller.text.trim()),
               child: const Text('Save'),
             ),
           ],
@@ -166,9 +169,10 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     try {
       final services = ref.read(appServicesProvider);
       await services.daylySportLocator.setCustomDirectoryPath(nextPath);
-      final result = await ref
-          .read(daylysportSyncControllerProvider.notifier)
-          .runManualSync();
+      final result =
+          await ref
+              .read(daylysportSyncControllerProvider.notifier)
+              .runManualSync();
 
       if (!mounted) {
         return;
@@ -271,104 +275,145 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     final themeMode = ref.watch(themeModeProvider);
     final syncState = ref.watch(daylysportSyncControllerProvider);
     final services = ref.read(appServicesProvider);
-    final selectedJsonFolder = services.daylySportLocator.readCustomDirectoryPath();
+    final selectedJsonFolder =
+        services.daylySportLocator.readCustomDirectoryPath();
+    final scheme = Theme.of(context).colorScheme;
+    final effectiveBrightness = Theme.of(context).brightness;
+    final platformBrightness = MediaQuery.platformBrightnessOf(context);
 
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text('Settings', style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: Theme.of(context).colorScheme.primary)),
-          const SizedBox(height: 12),
-          Card(
-            color: Theme.of(context).cardColor,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _SectionCard(
+              icon: Icons.palette_outlined,
+              title: 'Appearance',
+              subtitle:
+                  'Choose how EriSports follows light, dark, or system theme mode.',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SegmentedButton<ThemeMode>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.system,
+                        icon: Icon(Icons.brightness_auto_rounded),
+                        label: Text('System'),
+                      ),
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.light,
+                        icon: Icon(Icons.light_mode_rounded),
+                        label: Text('Light'),
+                      ),
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.dark,
+                        icon: Icon(Icons.dark_mode_rounded),
+                        label: Text('Dark'),
+                      ),
+                    ],
+                    selected: <ThemeMode>{themeMode},
+                    onSelectionChanged: (selection) {
+                      if (selection.isEmpty) {
+                        return;
+                      }
+                      ref
+                          .read(themeModeProvider.notifier)
+                          .setThemeMode(selection.first);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: scheme.outlineVariant),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _StatusBadge(
+                              label: 'Mode',
+                              value: _themeModeLabel(themeMode),
+                            ),
+                            _StatusBadge(
+                              label: 'Active',
+                              value: _brightnessLabel(effectiveBrightness),
+                            ),
+                            if (themeMode == ThemeMode.system)
+                              _StatusBadge(
+                                label: 'Device',
+                                value: _brightnessLabel(platformBrightness),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          themeMode == ThemeMode.system
+                              ? 'The app is following your device setting and is currently using ${_brightnessLabel(platformBrightness).toLowerCase()} mode.'
+                              : 'The app is locked to ${_brightnessLabel(effectiveBrightness).toLowerCase()} mode until you switch it again.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _SectionCard(
+              icon: Icons.lock_outline_rounded,
+              title: 'Offline Content Security',
+              subtitle:
+                  'Inspect encrypted content, warm caches, and clear decrypted runtime files.',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Appearance',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).colorScheme.primary),
+                    syncState.statusText,
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: 10,
+                    runSpacing: 10,
                     children: [
-                      _themeChip(
-                        context: context,
-                        label: 'System',
-                        selected: themeMode == ThemeMode.system,
-                        onTap: () => ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.system),
+                      FilledButton.icon(
+                        onPressed: () => context.push('/secure-content'),
+                        icon: const Icon(Icons.admin_panel_settings_outlined),
+                        label: const Text('Open secure content'),
                       ),
-                      _themeChip(
-                        context: context,
-                        label: 'Light',
-                        selected: themeMode == ThemeMode.light,
-                        onTap: () => ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.light),
-                      ),
-                      _themeChip(
-                        context: context,
-                        label: 'Dark',
-                        selected: themeMode == ThemeMode.dark,
-                        onTap: () => ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.dark),
+                      OutlinedButton.icon(
+                        onPressed: () => context.push('/sync'),
+                        icon: const Icon(Icons.sync_rounded),
+                        label: const Text('Open sync tools'),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Card(
-            color: Theme.of(context).cardColor,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            child: ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
-              leading: Icon(Icons.info_outline_rounded, color: Theme.of(context).colorScheme.primary),
-              title: Text(
-                'About',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              subtitle: Text(
-                'Developer and business contact information',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              trailing: Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.outline),
-              onTap: () => context.push('/about'),
-            ),
-          ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: () => context.push('/player-stats'),
-            icon: Icon(Icons.leaderboard, color: Theme.of(context).colorScheme.onPrimary),
-            label: Text('Open offline player leaderboards', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.onPrimary)),
-          ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: () => context.push('/sync'),
-            icon: Icon(Icons.sync, color: Theme.of(context).colorScheme.onPrimary),
-            label: Text('Open Synchronize Data', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.onPrimary)),
-          ),
-          const SizedBox(height: 10),
-          Card(
-            color: Theme.of(context).cardColor,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
+            const SizedBox(height: 12),
+            _SectionCard(
+              icon: Icons.folder_open_rounded,
+              title: 'JSON Data Directory',
+              subtitle:
+                  'Choose where the app reads the daylySport offline dataset from.',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'JSON data directory',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).colorScheme.primary),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
                     selectedJsonFolder ??
-                        'Default: /storage/emulated/0/daylySport (or platform fallback)',
-                    style: Theme.of(context).textTheme.bodySmall,
+                        'Using automatic daylySport discovery. Android defaults to /storage/emulated/0/daylySport when available.',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 10),
                   Wrap(
@@ -376,105 +421,288 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     runSpacing: 8,
                     children: [
                       FilledButton.icon(
-                        onPressed: _isPickingJsonFolder ? null : _pickJsonDirectory,
-                        icon: Icon(Icons.folder_open, color: Theme.of(context).colorScheme.onPrimary),
+                        onPressed:
+                            _isPickingJsonFolder ? null : _pickJsonDirectory,
+                        icon: const Icon(Icons.folder_open_rounded),
                         label: Text(
                           _isPickingJsonFolder
                               ? 'Applying folder...'
                               : 'Browse data JSONs directory',
-                          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.onPrimary),
                         ),
                       ),
                       OutlinedButton.icon(
                         onPressed:
                             _isPickingJsonFolder
                                 ? null
-                                : () => _openManualPathDialog(selectedJsonFolder),
-                        icon: Icon(Icons.edit_location_alt, color: Theme.of(context).colorScheme.primary),
-                        label: Text('Set path manually', style: Theme.of(context).textTheme.labelLarge),
+                                : () =>
+                                    _openManualPathDialog(selectedJsonFolder),
+                        icon: const Icon(Icons.edit_location_alt_rounded),
+                        label: const Text('Set path manually'),
                       ),
                       OutlinedButton.icon(
                         onPressed:
                             _isPickingJsonFolder || selectedJsonFolder == null
                                 ? null
                                 : _clearCustomJsonDirectory,
-                        icon: Icon(Icons.restart_alt, color: Theme.of(context).colorScheme.primary),
-                        label: Text('Use default folder', style: Theme.of(context).textTheme.labelLarge),
+                        icon: const Icon(Icons.restart_alt_rounded),
+                        label: const Text('Use default folder'),
                       ),
                     ],
                   ),
                   if (_folderSelectionMessage != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
-                      child: Text(_folderSelectionMessage!, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error)),
+                      child: Text(
+                        _folderSelectionMessage!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color:
+                              _folderSelectionMessage!.toLowerCase().contains(
+                                        'failed',
+                                      ) ||
+                                      _folderSelectionMessage!
+                                          .toLowerCase()
+                                          .contains('unable')
+                                  ? scheme.error
+                                  : scheme.primary,
+                        ),
+                      ),
                     ),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: _isDiagnosingAssets ? null : _runAssetDiagnostics,
-            icon: Icon(Icons.image_search, color: Theme.of(context).colorScheme.primary),
-            label: Text(
-              _isDiagnosingAssets
-                  ? 'Checking local image coverage...'
-                  : 'Run offline asset diagnostics',
-              style: Theme.of(context).textTheme.labelLarge,
+            const SizedBox(height: 12),
+            _SectionCard(
+              icon: Icons.tune_rounded,
+              title: 'Tools',
+              subtitle: 'Open data utilities and run local asset validation.',
+              child: Column(
+                children: [
+                  _ActionTile(
+                    icon: Icons.leaderboard_rounded,
+                    title: 'Offline player leaderboards',
+                    subtitle:
+                        'Inspect imported player statistics by competition and category.',
+                    onTap: () => context.push('/player-stats'),
+                  ),
+                  const SizedBox(height: 10),
+                  _ActionTile(
+                    icon: Icons.info_outline_rounded,
+                    title: 'About',
+                    subtitle: 'Developer and business contact information.',
+                    onTap: () => context.push('/about'),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed:
+                          _isDiagnosingAssets ? null : _runAssetDiagnostics,
+                      icon: const Icon(Icons.image_search_rounded),
+                      label: Text(
+                        _isDiagnosingAssets
+                            ? 'Checking local image coverage...'
+                            : 'Run offline asset diagnostics',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          if (startupReport != null)
-            _ReportCard(title: 'Startup import', report: startupReport),
-          if (startupState.isBackgroundRefreshing)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(startupState.statusText),
+            const SizedBox(height: 16),
+            if (startupReport != null)
+              _ReportCard(title: 'Startup import', report: startupReport),
+            if (startupState.isBackgroundRefreshing)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(startupState.statusText),
+                  ),
                 ),
               ),
-            ),
-          if (syncState.lastResult?.importReport != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: _ReportCard(
-                title: 'Latest synchronization',
-                report: syncState.lastResult!.importReport!,
+            if (syncState.lastResult?.importReport != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: _ReportCard(
+                  title: 'Latest synchronization',
+                  report: syncState.lastResult!.importReport!,
+                ),
               ),
-            ),
-          if (_assetDiagnostics != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: _AssetDiagnosticsCard(report: _assetDiagnostics!),
-            ),
-        ],
+            if (_assetDiagnostics != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: _AssetDiagnosticsCard(report: _assetDiagnostics!),
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _themeChip({
-    required BuildContext context,
-    required String label,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
+  String _themeModeLabel(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.system:
+        return 'System';
+      case ThemeMode.light:
+        return 'Light';
+      case ThemeMode.dark:
+        return 'Dark';
+    }
+  }
 
-    return ChoiceChip(
-      label: Text(
-        label,
-        style: TextStyle(
-          color: selected ? scheme.onPrimary : scheme.onSurface,
-          fontWeight: FontWeight.w600,
+  String _brightnessLabel(Brightness brightness) {
+    switch (brightness) {
+      case Brightness.light:
+        return 'Light';
+      case Brightness.dark:
+        return 'Dark';
+    }
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: scheme.onPrimaryContainer),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            child,
+          ],
         ),
       ),
-      selected: selected,
-      selectedColor: scheme.primary,
-      backgroundColor: Theme.of(context).cardColor,
-      side: BorderSide(color: scheme.outline.withValues(alpha: 0.72)),
-      onSelected: (_) => onTap(),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 2),
+          Text(value, style: Theme.of(context).textTheme.titleSmall),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: scheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: scheme.onSecondaryContainer),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: scheme.outline),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
