@@ -12,6 +12,12 @@ const int kMediaCryptoVersion = 1;
 const int kMacLengthBytes = 32;
 const int _chunkSizeBytes = 1024 * 512;
 
+typedef MediaCryptoProgressCallback = void Function({
+  required int processedBytes,
+  required int totalBytes,
+  required bool isWritingOutput,
+});
+
 const Set<String> kSupportedPlainVideoExtensions = {
   '.mp4',
   '.mov',
@@ -100,6 +106,7 @@ MediaEncryptionResult encryptMediaFileSync({
   required String destinationPath,
   required Uint8List masterKey,
   bool overwrite = false,
+  MediaCryptoProgressCallback? onProgress,
 }) {
   final sourceFile = File(sourcePath);
   if (!sourceFile.existsSync()) {
@@ -107,6 +114,7 @@ MediaEncryptionResult encryptMediaFileSync({
   }
 
   final sourceExtension = _normalizeExtension(sourcePath);
+  final totalBytes = sourceFile.lengthSync();
   if (!kSupportedPlainVideoExtensions.contains(sourceExtension)) {
     throw MediaCryptoException(
       'Unsupported source video extension: $sourceExtension',
@@ -146,6 +154,11 @@ MediaEncryptionResult encryptMediaFileSync({
   var sourceBytes = 0;
   try {
     output.writeFromSync(headerBytes);
+    onProgress?.call(
+      processedBytes: sourceBytes,
+      totalBytes: totalBytes,
+      isWritingOutput: false,
+    );
 
     while (true) {
       final chunk = input.readSync(_chunkSizeBytes);
@@ -157,8 +170,18 @@ MediaEncryptionResult encryptMediaFileSync({
       final encryptedChunk = cipher.process(Uint8List.fromList(chunk));
       macSink.add(encryptedChunk);
       output.writeFromSync(encryptedChunk);
+      onProgress?.call(
+        processedBytes: sourceBytes,
+        totalBytes: totalBytes,
+        isWritingOutput: false,
+      );
     }
 
+    onProgress?.call(
+      processedBytes: sourceBytes,
+      totalBytes: totalBytes,
+      isWritingOutput: true,
+    );
     macSink.close();
     final mac = Uint8List.fromList(macSinkOutput.value.bytes);
     output.writeFromSync(mac);

@@ -18,10 +18,12 @@ class SecureContentEncryptionRequest {
   const SecureContentEncryptionRequest({
     required this.sourcePath,
     required this.relativeOutputPath,
+    this.requestId,
   });
 
   final String sourcePath;
   final String relativeOutputPath;
+  final String? requestId;
 }
 
 class SecureContentEncryptionFailure {
@@ -62,6 +64,41 @@ class SecureContentEncryptionBatchResult {
   bool get importedJson => encryptedJsonCount > 0;
 }
 
+class SecureContentImportManifestEntry {
+  const SecureContentImportManifestEntry({
+    required this.sourcePath,
+    required this.encryptedPath,
+    required this.encryptedRelativePath,
+    required this.logicalPath,
+    required this.contentKind,
+    required this.sourceBytes,
+    required this.encryptedBytes,
+    required this.encryptedAtUtc,
+  });
+
+  final String sourcePath;
+  final String encryptedPath;
+  final String encryptedRelativePath;
+  final String logicalPath;
+  final String contentKind;
+  final int sourceBytes;
+  final int encryptedBytes;
+  final DateTime encryptedAtUtc;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'sourcePath': sourcePath,
+      'encryptedPath': encryptedPath,
+      'encryptedRelativePath': encryptedRelativePath,
+      'logicalPath': logicalPath,
+      'contentKind': contentKind,
+      'sourceBytes': sourceBytes,
+      'encryptedBytes': encryptedBytes,
+      'encryptedAtUtc': encryptedAtUtc.toUtc().toIso8601String(),
+    };
+  }
+}
+
 class DaylysportSecureContentCoordinator {
   DaylysportSecureContentCoordinator({
     required this.daylySportLocator,
@@ -86,6 +123,10 @@ class DaylysportSecureContentCoordinator {
   final EncryptedMediaService encryptedMediaService;
   final Uint8List _secureContentKey;
   final Uint8List _mediaKey;
+
+  Uint8List get secureContentMasterKey => Uint8List.fromList(_secureContentKey);
+
+  Uint8List get mediaMasterKey => Uint8List.fromList(_mediaKey);
 
   Future<void> warmUp() async {
     await Future.wait<void>([
@@ -123,6 +164,27 @@ class DaylysportSecureContentCoordinator {
     return encryptedMediaService.resolvePlayableFile(sourceFile);
   }
 
+  String normalizeImportRelativeOutputPath(
+    String rawPath,
+    String fallbackFileName,
+  ) {
+    return _normalizeRelativeOutputPath(rawPath, fallbackFileName);
+  }
+
+  String encryptedRelativePathForImport(
+    String logicalRelativePath,
+    SecureContentKind kind,
+  ) {
+    return _encryptedRelativePathFor(logicalRelativePath, kind);
+  }
+
+  Future<String?> writeImportManifest({
+    required Directory rootDirectory,
+    required List<SecureContentImportManifestEntry> entries,
+  }) {
+    return _writeImportManifest(rootDirectory: rootDirectory, entries: entries);
+  }
+
   Future<SecureContentEncryptionBatchResult> encryptImportedFiles({
     required Iterable<SecureContentEncryptionRequest> requests,
     bool overwrite = true,
@@ -131,7 +193,7 @@ class DaylysportSecureContentCoordinator {
     final normalizedRequests = requests.toList(growable: false);
     final failures = <SecureContentEncryptionFailure>[];
     final outputPaths = <String>[];
-    final manifestEntries = <Map<String, dynamic>>[];
+    final manifestEntries = <SecureContentImportManifestEntry>[];
     var encryptedCount = 0;
     var skippedCount = 0;
     var failedCount = 0;
@@ -211,16 +273,21 @@ class DaylysportSecureContentCoordinator {
         encryptedCount += 1;
         outputPaths.add(destinationPath);
         final destinationFile = File(destinationPath);
-        manifestEntries.add({
-          'sourcePath': sourcePath,
-          'encryptedPath': destinationPath,
-          'encryptedRelativePath': p.relative(destinationPath, from: rootDirectory.path),
-          'logicalPath': normalizedRelativeOutputPath,
-          'contentKind': descriptor.kind.name,
-          'sourceBytes': await File(sourcePath).length(),
-          'encryptedBytes': await destinationFile.length(),
-          'encryptedAtUtc': DateTime.now().toUtc().toIso8601String(),
-        });
+        manifestEntries.add(
+          SecureContentImportManifestEntry(
+            sourcePath: sourcePath,
+            encryptedPath: destinationPath,
+            encryptedRelativePath: p.relative(
+              destinationPath,
+              from: rootDirectory.path,
+            ),
+            logicalPath: normalizedRelativeOutputPath,
+            contentKind: descriptor.kind.name,
+            sourceBytes: await File(sourcePath).length(),
+            encryptedBytes: await destinationFile.length(),
+            encryptedAtUtc: DateTime.now().toUtc(),
+          ),
+        );
       } catch (error) {
         failedCount += 1;
         failures.add(
@@ -253,7 +320,7 @@ class DaylysportSecureContentCoordinator {
 
   Future<String?> _writeImportManifest({
     required Directory rootDirectory,
-    required List<Map<String, dynamic>> entries,
+    required List<SecureContentImportManifestEntry> entries,
   }) async {
     if (entries.isEmpty) {
       return null;
@@ -274,7 +341,7 @@ class DaylysportSecureContentCoordinator {
       const JsonEncoder.withIndent('  ').convert({
         'createdAtUtc': timestamp.toIso8601String(),
         'entryCount': entries.length,
-        'entries': entries,
+        'entries': entries.map((entry) => entry.toJson()).toList(growable: false),
       }),
     );
     return file.path;

@@ -11,6 +11,12 @@ const int kSecureContentCryptoVersion = 1;
 const int kSecureContentMacLengthBytes = 32;
 const int _secureContentChunkSizeBytes = 1024 * 512;
 
+typedef SecureContentCryptoProgressCallback = void Function({
+  required int processedBytes,
+  required int totalBytes,
+  required bool isWritingOutput,
+});
+
 enum SecureContentType { json, image }
 
 class SecureContentCryptoException implements Exception {
@@ -90,6 +96,7 @@ SecureContentEncryptionResult encryptSecureFileSync({
   required Uint8List masterKey,
   required SecureContentType contentType,
   bool overwrite = false,
+  SecureContentCryptoProgressCallback? onProgress,
 }) {
   final sourceFile = File(sourcePath);
   if (!sourceFile.existsSync()) {
@@ -106,6 +113,7 @@ SecureContentEncryptionResult encryptSecureFileSync({
   destinationFile.parent.createSync(recursive: true);
 
   final sourceExtension = _normalizeExtension(sourcePath);
+  final totalBytes = sourceFile.lengthSync();
   final iv = _randomBytes(16);
   final headerBytes = _buildHeaderBytes(
     iv: iv,
@@ -137,6 +145,11 @@ SecureContentEncryptionResult encryptSecureFileSync({
   var sourceBytes = 0;
   try {
     output.writeFromSync(headerBytes);
+    onProgress?.call(
+      processedBytes: sourceBytes,
+      totalBytes: totalBytes,
+      isWritingOutput: false,
+    );
 
     while (true) {
       final chunk = input.readSync(_secureContentChunkSizeBytes);
@@ -147,8 +160,18 @@ SecureContentEncryptionResult encryptSecureFileSync({
       final encryptedChunk = cipher.process(Uint8List.fromList(chunk));
       macSink.add(encryptedChunk);
       output.writeFromSync(encryptedChunk);
+      onProgress?.call(
+        processedBytes: sourceBytes,
+        totalBytes: totalBytes,
+        isWritingOutput: false,
+      );
     }
 
+    onProgress?.call(
+      processedBytes: sourceBytes,
+      totalBytes: totalBytes,
+      isWritingOutput: true,
+    );
     macSink.close();
     output.writeFromSync(Uint8List.fromList(macSinkOutput.value.bytes));
   } finally {

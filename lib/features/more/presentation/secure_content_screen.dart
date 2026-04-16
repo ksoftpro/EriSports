@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -5,6 +6,7 @@ import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/data/secure_content/daylysport_secure_content_coordinator.dart';
 import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
+import 'package:eri_sports/data/secure_content/secure_content_encryption_job_manager.dart';
 import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -51,22 +53,40 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
   bool _isEncrypting = false;
   bool _overwriteExisting = true;
   String? _selectedSourceRoot;
-    final TextEditingController _jsonDestinationController =
+  int _nextSelectionId = 0;
+  late final SecureContentEncryptionJobManager _jobManager;
+  StreamSubscription<SecureContentEncryptionJobSnapshot>? _jobSubscription;
+  SecureContentEncryptionJobSnapshot _jobSnapshot =
+      const SecureContentEncryptionJobSnapshot.idle();
+  final TextEditingController _jsonDestinationController =
       TextEditingController(text: 'json');
-    final TextEditingController _imageDestinationController =
+  final TextEditingController _imageDestinationController =
       TextEditingController(text: 'news');
-    final TextEditingController _videoDestinationController =
+  final TextEditingController _videoDestinationController =
       TextEditingController(text: 'reels');
   final List<_PendingSecureSource> _selectedSources = <_PendingSecureSource>[];
 
   @override
   void initState() {
     super.initState();
+    _jobManager = ref.read(appServicesProvider).secureContentEncryptionJobManager;
+    _jobSnapshot = _jobManager.snapshot;
+    _isEncrypting = _jobSnapshot.isRunning;
+    _jobSubscription = _jobManager.stream.listen((snapshot) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _jobSnapshot = snapshot;
+        _isEncrypting = snapshot.isRunning;
+      });
+    });
     Future<void>.microtask(_refreshInventory);
   }
 
   @override
   void dispose() {
+    _jobSubscription?.cancel();
     _jsonDestinationController.dispose();
     _imageDestinationController.dispose();
     _videoDestinationController.dispose();
@@ -424,6 +444,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       final requests = _selectedSources
           .map(
             (source) => SecureContentEncryptionRequest(
+              requestId: source.requestId,
               sourcePath: source.sourcePath,
               relativeOutputPath: p.join(
                 destinationByKind[source.kind]!,
@@ -432,7 +453,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
             ),
           )
           .toList(growable: false);
-      final result = await services.secureContentCoordinator.encryptImportedFiles(
+      final result = await services.secureContentEncryptionJobManager.startBatch(
         requests: requests,
         overwrite: _overwriteExisting,
       );
@@ -472,6 +493,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       return null;
     }
     return _PendingSecureSource(
+      requestId: 'selection-${_nextSelectionId++}',
       sourcePath: sourcePath,
       relativeOutputPath: relativeOutputPath.replaceAll('\\', '/'),
       kind: descriptor.kind,
@@ -640,6 +662,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                     _EncryptionImportPanel(
                       selectedSources: _selectedSources,
                       selectedSourceRoot: _selectedSourceRoot,
+                      jobSnapshot: _jobSnapshot,
                       destinationByKind: _buildDestinationByKind(),
                       jsonDestinationController: _jsonDestinationController,
                       imageDestinationController: _imageDestinationController,
@@ -727,11 +750,13 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
 
 class _PendingSecureSource {
   const _PendingSecureSource({
+    required this.requestId,
     required this.sourcePath,
     required this.relativeOutputPath,
     required this.kind,
   });
 
+  final String requestId;
   final String sourcePath;
   final String relativeOutputPath;
   final SecureContentKind kind;
@@ -741,6 +766,7 @@ class _EncryptionImportPanel extends StatelessWidget {
   const _EncryptionImportPanel({
     required this.selectedSources,
     required this.selectedSourceRoot,
+    required this.jobSnapshot,
     required this.destinationByKind,
     required this.jsonDestinationController,
     required this.imageDestinationController,
@@ -756,6 +782,7 @@ class _EncryptionImportPanel extends StatelessWidget {
 
   final List<_PendingSecureSource> selectedSources;
   final String? selectedSourceRoot;
+  final SecureContentEncryptionJobSnapshot jobSnapshot;
   final Map<SecureContentKind, String> destinationByKind;
   final TextEditingController jsonDestinationController;
   final TextEditingController imageDestinationController;
@@ -853,6 +880,10 @@ class _EncryptionImportPanel extends StatelessWidget {
               _StatChip(label: 'Video', value: '$videoCount'),
             ],
           ),
+          if (jobSnapshot.totalFiles > 0) ...[
+            const SizedBox(height: 12),
+            _EncryptionProgressSection(snapshot: jobSnapshot),
+          ],
           if (selectedSources.isNotEmpty) ...[
             const SizedBox(height: 10),
             Wrap(
@@ -911,6 +942,7 @@ class _EncryptionImportPanel extends StatelessWidget {
           else
             _SelectedSourcesReviewTable(
               selectedSources: selectedSources,
+              jobSnapshot: jobSnapshot,
               destinationByKind: destinationByKind,
               onRemoveSource: onRemoveSource,
             ),
@@ -977,16 +1009,22 @@ class _DestinationPresetEditor extends StatelessWidget {
 class _SelectedSourcesReviewTable extends StatelessWidget {
   const _SelectedSourcesReviewTable({
     required this.selectedSources,
+    required this.jobSnapshot,
     required this.destinationByKind,
     required this.onRemoveSource,
   });
 
   final List<_PendingSecureSource> selectedSources;
+  final SecureContentEncryptionJobSnapshot jobSnapshot;
   final Map<SecureContentKind, String> destinationByKind;
   final ValueChanged<_PendingSecureSource> onRemoveSource;
 
   @override
   Widget build(BuildContext context) {
+    final progressByRequestId = <String, SecureContentEncryptionJobItemState>{
+      for (final item in jobSnapshot.items) item.requestId: item,
+    };
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1003,9 +1041,12 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
               DataColumn(label: Text('Type')),
               DataColumn(label: Text('Source')),
               DataColumn(label: Text('Encrypted output')),
+              DataColumn(label: Text('Status')),
+              DataColumn(label: Text('Progress')),
               DataColumn(label: Text('Remove')),
             ],
             rows: selectedSources.map((source) {
+              final itemState = progressByRequestId[source.requestId];
               final destinationRoot = destinationByKind[source.kind] ?? '';
               final outputPath = destinationRoot.isEmpty
                   ? source.relativeOutputPath
@@ -1038,8 +1079,35 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 280),
                       child: Text(
-                        _encryptedPreviewPath(outputPath, source.kind),
+                        itemState?.destinationPath ??
+                            _encryptedPreviewPath(outputPath, source.kind),
                         overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 160),
+                      child: Text(_statusLabel(itemState?.stage)),
+                    ),
+                  ),
+                  DataCell(
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 180),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          LinearProgressIndicator(
+                            value: itemState?.percentComplete,
+                            minHeight: 8,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _progressLabel(itemState),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1097,6 +1165,105 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
         return logicalPath;
     }
   }
+
+  static String _statusLabel(SecureContentEncryptionItemStage? stage) {
+    switch (stage) {
+      case SecureContentEncryptionItemStage.preparing:
+        return 'Preparing';
+      case SecureContentEncryptionItemStage.queued:
+        return 'Queued';
+      case SecureContentEncryptionItemStage.encrypting:
+        return 'Encrypting';
+      case SecureContentEncryptionItemStage.writingOutput:
+        return 'Writing output';
+      case SecureContentEncryptionItemStage.completed:
+        return 'Completed';
+      case SecureContentEncryptionItemStage.skipped:
+        return 'Skipped';
+      case SecureContentEncryptionItemStage.failed:
+        return 'Failed';
+      case null:
+        return 'Waiting';
+    }
+  }
+
+  static String _progressLabel(SecureContentEncryptionJobItemState? itemState) {
+    if (itemState == null) {
+      return '0%';
+    }
+    final percent = (itemState.percentComplete * 100).round();
+    final bytesLabel = itemState.totalBytes > 0
+        ? ' • ${_humanizeBytes(itemState.processedBytes)} / ${_humanizeBytes(itemState.totalBytes)}'
+        : '';
+    return '$percent%$bytesLabel';
+  }
+}
+
+class _EncryptionProgressSection extends StatelessWidget {
+  const _EncryptionProgressSection({required this.snapshot});
+
+  final SecureContentEncryptionJobSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = (snapshot.percentComplete * 100).clamp(0, 100).round();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            snapshot.isRunning ? 'Encryption in progress' : 'Last encryption batch',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(
+            value: snapshot.isRunning ? snapshot.percentComplete : 1,
+            minHeight: 10,
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _StatChip(label: 'Total', value: '${snapshot.totalFiles}'),
+              _StatChip(label: 'Completed', value: '${snapshot.completedFiles}'),
+              _StatChip(label: 'Queued', value: '${snapshot.queuedFiles}'),
+              _StatChip(label: 'Failed', value: '${snapshot.failedFiles}'),
+              _StatChip(label: 'Skipped', value: '${snapshot.skippedFiles}'),
+              _StatChip(label: 'Progress', value: '$percent%'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            snapshot.currentFileName == null
+                ? (snapshot.statusText ?? 'Waiting for work.')
+                : 'Current file: ${snapshot.currentFileName} • ${snapshot.statusText ?? ''}',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _humanizeBytes(int bytes) {
+  if (bytes < 1024) {
+    return '$bytes B';
+  }
+  const units = <String>['KB', 'MB', 'GB'];
+  var value = bytes / 1024;
+  var unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return '${value.toStringAsFixed(value >= 100 ? 0 : 1)} ${units[unitIndex]}';
 }
 
 Future<List<String>> collectEncryptableSourceFilesInIsolate(String rootPath) {

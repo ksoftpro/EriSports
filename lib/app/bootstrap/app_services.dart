@@ -11,6 +11,7 @@ import 'package:eri_sports/data/secure_content/daylysport_secure_content_coordin
 import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:eri_sports/data/secure_content/encrypted_image_service.dart';
 import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
+import 'package:eri_sports/data/secure_content/secure_content_encryption_job_manager.dart';
 import 'package:eri_sports/data/secure_content/file_fingerprint_cache.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
@@ -29,6 +30,7 @@ class AppServices {
     required this.encryptedJsonService,
     required this.encryptedImageService,
     required this.secureContentCoordinator,
+    required this.secureContentEncryptionJobManager,
     required this.leagueStandingsSource,
     required this.teamRawSource,
     required this.daylysportSyncCoordinator,
@@ -43,6 +45,7 @@ class AppServices {
   final EncryptedJsonService encryptedJsonService;
   final EncryptedImageService encryptedImageService;
   final DaylysportSecureContentCoordinator secureContentCoordinator;
+  final SecureContentEncryptionJobManager secureContentEncryptionJobManager;
   final LeagueStandingsSource leagueStandingsSource;
   final TeamRawSource teamRawSource;
   final DaylysportSyncCoordinator daylysportSyncCoordinator;
@@ -113,6 +116,9 @@ class AppServices {
       encryptedImageService: encryptedImageService,
       encryptedMediaService: encryptedMediaService,
     );
+    final secureContentEncryptionJobManager = SecureContentEncryptionJobManager(
+      coordinator: secureContentCoordinator,
+    );
 
     return AppServices(
       database: database,
@@ -123,6 +129,7 @@ class AppServices {
       encryptedJsonService: encryptedJsonService,
       encryptedImageService: encryptedImageService,
       secureContentCoordinator: secureContentCoordinator,
+      secureContentEncryptionJobManager: secureContentEncryptionJobManager,
       leagueStandingsSource: leagueStandingsSource,
       teamRawSource: teamRawSource,
       daylysportSyncCoordinator: daylysportSyncCoordinator,

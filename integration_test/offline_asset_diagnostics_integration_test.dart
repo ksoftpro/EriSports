@@ -21,6 +21,7 @@ import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:eri_sports/data/secure_content/encrypted_image_service.dart';
 import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
 import 'package:eri_sports/data/secure_content/file_fingerprint_cache.dart';
+import 'package:eri_sports/data/secure_content/secure_content_encryption_job_manager.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
@@ -140,6 +141,9 @@ class _TestHarness {
       encryptedImageService: encryptedImageService,
       encryptedMediaService: encryptedMediaService,
     );
+    final secureContentEncryptionJobManager = SecureContentEncryptionJobManager(
+      coordinator: secureContentCoordinator,
+    );
 
     final services = AppServices(
       database: database,
@@ -150,6 +154,7 @@ class _TestHarness {
       encryptedJsonService: encryptedJsonService,
       encryptedImageService: encryptedImageService,
       secureContentCoordinator: secureContentCoordinator,
+      secureContentEncryptionJobManager: secureContentEncryptionJobManager,
       leagueStandingsSource: leagueStandingsSource,
       teamRawSource: teamRawSource,
       daylysportSyncCoordinator: syncCoordinator,
