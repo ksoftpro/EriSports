@@ -215,6 +215,7 @@ class _WidgetHarness {
       importCoordinator: importCoordinator,
     );
     final secureContentCoordinator = DaylysportSecureContentCoordinator(
+      daylySportLocator: locator,
       fileResolver: fileResolver,
       encryptedJsonService: encryptedJsonService,
       encryptedImageService: encryptedImageService,

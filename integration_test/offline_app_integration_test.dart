@@ -183,6 +183,7 @@ class _TestHarness {
       importCoordinator: importCoordinator,
     );
     final secureContentCoordinator = DaylysportSecureContentCoordinator(
+      daylySportLocator: locator,
       fileResolver: fileResolver,
       encryptedJsonService: encryptedJsonService,
       encryptedImageService: encryptedImageService,

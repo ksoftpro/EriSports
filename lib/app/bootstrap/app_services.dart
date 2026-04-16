@@ -107,6 +107,7 @@ class AppServices {
       importCoordinator: importCoordinator,
     );
     final secureContentCoordinator = DaylysportSecureContentCoordinator(
+      daylySportLocator: daylySportLocator,
       fileResolver: encryptedFileResolver,
       encryptedJsonService: encryptedJsonService,
       encryptedImageService: encryptedImageService,

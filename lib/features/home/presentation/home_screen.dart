@@ -657,6 +657,7 @@ class _DayTabStrip extends StatefulWidget {
 class _DayTabStripState extends State<_DayTabStrip> {
   final ScrollController _scrollController = ScrollController();
   final Map<String, GlobalKey> _dayKeys = <String, GlobalKey>{};
+  final GlobalKey _viewportKey = GlobalKey();
   static const Duration _tabCenterDuration = Duration(milliseconds: 180);
 
   @override
@@ -698,6 +699,7 @@ class _DayTabStripState extends State<_DayTabStrip> {
     ).textTheme.bodySmall?.color?.withValues(alpha: 0.66);
 
     return Container(
+      key: _viewportKey,
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: ListView.separated(
@@ -764,16 +766,50 @@ class _DayTabStripState extends State<_DayTabStrip> {
 
     final selectedKey = _dayKeys[_dayId(widget.selectedDay)];
     final targetContext = selectedKey?.currentContext;
-    if (targetContext == null) {
+    final viewportContext = _viewportKey.currentContext;
+    if (targetContext == null || viewportContext == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _scrollSelectedIntoView(animate: animate);
+        }
+      });
       return;
     }
 
-    Scrollable.ensureVisible(
-      targetContext,
-      alignment: 0.5,
-      duration: animate ? _tabCenterDuration : Duration.zero,
-      curve: Curves.easeOutQuart,
+    final targetBox = targetContext.findRenderObject() as RenderBox?;
+    final viewportBox = viewportContext.findRenderObject() as RenderBox?;
+    if (targetBox == null || viewportBox == null) {
+      return;
+    }
+
+    final targetOffsetInViewport = targetBox.localToGlobal(
+      Offset.zero,
+      ancestor: viewportBox,
     );
+    final desiredOffset =
+        _scrollController.offset +
+        targetOffsetInViewport.dx +
+        (targetBox.size.width / 2) -
+        (viewportBox.size.width / 2);
+
+    final clampedOffset = desiredOffset.clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
+    );
+
+    if ((clampedOffset - _scrollController.offset).abs() < 1) {
+      return;
+    }
+
+    if (animate) {
+      _scrollController.animateTo(
+        clampedOffset,
+        duration: _tabCenterDuration,
+        curve: Curves.easeOutQuart,
+      );
+    } else {
+      _scrollController.jumpTo(clampedOffset);
+    }
   }
 
   GlobalKey _keyForDay(DateTime day) {
