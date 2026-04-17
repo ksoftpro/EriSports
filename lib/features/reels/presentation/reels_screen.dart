@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:eri_sports/app/app.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/navigation/app_shell.dart';
+import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
 import 'package:flutter/material.dart';
@@ -16,12 +19,67 @@ class ReelsScreen extends ConsumerStatefulWidget {
   ConsumerState<ReelsScreen> createState() => _ReelsScreenState();
 }
 
-class _ReelsScreenState extends ConsumerState<ReelsScreen> {
+class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   DateTime? _lastPrewarmScanAt;
+  ModalRoute<dynamic>? _route;
+  bool _routeVisible = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route == null || route == _route) {
+      return;
+    }
+
+    final observer = ref.read(appRouteObserverProvider);
+    if (_route case final PageRoute<dynamic> currentRoute) {
+      observer.unsubscribe(this);
+      if (_routeVisible != currentRoute.isCurrent && mounted) {
+        setState(() {
+          _routeVisible = currentRoute.isCurrent;
+        });
+      }
+    }
+
+    _route = route;
+    if (route is PageRoute<dynamic>) {
+      observer.subscribe(this, route);
+      _routeVisible = route.isCurrent;
+    } else {
+      _routeVisible = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_route is PageRoute<dynamic>) {
+      ref.read(appRouteObserverProvider).unsubscribe(this);
+    }
+    super.dispose();
+  }
+
+  @override
+  void didPush() => _setRouteVisible(true);
+
+  @override
+  void didPopNext() => _setRouteVisible(true);
+
+  @override
+  void didPushNext() => _setRouteVisible(false);
+
+  @override
+  void didPop() => _setRouteVisible(false);
 
   @override
   Widget build(BuildContext context) {
     final mediaAsync = ref.watch(daylySportMediaSnapshotProvider);
+    final shellIndex = ref.watch(currentShellBranchIndexProvider);
+    final lifecycleState = ref.watch(appLifecycleStateProvider);
+    final isScreenActive =
+        shellIndex == 3 &&
+        _routeVisible &&
+        lifecycleState == AppLifecycleState.resumed;
 
     return Scaffold(
       appBar: AppBar(
@@ -30,9 +88,10 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> {
           IconButton(
             tooltip: 'Refresh reels',
             onPressed:
-                () => ref
-                    .read(daylySportMediaSnapshotProvider.notifier)
-                    .refresh(),
+                () =>
+                    ref
+                        .read(daylySportMediaSnapshotProvider.notifier)
+                        .refresh(),
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -48,11 +107,12 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> {
         data: (snapshot) {
           final reelsSection = snapshot.section(DaylySportMediaSection.reels);
           final highlightFallback =
-            snapshot.section(DaylySportMediaSection.highlights).videoItems;
+              snapshot.section(DaylySportMediaSection.highlights).videoItems;
 
-          final items = reelsSection.hasVideoItems
-            ? reelsSection.videoItems
-              : highlightFallback;
+          final items =
+              reelsSection.hasVideoItems
+                  ? reelsSection.videoItems
+                  : highlightFallback;
 
           _scheduleEncryptedPrewarm(snapshot, items);
 
@@ -64,12 +124,19 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> {
             );
           }
 
-          return ReelsFeed(
-            items: items,
-          );
+          return ReelsFeed(items: items, isScreenActive: isScreenActive);
         },
       ),
     );
+  }
+
+  void _setRouteVisible(bool value) {
+    if (_routeVisible == value || !mounted) {
+      return;
+    }
+    setState(() {
+      _routeVisible = value;
+    });
   }
 
   void _scheduleEncryptedPrewarm(
@@ -94,20 +161,23 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> {
   }
 }
 
-typedef ReelsFeedItemBuilder = Widget Function(
-  BuildContext context,
-  DaylySportMediaItem item,
-  bool isActive,
-);
+typedef ReelsFeedItemBuilder =
+    Widget Function(
+      BuildContext context,
+      DaylySportMediaItem item,
+      bool isActive,
+    );
 
 class ReelsFeed extends StatefulWidget {
   const ReelsFeed({
     required this.items,
+    this.isScreenActive = true,
     this.itemBuilder,
     super.key,
   });
 
   final List<DaylySportMediaItem> items;
+  final bool isScreenActive;
   final ReelsFeedItemBuilder? itemBuilder;
 
   @override
@@ -160,7 +230,7 @@ class _ReelsFeedState extends State<ReelsFeed> {
       },
       itemBuilder: (context, index) {
         final item = widget.items[index];
-        final isActive = index == _activeIndex;
+        final isActive = widget.isScreenActive && index == _activeIndex;
         final builder = widget.itemBuilder;
         if (builder != null) {
           return builder(context, item, isActive);
@@ -277,10 +347,10 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
       return;
     }
 
-    if (widget.isActive) {
+    if (!oldWidget.isActive && widget.isActive) {
       _ensurePrepared();
       unawaited(_playIfReady());
-    } else {
+    } else if (oldWidget.isActive && !widget.isActive) {
       unawaited(_pauseIfReady());
     }
   }
@@ -333,9 +403,9 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
                 child: Text(
                   'Unable to play this reel.',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.white),
                 ),
               ),
             )

@@ -16,12 +16,18 @@ import 'package:eri_sports/features/search/presentation/search_screen.dart';
 import 'package:eri_sports/features/sync/presentation/daylysport_sync_screen.dart';
 import 'package:eri_sports/features/team/presentation/team_screen.dart';
 import 'package:eri_sports/features/video/presentation/video_screen.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+final appRouteObserverProvider = Provider<RouteObserver<ModalRoute<void>>>(
+  (ref) => RouteObserver<ModalRoute<void>>(),
+);
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/home',
+    observers: [ref.watch(appRouteObserverProvider)],
     routes: [
       StatefulShellRoute.indexedStack(
         builder:

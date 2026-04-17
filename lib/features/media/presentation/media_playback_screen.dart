@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
@@ -13,29 +15,87 @@ class MediaPlaybackScreen extends ConsumerStatefulWidget {
   final DaylySportMediaItem item;
 
   @override
-  ConsumerState<MediaPlaybackScreen> createState() => _MediaPlaybackScreenState();
+  ConsumerState<MediaPlaybackScreen> createState() =>
+      _MediaPlaybackScreenState();
 }
 
-class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen> {
+class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
+    with WidgetsBindingObserver, RouteAware {
   VideoPlayerController? _controller;
   bool _isPreparing = false;
   String? _errorMessage;
   bool _usedCache = false;
   bool _wasDecrypted = false;
+  bool _routeVisible = true;
+  bool _shouldResumePlayback = false;
+  AppLifecycleState _lifecycleState =
+      WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
+  ModalRoute<dynamic>? _route;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (widget.item.isVideo) {
       _prepareVideo();
     }
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route == null || route == _route) {
+      return;
+    }
+
+    final observer = ref.read(appRouteObserverProvider);
+    if (_route is PageRoute<dynamic>) {
+      observer.unsubscribe(this);
+    }
+
+    _route = route;
+    if (route is PageRoute<dynamic>) {
+      observer.subscribe(this, route);
+      _routeVisible = route.isCurrent;
+    } else {
+      _routeVisible = true;
+    }
+
+    unawaited(_syncPlaybackWithVisibility());
+  }
+
+  @override
   void dispose() {
-    _controller?.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    if (_route is PageRoute<dynamic>) {
+      ref.read(appRouteObserverProvider).unsubscribe(this);
+    }
+    final controller = _controller;
+    _controller = null;
+    if (controller != null) {
+      unawaited(_pauseAndDisposeController(controller));
+    }
     super.dispose();
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+    unawaited(_syncPlaybackWithVisibility());
+  }
+
+  @override
+  void didPush() => _handleRouteVisibilityChanged(true);
+
+  @override
+  void didPopNext() => _handleRouteVisibilityChanged(true);
+
+  @override
+  void didPushNext() => _handleRouteVisibilityChanged(false);
+
+  @override
+  void didPop() => _handleRouteVisibilityChanged(false);
 
   Future<void> _prepareVideo() async {
     setState(() {
@@ -52,20 +112,25 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen> {
       final controller = VideoPlayerController.file(File(playable.file.path));
       await controller.initialize();
       await controller.setLooping(true);
-      await controller.play();
 
       if (!mounted) {
         await controller.dispose();
         return;
       }
 
+      final previousController = _controller;
       setState(() {
-        _controller?.dispose();
         _controller = controller;
         _usedCache = playable.usedCache;
         _wasDecrypted = playable.wasDecrypted;
         _isPreparing = false;
       });
+      if (previousController != null) {
+        unawaited(_pauseAndDisposeController(previousController));
+      }
+
+      _shouldResumePlayback = true;
+      await _syncPlaybackWithVisibility();
     } catch (error) {
       if (!mounted) {
         return;
@@ -80,11 +145,10 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.item.fileName),
-      ),
+      appBar: AppBar(title: Text(widget.item.fileName)),
       body: SafeArea(
-        child: widget.item.isVideo ? _buildVideoBody(context) : _buildImageBody(),
+        child:
+            widget.item.isVideo ? _buildVideoBody(context) : _buildImageBody(),
       ),
     );
   }
@@ -94,7 +158,10 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen> {
       child: InteractiveViewer(
         minScale: 1,
         maxScale: 4,
-        child: SecureFileImage(sourceFile: widget.item.file, fit: BoxFit.contain),
+        child: SecureFileImage(
+          sourceFile: widget.item.file,
+          fit: BoxFit.contain,
+        ),
       ),
     );
   }
@@ -110,10 +177,7 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
-            _errorMessage!,
-            textAlign: TextAlign.center,
-          ),
+          child: Text(_errorMessage!, textAlign: TextAlign.center),
         ),
       );
     }
@@ -147,14 +211,8 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen> {
                 children: [
                   IconButton(
                     onPressed: () async {
-                      if (controller.value.isPlaying) {
-                        await controller.pause();
-                      } else {
-                        await controller.play();
-                      }
-                      if (mounted) {
-                        setState(() {});
-                      }
+                      _shouldResumePlayback = !controller.value.isPlaying;
+                      await _syncPlaybackWithVisibility();
                     },
                     icon: Icon(
                       controller.value.isPlaying
@@ -168,8 +226,8 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen> {
                       _wasDecrypted
                           ? 'Decrypted and cached'
                           : (_usedCache
-                                ? 'Playing cached decrypted media'
-                                : 'Playing local media'),
+                              ? 'Playing cached decrypted media'
+                              : 'Playing local media'),
                       style: Theme.of(context).textTheme.labelLarge,
                     ),
                   ),
@@ -180,5 +238,42 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen> {
         ),
       ],
     );
+  }
+
+  void _handleRouteVisibilityChanged(bool isVisible) {
+    _routeVisible = isVisible;
+    unawaited(_syncPlaybackWithVisibility());
+  }
+
+  Future<void> _syncPlaybackWithVisibility() async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+
+    final shouldBePlaying =
+        _shouldResumePlayback &&
+        _routeVisible &&
+        _lifecycleState == AppLifecycleState.resumed;
+    if (shouldBePlaying) {
+      if (!controller.value.isPlaying) {
+        await controller.play();
+      }
+    } else if (controller.value.isPlaying) {
+      await controller.pause();
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _pauseAndDisposeController(
+    VideoPlayerController controller,
+  ) async {
+    if (controller.value.isInitialized && controller.value.isPlaying) {
+      await controller.pause();
+    }
+    await controller.dispose();
   }
 }

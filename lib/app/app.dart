@@ -6,6 +6,10 @@ import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+final appLifecycleStateProvider = StateProvider<AppLifecycleState>(
+  (ref) => WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed,
+);
+
 class EriSportsApp extends ConsumerStatefulWidget {
   const EriSportsApp({super.key});
 
@@ -21,7 +25,9 @@ class _EriSportsAppState extends ConsumerState<EriSportsApp> {
     Future.microtask(() {
       ref.read(startupControllerProvider.notifier).ensureStarted();
       if (ref.read(daylysportAutoMonitoringEnabledProvider)) {
-        ref.read(daylysportSyncControllerProvider.notifier).ensureMonitoringStarted();
+        ref
+            .read(daylysportSyncControllerProvider.notifier)
+            .ensureMonitoringStarted();
       }
     });
   }
@@ -34,9 +40,14 @@ class _EriSportsAppState extends ConsumerState<EriSportsApp> {
 
   late final WidgetsBindingObserver _lifecycleObserver =
       _DaylysportLifecycleObserver(
+        onStateChanged: (state) {
+          ref.read(appLifecycleStateProvider.notifier).state = state;
+        },
         onResume: () {
           if (ref.read(daylysportAutoMonitoringEnabledProvider)) {
-            ref.read(daylysportSyncControllerProvider.notifier).runResumeSyncIfNeeded();
+            ref
+                .read(daylysportSyncControllerProvider.notifier)
+                .runResumeSyncIfNeeded();
           }
         },
       );
@@ -80,12 +91,17 @@ class _EriSportsAppState extends ConsumerState<EriSportsApp> {
 }
 
 class _DaylysportLifecycleObserver extends WidgetsBindingObserver {
-  _DaylysportLifecycleObserver({required this.onResume});
+  _DaylysportLifecycleObserver({
+    required this.onStateChanged,
+    required this.onResume,
+  });
 
+  final ValueChanged<AppLifecycleState> onStateChanged;
   final VoidCallback onResume;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    onStateChanged(state);
     if (state == AppLifecycleState.resumed) {
       onResume();
     }
