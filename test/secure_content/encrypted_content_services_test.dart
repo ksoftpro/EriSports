@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
+import 'package:eri_sports/data/secure_content/decrypted_file_cache_manager.dart';
 import 'package:eri_sports/data/secure_content/encrypted_image_service.dart';
 import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
 import 'package:eri_sports/data/secure_content/file_fingerprint_cache.dart';
@@ -46,12 +48,11 @@ void main() {
     });
 
     test('json service decrypts once and reuses cached output', () async {
-      final sourceFile = File('${tempDir.path}${Platform.pathSeparator}table.json');
+      final sourceFile = File(
+        '${tempDir.path}${Platform.pathSeparator}table.json',
+      );
       await sourceFile.writeAsString(
-        jsonEncode({
-          'competition': 'Premier League',
-          'round': 32,
-        }),
+        jsonEncode({'competition': 'Premier League', 'round': 32}),
       );
       final encryptedFile = File('${sourceFile.path}.esj');
 
@@ -83,72 +84,172 @@ void main() {
       expect((decoded as Map)['competition'], 'Premier League');
     });
 
-    test('image service invalidates cache when encrypted source changes', () async {
-      final plainFile = File('${tempDir.path}${Platform.pathSeparator}headline.png');
-      await plainFile.writeAsBytes(<int>[137, 80, 78, 71, 0, 1, 2, 3]);
-      final encryptedFile = File('${plainFile.path}.esi');
+    test(
+      'image service invalidates cache when encrypted source changes',
+      () async {
+        final plainFile = File(
+          '${tempDir.path}${Platform.pathSeparator}headline.png',
+        );
+        await plainFile.writeAsBytes(<int>[137, 80, 78, 71, 0, 1, 2, 3]);
+        final encryptedFile = File('${plainFile.path}.esi');
 
-      encryptSecureFileSync(
-        sourcePath: plainFile.path,
-        destinationPath: encryptedFile.path,
-        masterKey: masterKey,
-        contentType: SecureContentType.image,
-      );
+        encryptSecureFileSync(
+          sourcePath: plainFile.path,
+          destinationPath: encryptedFile.path,
+          masterKey: masterKey,
+          contentType: SecureContentType.image,
+        );
 
-      final service = EncryptedImageService(
-        fingerprintCache: fingerprintCache,
-        keyBase64: keyBase64,
-        cacheRootProvider: () async => cacheRoot,
-      );
+        final service = EncryptedImageService(
+          fingerprintCache: fingerprintCache,
+          keyBase64: keyBase64,
+          cacheRootProvider: () async => cacheRoot,
+        );
 
-      final first = await service.resolveImageFile(encryptedFile);
-      expect(first.wasDecrypted, isTrue);
-      final firstPath = first.file.path;
-      expect(await first.file.readAsBytes(), await plainFile.readAsBytes());
+        final first = await service.resolveImageFile(encryptedFile);
+        expect(first.wasDecrypted, isTrue);
+        final firstPath = first.file.path;
+        expect(await first.file.readAsBytes(), await plainFile.readAsBytes());
 
-      await plainFile.writeAsBytes(<int>[137, 80, 78, 71, 9, 8, 7, 6, 5, 4, 3]);
-      encryptSecureFileSync(
-        sourcePath: plainFile.path,
-        destinationPath: encryptedFile.path,
-        masterKey: masterKey,
-        contentType: SecureContentType.image,
-        overwrite: true,
-      );
+        await plainFile.writeAsBytes(<int>[
+          137,
+          80,
+          78,
+          71,
+          9,
+          8,
+          7,
+          6,
+          5,
+          4,
+          3,
+        ]);
+        encryptSecureFileSync(
+          sourcePath: plainFile.path,
+          destinationPath: encryptedFile.path,
+          masterKey: masterKey,
+          contentType: SecureContentType.image,
+          overwrite: true,
+        );
 
-      final second = await service.resolveImageFile(encryptedFile);
-      expect(second.wasDecrypted, isTrue);
-      expect(second.file.path, isNot(firstPath));
-      expect(await second.file.readAsBytes(), await plainFile.readAsBytes());
-    });
+        final second = await service.resolveImageFile(encryptedFile);
+        expect(second.wasDecrypted, isTrue);
+        expect(second.file.path, isNot(firstPath));
+        expect(await second.file.readAsBytes(), await plainFile.readAsBytes());
+      },
+    );
 
-    test('media service decrypts once and reuses cached playable output', () async {
-      final plainFile = File('${tempDir.path}${Platform.pathSeparator}goal.mp4');
-      await plainFile.writeAsBytes(
-        List<int>.generate(2048, (index) => index % 251),
-      );
-      final encryptedFile = File('${plainFile.path}.esv');
+    test(
+      'media service decrypts once and reuses cached playable output',
+      () async {
+        final plainFile = File(
+          '${tempDir.path}${Platform.pathSeparator}goal.mp4',
+        );
+        await plainFile.writeAsBytes(
+          List<int>.generate(2048, (index) => index % 251),
+        );
+        final encryptedFile = File('${plainFile.path}.esv');
 
-      encryptMediaFileSync(
-        sourcePath: plainFile.path,
-        destinationPath: encryptedFile.path,
-        masterKey: masterKey,
-      );
+        encryptMediaFileSync(
+          sourcePath: plainFile.path,
+          destinationPath: encryptedFile.path,
+          masterKey: masterKey,
+        );
 
-      final service = EncryptedMediaService(
-        fingerprintCache: fingerprintCache,
-        mediaKeyBase64: keyBase64,
-        cacheRootProvider: () async => cacheRoot,
-      );
+        final service = EncryptedMediaService(
+          fingerprintCache: fingerprintCache,
+          mediaKeyBase64: keyBase64,
+          cacheRootProvider: () async => cacheRoot,
+        );
 
-      final first = await service.resolvePlayableFile(encryptedFile);
-      expect(first.wasDecrypted, isTrue);
-      expect(first.usedCache, isFalse);
-      expect(await first.file.readAsBytes(), await plainFile.readAsBytes());
+        final first = await service.resolvePlayableFile(encryptedFile);
+        expect(first.wasDecrypted, isTrue);
+        expect(first.usedCache, isFalse);
+        expect(await first.file.readAsBytes(), await plainFile.readAsBytes());
 
-      final second = await service.resolvePlayableFile(encryptedFile);
-      expect(second.wasDecrypted, isFalse);
-      expect(second.usedCache, isTrue);
-      expect(second.file.path, first.file.path);
-    });
+        final second = await service.resolvePlayableFile(encryptedFile);
+        expect(second.wasDecrypted, isFalse);
+        expect(second.usedCache, isTrue);
+        expect(second.file.path, first.file.path);
+      },
+    );
+
+    test(
+      'cache manager serializes first-time materialization when limited',
+      () async {
+        final sourceOne = File(
+          '${tempDir.path}${Platform.pathSeparator}one.esi',
+        );
+        final sourceTwo = File(
+          '${tempDir.path}${Platform.pathSeparator}two.esi',
+        );
+        await sourceOne.writeAsBytes(<int>[1, 2, 3, 4]);
+        await sourceTwo.writeAsBytes(<int>[5, 6, 7, 8]);
+
+        final manager = DecryptedFileCacheManager(
+          namespace: 'image-test',
+          cacheDirectoryName: 'serial_materialize_cache',
+          fingerprintCache: fingerprintCache,
+          maxConcurrentMaterializations: 1,
+          cacheRootProvider: () async => cacheRoot,
+        );
+
+        final firstEntered = Completer<void>();
+        final secondEntered = Completer<void>();
+        final releaseFirst = Completer<void>();
+        final releaseSecond = Completer<void>();
+        var activeMaterializations = 0;
+        var maxActiveMaterializations = 0;
+
+        Future<void> materialize(
+          String sourcePath,
+          String destinationPath,
+        ) async {
+          activeMaterializations += 1;
+          if (activeMaterializations > maxActiveMaterializations) {
+            maxActiveMaterializations = activeMaterializations;
+          }
+
+          if (sourcePath == sourceOne.path) {
+            firstEntered.complete();
+            await releaseFirst.future;
+          } else {
+            secondEntered.complete();
+            await releaseSecond.future;
+          }
+
+          await File(destinationPath).writeAsString(sourcePath);
+          activeMaterializations -= 1;
+        }
+
+        final firstFuture = manager.resolve(
+          sourceFile: sourceOne,
+          outputExtensionResolver: (_) async => '.png',
+          materializeToPath: materialize,
+        );
+        await firstEntered.future;
+
+        final secondFuture = manager.resolve(
+          sourceFile: sourceTwo,
+          outputExtensionResolver: (_) async => '.png',
+          materializeToPath: materialize,
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(secondEntered.isCompleted, isFalse);
+
+        releaseFirst.complete();
+        await secondEntered.future;
+        expect(maxActiveMaterializations, 1);
+
+        releaseSecond.complete();
+        final results = await Future.wait(<Future<CachedDecryptedFile>>[
+          firstFuture,
+          secondFuture,
+        ]);
+
+        expect(results, hasLength(2));
+        expect(results.every((result) => result.wasDecrypted), isTrue);
+      },
+    );
   });
 }

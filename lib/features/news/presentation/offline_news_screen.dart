@@ -156,21 +156,27 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                                   width: selected ? 2 : 1,
                                   color:
                                       selected
-                                          ? Theme.of(context).colorScheme.primary
-                                          : Theme.of(context)
-                                              .colorScheme
-                                              .outlineVariant,
+                                          ? Theme.of(
+                                            context,
+                                          ).colorScheme.primary
+                                          : Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
                                 ),
                               ),
                               clipBehavior: Clip.antiAlias,
                               child: SecureFileImage(
                                 sourceFile: media.file,
                                 fit: BoxFit.cover,
+                                loadingWidget: _ThumbnailLoadingState(
+                                  isSelected: selected,
+                                ),
                                 errorBuilder:
                                     (context, error, stackTrace) => Container(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .surfaceContainerHighest,
+                                      color:
+                                          Theme.of(
+                                            context,
+                                          ).colorScheme.surfaceContainerHighest,
                                       alignment: Alignment.center,
                                       child: const Icon(
                                         Icons.broken_image_outlined,
@@ -200,9 +206,10 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
 
     const itemWidth = 76.0;
     final target = (index * itemWidth) - 96;
-    final clamped = target
-        .clamp(0.0, _thumbnailScrollController.position.maxScrollExtent)
-        .toDouble();
+    final clamped =
+        target
+            .clamp(0.0, _thumbnailScrollController.position.maxScrollExtent)
+            .toDouble();
 
     _thumbnailScrollController.animateTo(
       clamped,
@@ -242,15 +249,102 @@ class _OfflineNewsPage extends StatelessWidget {
                       alignment: Alignment.topCenter,
                       filterQuality: FilterQuality.high,
                       gaplessPlayback: true,
+                      loadingWidget: _NewsImageLoadingState(
+                        fileName: media.fileName,
+                      ),
                       errorBuilder:
-                          (context, error, stackTrace) => _CorruptedImageState(
-                            fileName: media.fileName,
-                          ),
+                          (context, error, stackTrace) =>
+                              _CorruptedImageState(fileName: media.fileName),
                     ),
                   ),
                 ),
               );
             },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NewsImageLoadingState extends StatelessWidget {
+  const _NewsImageLoadingState({required this.fileName});
+
+  final String fileName;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ColoredBox(
+      color: colorScheme.surfaceContainerLow,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 34,
+                height: 34,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Decrypting image...',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Preparing a cached copy for smoother next loads.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                fileName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThumbnailLoadingState extends StatelessWidget {
+  const _ThumbnailLoadingState({required this.isSelected});
+
+  final bool isSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ColoredBox(
+      color:
+          isSelected
+              ? colorScheme.primaryContainer.withValues(alpha: 0.45)
+              : colorScheme.surfaceContainerHighest,
+      child: Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color:
+                isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
           ),
         ),
       ),
@@ -320,21 +414,25 @@ class _CorruptedImageState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.broken_image_outlined, color: Colors.white70, size: 40),
+            const Icon(
+              Icons.broken_image_outlined,
+              color: Colors.white70,
+              size: 40,
+            ),
             const SizedBox(height: 12),
             Text(
               'Unable to render image',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: Colors.white,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: Colors.white),
             ),
             const SizedBox(height: 6),
             Text(
               fileName,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.white70,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.white70),
             ),
           ],
         ),

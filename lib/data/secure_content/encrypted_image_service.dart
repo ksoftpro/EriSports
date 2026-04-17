@@ -23,6 +23,7 @@ class EncryptedImageService {
   EncryptedImageService({
     required FileFingerprintCache fingerprintCache,
     String? keyBase64,
+    int maxConcurrentDecryptions = 1,
     Future<Directory> Function()? cacheRootProvider,
   }) : _masterKey = decodeSecureContentMasterKey(
          keyBase64 ?? configuredSecureContentKeyBase64(),
@@ -31,6 +32,7 @@ class EncryptedImageService {
          namespace: 'image',
          cacheDirectoryName: 'eri_sports_image_cache',
          fingerprintCache: fingerprintCache,
+         maxConcurrentMaterializations: maxConcurrentDecryptions,
          cacheRootProvider: cacheRootProvider,
        );
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -23,18 +25,23 @@ class DecryptedFileCacheManager {
     required this.namespace,
     required this.cacheDirectoryName,
     this.fingerprintCache,
+    this.maxConcurrentMaterializations,
     Future<Directory> Function()? cacheRootProvider,
   }) : _cacheRootProvider = cacheRootProvider;
 
   final String namespace;
   final String cacheDirectoryName;
   final FileFingerprintCache? fingerprintCache;
+  final int? maxConcurrentMaterializations;
   final Future<Directory> Function()? _cacheRootProvider;
 
   final Map<String, Future<CachedDecryptedFile>> _inFlight =
       <String, Future<CachedDecryptedFile>>{};
+  final Queue<Completer<void>> _materializationWaiters =
+      Queue<Completer<void>>();
 
   Directory? _cacheDirectory;
+  int _activeMaterializations = 0;
 
   Future<void> warmUpCache() async {
     final cacheDirectory = await _getOrCreateCacheDirectory();
@@ -133,32 +140,35 @@ class DecryptedFileCacheManager {
             );
           }
 
-          await _deleteStaleCacheFiles(cacheDirectory, sourcePrefix);
-          if (cachedEntry != null && cachedEntry.cachePath != cacheFile.path) {
-            final staleFile = File(cachedEntry.cachePath);
-            if (await staleFile.exists()) {
-              await staleFile.delete();
+          await _runWithMaterializationPermit(() async {
+            await _deleteStaleCacheFiles(cacheDirectory, sourcePrefix);
+            if (cachedEntry != null &&
+                cachedEntry.cachePath != cacheFile.path) {
+              final staleFile = File(cachedEntry.cachePath);
+              if (await staleFile.exists()) {
+                await staleFile.delete();
+              }
             }
-          }
 
-          final tempOutput = File('${cacheFile.path}.part');
-          if (await tempOutput.exists()) {
-            await tempOutput.delete();
-          }
-
-          try {
-            await materializeToPath(normalizedPath, tempOutput.path);
-
-            if (await cacheFile.exists()) {
-              await cacheFile.delete();
-            }
-            await tempOutput.rename(cacheFile.path);
-          } catch (_) {
+            final tempOutput = File('${cacheFile.path}.part');
             if (await tempOutput.exists()) {
               await tempOutput.delete();
             }
-            rethrow;
-          }
+
+            try {
+              await materializeToPath(normalizedPath, tempOutput.path);
+
+              if (await cacheFile.exists()) {
+                await cacheFile.delete();
+              }
+              await tempOutput.rename(cacheFile.path);
+            } catch (_) {
+              if (await tempOutput.exists()) {
+                await tempOutput.delete();
+              }
+              rethrow;
+            }
+          });
 
           await fingerprintCache?.write(
             namespace,
@@ -189,7 +199,7 @@ class DecryptedFileCacheManager {
 
     final rootDirectory =
         _cacheRootProvider != null
-        ? await _cacheRootProvider()
+            ? await _cacheRootProvider()
             : await getTemporaryDirectory();
     final dir = Directory(p.join(rootDirectory.path, cacheDirectoryName));
     if (!await dir.exists()) {
@@ -237,6 +247,44 @@ class DecryptedFileCacheManager {
       if (name.startsWith('${sourcePrefix}_') && !name.endsWith('.part')) {
         await entity.delete();
       }
+    }
+  }
+
+  Future<T> _runWithMaterializationPermit<T>(
+    Future<T> Function() action,
+  ) async {
+    final maxConcurrent = maxConcurrentMaterializations;
+    if (maxConcurrent == null || maxConcurrent <= 0) {
+      return action();
+    }
+
+    await _acquireMaterializationPermit(maxConcurrent);
+    try {
+      return await action();
+    } finally {
+      _releaseMaterializationPermit();
+    }
+  }
+
+  Future<void> _acquireMaterializationPermit(int maxConcurrent) async {
+    if (_activeMaterializations < maxConcurrent) {
+      _activeMaterializations += 1;
+      return;
+    }
+
+    final waiter = Completer<void>();
+    _materializationWaiters.addLast(waiter);
+    await waiter.future;
+  }
+
+  void _releaseMaterializationPermit() {
+    if (_materializationWaiters.isNotEmpty) {
+      _materializationWaiters.removeFirst().complete();
+      return;
+    }
+
+    if (_activeMaterializations > 0) {
+      _activeMaterializations -= 1;
     }
   }
 }
