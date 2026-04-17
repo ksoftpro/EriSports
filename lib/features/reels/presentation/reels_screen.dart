@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:eri_sports/app/app.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/app/navigation/app_shell.dart';
 import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
@@ -348,6 +349,11 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     }
 
     if (!oldWidget.isActive && widget.isActive) {
+      unawaited(
+        ref
+            .read(offlineContentRefreshControllerProvider.notifier)
+            .markMediaItemSeen(widget.item),
+      );
       _ensurePrepared();
       unawaited(_playIfReady());
     } else if (oldWidget.isActive && !widget.isActive) {
@@ -433,6 +439,13 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     });
 
     try {
+      if (widget.isActive) {
+        unawaited(
+          ref
+              .read(offlineContentRefreshControllerProvider.notifier)
+              .markMediaItemSeen(widget.item),
+        );
+      }
       final services = ref.read(appServicesProvider);
       final playable = await services.encryptedMediaService.resolvePlayableFile(
         widget.item.file,

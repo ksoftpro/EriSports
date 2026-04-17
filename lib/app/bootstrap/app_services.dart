@@ -23,6 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppServices {
   AppServices({
     required this.database,
+    required this.cacheStore,
     required this.daylySportLocator,
     required this.importCoordinator,
     required this.assetResolver,
@@ -38,6 +39,7 @@ class AppServices {
   });
 
   final AppDatabase database;
+  final DaylySportCacheStore cacheStore;
   final DaylySportLocator daylySportLocator;
   final ImportCoordinator importCoordinator;
   final LocalAssetResolver assetResolver;
@@ -122,6 +124,7 @@ class AppServices {
 
     return AppServices(
       database: database,
+      cacheStore: cacheStore,
       daylySportLocator: daylySportLocator,
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,

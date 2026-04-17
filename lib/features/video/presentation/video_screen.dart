@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
 import 'package:eri_sports/features/media/presentation/media_playback_screen.dart';
@@ -30,6 +31,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
   @override
   Widget build(BuildContext context) {
     final mediaAsync = ref.watch(daylySportMediaSnapshotProvider);
+    final badges = ref.watch(offlineContentBadgeCountsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -38,18 +40,31 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
           IconButton(
             tooltip: 'Refresh media',
             onPressed:
-                () => ref
-                    .read(daylySportMediaSnapshotProvider.notifier)
-                    .refresh(),
+                () =>
+                    ref
+                        .read(daylySportMediaSnapshotProvider.notifier)
+                        .refresh(),
             icon: const Icon(Icons.refresh),
           ),
         ],
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [
-            Tab(text: 'Highlights'),
-            Tab(text: 'News'),
-            Tab(text: 'Updates'),
+          tabs: [
+            Tab(
+              child: _SectionTabLabel(
+                label: 'Highlights',
+                count: badges.videoHighlights,
+              ),
+            ),
+            Tab(
+              child: _SectionTabLabel(label: 'News', count: badges.videoNews),
+            ),
+            Tab(
+              child: _SectionTabLabel(
+                label: 'Updates',
+                count: badges.videoUpdates,
+              ),
+            ),
           ],
         ),
       ),
@@ -116,13 +131,52 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
   }
 
   void _openMediaItem(DaylySportMediaItem item) {
+    unawaited(
+      ref
+          .read(offlineContentRefreshControllerProvider.notifier)
+          .markMediaItemSeen(item),
+    );
     if (item.isVideo && item.isEncrypted) {
       final service = ref.read(appServicesProvider).encryptedMediaService;
       unawaited(service.prewarmPlayableFile(item.file));
     }
 
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => MediaPlaybackScreen(item: item)),
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => MediaPlaybackScreen(item: item)));
+  }
+}
+
+class _SectionTabLabel extends StatelessWidget {
+  const _SectionTabLabel({required this.label, required this.count});
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label),
+        if (count > 0) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.error,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              count > 99 ? '99+' : '$count',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onError,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -196,9 +250,9 @@ class _MediaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final titleStyle = Theme.of(context).textTheme.titleSmall?.copyWith(
-      fontWeight: FontWeight.w700,
-    );
+    final titleStyle = Theme.of(
+      context,
+    ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -210,18 +264,22 @@ class _MediaCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 16 / 9,
-              child: item.type == DaylySportMediaType.image
-                  ? SecureFileImage(sourceFile: item.file, fit: BoxFit.cover)
-                  : ColoredBox(
-                      color: const Color(0xFF141A24),
-                      child: Center(
-                        child: Icon(
-                          Icons.play_circle_fill_rounded,
-                          size: 56,
-                          color: Colors.white.withValues(alpha: 0.85),
+              child:
+                  item.type == DaylySportMediaType.image
+                      ? SecureFileImage(
+                        sourceFile: item.file,
+                        fit: BoxFit.cover,
+                      )
+                      : ColoredBox(
+                        color: const Color(0xFF141A24),
+                        child: Center(
+                          child: Icon(
+                            Icons.play_circle_fill_rounded,
+                            size: 56,
+                            color: Colors.white.withValues(alpha: 0.85),
+                          ),
                         ),
                       ),
-                    ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),

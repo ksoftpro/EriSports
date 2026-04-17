@@ -1,5 +1,6 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/app/bootstrap/startup_controller.dart';
+import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
@@ -21,6 +22,7 @@ class MoreScreen extends ConsumerStatefulWidget {
 class _MoreScreenState extends ConsumerState<MoreScreen> {
   bool _isDiagnosingAssets = false;
   bool _isPickingJsonFolder = false;
+  bool _isRunningOfflineAction = false;
   String? _folderSelectionMessage;
   AssetDiagnosticsReport? _assetDiagnostics;
 
@@ -268,10 +270,35 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     });
   }
 
+  Future<void> _runOfflineAction(OfflineContentManualAction action) async {
+    if (_isRunningOfflineAction) {
+      return;
+    }
+
+    setState(() {
+      _isRunningOfflineAction = true;
+    });
+
+    try {
+      await ref
+          .read(offlineContentRefreshControllerProvider.notifier)
+          .runManualAction(action);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRunningOfflineAction = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final startupReport = ref.watch(startupImportReportProvider);
     final startupState = ref.watch(startupControllerProvider);
+    final offlineContentState = ref.watch(
+      offlineContentRefreshControllerProvider,
+    );
     final themeMode = ref.watch(themeModeProvider);
     final syncState = ref.watch(daylysportSyncControllerProvider);
     final services = ref.read(appServicesProvider);
@@ -381,6 +408,11 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     syncState.statusText,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    offlineContentState.statusText,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 10,
@@ -395,6 +427,40 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         onPressed: () => context.push('/sync'),
                         icon: const Icon(Icons.sync_rounded),
                         label: const Text('Open sync tools'),
+                      ),
+                      FilledButton.icon(
+                        onPressed:
+                            _isRunningOfflineAction || syncState.isBusy
+                                ? null
+                                : () => _runOfflineAction(
+                                  OfflineContentManualAction.sync,
+                                ),
+                        icon: const Icon(Icons.cloud_sync_outlined),
+                        label: Text(
+                          _isRunningOfflineAction
+                              ? 'Working...'
+                              : 'Run sync now',
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed:
+                            _isRunningOfflineAction
+                                ? null
+                                : () => _runOfflineAction(
+                                  OfflineContentManualAction.decrypt,
+                                ),
+                        icon: const Icon(Icons.lock_open_rounded),
+                        label: const Text('Prewarm decryption'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed:
+                            _isRunningOfflineAction
+                                ? null
+                                : () => _runOfflineAction(
+                                  OfflineContentManualAction.cache,
+                                ),
+                        icon: const Icon(Icons.cached_rounded),
+                        label: const Text('Refresh cache'),
                       ),
                     ],
                   ),

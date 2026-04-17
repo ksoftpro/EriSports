@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:eri_sports/features/news/data/offline_news_repository.dart';
 import 'package:eri_sports/features/news/presentation/offline_news_providers.dart';
+import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,10 +39,33 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
   @override
   Widget build(BuildContext context) {
     final galleryAsync = ref.watch(offlineNewsGalleryProvider);
+    final badges = ref.watch(offlineContentBadgeCountsProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Offline News'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Offline News'),
+            if (badges.newsImages > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.error,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  badges.newsImages > 99 ? '99+' : '${badges.newsImages}',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onError,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Refresh encrypted news',
@@ -61,6 +87,11 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                 onPressed: _onRefresh,
               ),
           data: (snapshot) {
+            unawaited(
+              ref
+                  .read(offlineContentRefreshControllerProvider.notifier)
+                  .markNewsItemsSeen(snapshot.images.take(1)),
+            );
             if (!snapshot.newsDirectoryExists) {
               return _OfflineNewsEmptyState(
                 icon: Icons.folder_off,
@@ -108,6 +139,14 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                       controller: _pageController,
                       itemCount: snapshot.images.length,
                       onPageChanged: (index) {
+                        unawaited(
+                          ref
+                              .read(
+                                offlineContentRefreshControllerProvider
+                                    .notifier,
+                              )
+                              .markNewsItemSeen(snapshot.images[index]),
+                        );
                         setState(() {
                           _currentIndex = index;
                         });

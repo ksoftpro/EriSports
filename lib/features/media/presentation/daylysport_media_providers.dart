@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,15 +12,16 @@ final daylySportMediaRepositoryProvider = Provider<DaylySportMediaRepository>((
   );
 });
 
-final daylySportMediaSnapshotProvider =
-    AsyncNotifierProvider<DaylySportMediaSnapshotNotifier, DaylySportMediaSnapshot>(
-      DaylySportMediaSnapshotNotifier.new,
-    );
+final daylySportMediaSnapshotProvider = AsyncNotifierProvider<
+  DaylySportMediaSnapshotNotifier,
+  DaylySportMediaSnapshot
+>(DaylySportMediaSnapshotNotifier.new);
 
 class DaylySportMediaSnapshotNotifier
     extends AsyncNotifier<DaylySportMediaSnapshot> {
   @override
   Future<DaylySportMediaSnapshot> build() async {
+    ref.watch(dataRefreshTokenProvider);
     final repository = ref.read(daylySportMediaRepositoryProvider);
     return repository.loadSnapshot();
   }

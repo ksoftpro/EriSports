@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
@@ -92,6 +93,11 @@ class StartupController extends Notifier<StartupState> {
         clearError: true,
       );
       _warmRuntimeCaches(services);
+      unawaited(
+        ref
+            .read(offlineContentRefreshControllerProvider.notifier)
+            .refreshOnStartup(),
+      );
       return;
     }
 
@@ -150,6 +156,11 @@ class StartupController extends Notifier<StartupState> {
       );
       await _recordBackgroundRefresh(result.finishedAtUtc);
       _warmRuntimeCaches(services);
+      unawaited(
+        ref
+            .read(offlineContentRefreshControllerProvider.notifier)
+            .refreshOnStartup(),
+      );
     } catch (error) {
       services.logger.error('Startup import failed.', error);
       state = state.copyWith(

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
@@ -265,6 +266,11 @@ class DaylysportSyncController extends Notifier<DaylysportSyncState> {
 
     if (result.status != DaylysportSyncStatus.failed) {
       _applySyncImpact(result);
+      unawaited(
+        ref
+            .read(offlineContentRefreshControllerProvider.notifier)
+            .refreshAfterSync(),
+      );
     }
     recordSyncResult(result);
     return result;

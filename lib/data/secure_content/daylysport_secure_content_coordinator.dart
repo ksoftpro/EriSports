@@ -144,6 +144,61 @@ class DaylysportSecureContentCoordinator {
     ]);
   }
 
+  Future<void> prewarmImages(
+    Iterable<File> sourceFiles, {
+    int maxItems = 8,
+  }) async {
+    if (maxItems <= 0) {
+      return;
+    }
+
+    var warmed = 0;
+    for (final file in sourceFiles) {
+      if (warmed >= maxItems) {
+        break;
+      }
+      if (!isEncryptedImagePath(file.path)) {
+        continue;
+      }
+
+      warmed += 1;
+      try {
+        await resolveImageFile(file);
+      } catch (_) {
+        // Best effort only.
+      }
+    }
+  }
+
+  Future<void> prewarmJsonFiles(
+    Directory rootDirectory, {
+    int maxItems = 8,
+  }) async {
+    if (maxItems <= 0 || !await rootDirectory.exists()) {
+      return;
+    }
+
+    var warmed = 0;
+    await for (final entity in rootDirectory.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (warmed >= maxItems) {
+        break;
+      }
+      if (entity is! File || !isSupportedSecureJsonPath(entity.path)) {
+        continue;
+      }
+
+      warmed += 1;
+      try {
+        await resolveJsonFile(entity);
+      } catch (_) {
+        // Best effort only.
+      }
+    }
+  }
+
   Future<String> readJsonText(File sourceFile) {
     return encryptedJsonService.readTextFile(sourceFile);
   }
@@ -189,7 +244,8 @@ class DaylysportSecureContentCoordinator {
     required Iterable<SecureContentEncryptionRequest> requests,
     bool overwrite = true,
   }) async {
-    final rootDirectory = await daylySportLocator.getOrCreateDaylySportDirectory();
+    final rootDirectory =
+        await daylySportLocator.getOrCreateDaylySportDirectory();
     final normalizedRequests = requests.toList(growable: false);
     final failures = <SecureContentEncryptionFailure>[];
     final outputPaths = <String>[];
@@ -222,7 +278,8 @@ class DaylysportSecureContentCoordinator {
         continue;
       }
 
-      if (descriptor.isEncrypted || descriptor.kind == SecureContentKind.other) {
+      if (descriptor.isEncrypted ||
+          descriptor.kind == SecureContentKind.other) {
         skippedCount += 1;
         continue;
       }
@@ -233,7 +290,10 @@ class DaylysportSecureContentCoordinator {
       );
       final destinationPath = p.join(
         rootDirectory.path,
-        _encryptedRelativePathFor(normalizedRelativeOutputPath, descriptor.kind),
+        _encryptedRelativePathFor(
+          normalizedRelativeOutputPath,
+          descriptor.kind,
+        ),
       );
 
       try {
@@ -341,7 +401,9 @@ class DaylysportSecureContentCoordinator {
       const JsonEncoder.withIndent('  ').convert({
         'createdAtUtc': timestamp.toIso8601String(),
         'entryCount': entries.length,
-        'entries': entries.map((entry) => entry.toJson()).toList(growable: false),
+        'entries': entries
+            .map((entry) => entry.toJson())
+            .toList(growable: false),
       }),
     );
     return file.path;
@@ -353,12 +415,17 @@ class DaylysportSecureContentCoordinator {
     final normalized = p.normalize(candidate.replaceAll('\\', '/'));
     final sanitized = normalized
         .split('/')
-        .where((segment) => segment.isNotEmpty && segment != '.' && segment != '..')
+        .where(
+          (segment) => segment.isNotEmpty && segment != '.' && segment != '..',
+        )
         .join('/');
     return sanitized.isEmpty ? fallbackFileName : sanitized;
   }
 
-  String _encryptedRelativePathFor(String logicalRelativePath, SecureContentKind kind) {
+  String _encryptedRelativePathFor(
+    String logicalRelativePath,
+    SecureContentKind kind,
+  ) {
     switch (kind) {
       case SecureContentKind.json:
         return '$logicalRelativePath$kEncryptedJsonExtension';
