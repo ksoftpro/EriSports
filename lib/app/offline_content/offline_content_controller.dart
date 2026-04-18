@@ -173,7 +173,7 @@ class OfflineContentDeletionProgress {
     if (currentFileName.isEmpty) {
       return currentLabel;
     }
-    return '$currentLabel • $currentFileName';
+    return '$currentLabel - $currentFileName';
   }
 }
 
@@ -271,7 +271,9 @@ final offlineContentBadgeCountsProvider = Provider<OfflineContentBadgeCounts>((
 
 final offlineContentDeletionProgressProvider =
     Provider<OfflineContentDeletionProgress?>((ref) {
-      return ref.watch(offlineContentRefreshControllerProvider).deletionProgress;
+      return ref
+          .watch(offlineContentRefreshControllerProvider)
+          .deletionProgress;
     });
 
 class OfflineContentRefreshController

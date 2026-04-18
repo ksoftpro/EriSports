@@ -8,6 +8,7 @@ import 'package:eri_sports/app/navigation/app_shell.dart';
 import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
+import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -79,6 +80,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   @override
   Widget build(BuildContext context) {
     final mediaAsync = ref.watch(daylySportMediaSnapshotProvider);
+    final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
     final shellIndex = ref.watch(currentShellBranchIndexProvider);
     final lifecycleState = ref.watch(appLifecycleStateProvider);
     final snapshot = mediaAsync.valueOrNull;
@@ -143,55 +145,58 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
           ),
         ],
       ),
-      body: mediaAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error:
-            (_, __) => _EmptyReelsState(
-              title: 'Unable to load local reels',
-              message:
-                  'The app could not scan daylySport media folders. Check storage permissions and refresh.',
-            ),
-        data: (snapshot) {
-          final reelsSection = snapshot.section(DaylySportMediaSection.reels);
-          final highlightFallback =
-              snapshot.section(DaylySportMediaSection.highlights).videoItems;
+      body: OfflineContentDeleteProgressScope(
+        progress: deleteProgress,
+        child: mediaAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error:
+              (_, __) => _EmptyReelsState(
+                title: 'Unable to load local reels',
+                message:
+                    'The app could not scan daylySport media folders. Check storage permissions and refresh.',
+              ),
+          data: (snapshot) {
+            final reelsSection = snapshot.section(DaylySportMediaSection.reels);
+            final highlightFallback =
+                snapshot.section(DaylySportMediaSection.highlights).videoItems;
 
-          final items =
-              reelsSection.hasVideoItems
-                  ? reelsSection.videoItems
-                  : highlightFallback;
+            final items =
+                reelsSection.hasVideoItems
+                    ? reelsSection.videoItems
+                    : highlightFallback;
 
-          _scheduleEncryptedPrewarm(snapshot, items);
+            _scheduleEncryptedPrewarm(snapshot, items);
 
-          if (items.isNotEmpty && _currentActiveIndex >= items.length) {
-            _currentActiveIndex = items.length - 1;
-          }
+            if (items.isNotEmpty && _currentActiveIndex >= items.length) {
+              _currentActiveIndex = items.length - 1;
+            }
 
-          if (items.isEmpty) {
-            return _EmptyReelsState(
-              title: 'No short videos found',
-              message:
-                  'Add encrypted files in ${reelsSection.scannedDirectories.join(' or ')} to populate reels.',
-            );
-          }
+            if (items.isEmpty) {
+              return _EmptyReelsState(
+                title: 'No short videos found',
+                message:
+                    'Add encrypted files in ${reelsSection.scannedDirectories.join(' or ')} to populate reels.',
+              );
+            }
 
-          if (_selectionMode) {
-            return _ReelsSelectionGrid(
+            if (_selectionMode) {
+              return _ReelsSelectionGrid(
+                items: items,
+                selectedIds: _selectedMediaIds,
+                onToggleSelection: _toggleReelSelection,
+                onDelete: _deleteSingleReel,
+              );
+            }
+
+            return ReelsFeed(
               items: items,
-              selectedIds: _selectedMediaIds,
-              onToggleSelection: _toggleReelSelection,
-              onDelete: _deleteSingleReel,
+              isScreenActive: isScreenActive,
+              onActiveIndexChanged: (index) {
+                _currentActiveIndex = index;
+              },
             );
-          }
-
-          return ReelsFeed(
-            items: items,
-            isScreenActive: isScreenActive,
-            onActiveIndexChanged: (index) {
-              _currentActiveIndex = index;
-            },
-          );
-        },
+          },
+        ),
       ),
     );
   }

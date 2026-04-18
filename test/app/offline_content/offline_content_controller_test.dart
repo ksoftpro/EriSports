@@ -446,6 +446,106 @@ void main() {
         );
       },
     );
+
+    test('publishes per-item deletion progress during bulk delete', () async {
+      final daylySportDir =
+          await services.daylySportLocator.getOrCreateDaylySportDirectory();
+      final sourceDir = Directory(
+        '${tempDir.path}${Platform.pathSeparator}source_progress_delete',
+      )..createSync(recursive: true);
+
+      final plainReel = File(
+        '${sourceDir.path}${Platform.pathSeparator}reel.mp4',
+      )..writeAsBytesSync(List<int>.generate(1200, (index) => index % 251));
+      final encryptedReel = File(
+        '${daylySportDir.path}${Platform.pathSeparator}reels${Platform.pathSeparator}reel.mp4.esv',
+      )..parent.createSync(recursive: true);
+      encryptMediaFileSync(
+        sourcePath: plainReel.path,
+        destinationPath: encryptedReel.path,
+        masterKey: services.secureContentCoordinator.mediaMasterKey,
+      );
+
+      final plainVideo = File(
+        '${sourceDir.path}${Platform.pathSeparator}video.mp4',
+      )..writeAsBytesSync(
+        List<int>.generate(1400, (index) => (index * 7) % 253),
+      );
+      final encryptedVideo = File(
+        '${daylySportDir.path}${Platform.pathSeparator}highlights${Platform.pathSeparator}video.mp4.esv',
+      )..parent.createSync(recursive: true);
+      encryptMediaFileSync(
+        sourcePath: plainVideo.path,
+        destinationPath: encryptedVideo.path,
+        masterKey: services.secureContentCoordinator.mediaMasterKey,
+      );
+
+      final plainImage = File(
+        '${sourceDir.path}${Platform.pathSeparator}headline.png',
+      )..writeAsBytesSync(<int>[137, 80, 78, 71, 1, 2, 3, 4, 5, 6]);
+      final encryptedImage = File(
+        '${daylySportDir.path}${Platform.pathSeparator}news${Platform.pathSeparator}headline.png.esi',
+      )..parent.createSync(recursive: true);
+      encryptSecureFileSync(
+        sourcePath: plainImage.path,
+        destinationPath: encryptedImage.path,
+        masterKey: services.secureContentCoordinator.secureContentMasterKey,
+        contentType: SecureContentType.image,
+      );
+
+      final container = ProviderContainer(
+        overrides: [appServicesProvider.overrideWithValue(services)],
+      );
+      addTearDown(container.dispose);
+
+      final progressSnapshots = <OfflineContentDeletionProgress>[];
+      final sub = container.listen<OfflineContentRefreshState>(
+        offlineContentRefreshControllerProvider,
+        (_, next) {
+          final progress = next.deletionProgress;
+          if (progress != null) {
+            progressSnapshots.add(progress);
+          }
+        },
+        fireImmediately: false,
+      );
+      addTearDown(sub.close);
+
+      await container
+          .read(offlineContentRefreshControllerProvider.notifier)
+          .refreshOnStartup();
+
+      final mediaSnapshot = await container.read(
+        daylySportMediaSnapshotProvider.future,
+      );
+      final newsSnapshot = await container.read(
+        offlineNewsGalleryProvider.future,
+      );
+      final reel =
+          mediaSnapshot.section(DaylySportMediaSection.reels).videoItems.single;
+      final video =
+          mediaSnapshot
+              .section(DaylySportMediaSection.highlights)
+              .videoItems
+              .single;
+      final newsImage = newsSnapshot.images.single;
+
+      final result = await container
+          .read(offlineContentRefreshControllerProvider.notifier)
+          .deleteItems(mediaItems: [reel, video], newsItems: [newsImage]);
+
+      expect(result.requestedCount, 3);
+      expect(progressSnapshots, isNotEmpty);
+      expect(progressSnapshots.first.totalCount, 3);
+      expect(progressSnapshots.first.currentIndex, 1);
+      expect(progressSnapshots.first.progressPercent, greaterThan(0));
+      expect(
+        progressSnapshots.map((snapshot) => snapshot.currentIndex),
+        containsAll(<int>[1, 2, 3]),
+      );
+      expect(progressSnapshots.last.completedCount, 3);
+      expect(container.read(offlineContentDeletionProgressProvider), isNull);
+    });
   });
 }
 

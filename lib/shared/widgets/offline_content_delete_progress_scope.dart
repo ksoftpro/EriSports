@@ -14,7 +14,7 @@ class OfflineContentDeleteProgressScope extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentProgress = progress;
-    if (currentProgress == null) {
+    if (currentProgress == null || currentProgress.totalCount <= 1) {
       return child;
     }
 
@@ -61,11 +61,12 @@ class OfflineContentDeleteProgressScope extends StatelessWidget {
                               ),
                               child: Text(
                                 '${currentProgress.progressPercent}%',
-                                style: Theme.of(context).textTheme.labelMedium
-                                    ?.copyWith(
-                                      color: scheme.onPrimaryContainer,
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.labelMedium?.copyWith(
+                                  color: scheme.onPrimaryContainer,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ],

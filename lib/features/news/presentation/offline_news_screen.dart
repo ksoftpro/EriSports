@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:eri_sports/features/news/data/offline_news_repository.dart';
 import 'package:eri_sports/features/news/presentation/offline_news_providers.dart';
 import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
+import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,6 +44,7 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
   Widget build(BuildContext context) {
     final galleryAsync = ref.watch(offlineNewsGalleryProvider);
     final badges = ref.watch(offlineContentBadgeCountsProvider);
+    final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
     final snapshot = galleryAsync.valueOrNull;
     final selectedCount = _selectedNewsIds.length;
 
@@ -129,179 +131,184 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
         ],
       ),
       body: SafeArea(
-        child: galleryAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error:
-              (error, stackTrace) => _OfflineNewsEmptyState(
-                icon: Icons.warning_amber_rounded,
-                title: 'Unable to load offline news',
-                message:
-                    'The app could not scan daylySport/news right now. Please check storage permissions and try again.',
-                ctaLabel: 'Retry',
-                onPressed: _onRefresh,
-              ),
-          data: (snapshot) {
-            unawaited(
-              ref
-                  .read(offlineContentRefreshControllerProvider.notifier)
-                  .markNewsItemsSeen(snapshot.images.take(1)),
-            );
-            if (!snapshot.newsDirectoryExists) {
-              return _OfflineNewsEmptyState(
-                icon: Icons.folder_off,
-                title: 'No news folder found',
-                message:
-                    'Create this folder and add encrypted news images: ${snapshot.newsDirectory.path}',
-                ctaLabel: 'Refresh',
-                onPressed: _onRefresh,
+        child: OfflineContentDeleteProgressScope(
+          progress: deleteProgress,
+          child: galleryAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error:
+                (error, stackTrace) => _OfflineNewsEmptyState(
+                  icon: Icons.warning_amber_rounded,
+                  title: 'Unable to load offline news',
+                  message:
+                      'The app could not scan daylySport/news right now. Please check storage permissions and try again.',
+                  ctaLabel: 'Retry',
+                  onPressed: _onRefresh,
+                ),
+            data: (snapshot) {
+              unawaited(
+                ref
+                    .read(offlineContentRefreshControllerProvider.notifier)
+                    .markNewsItemsSeen(snapshot.images.take(1)),
               );
-            }
-
-            if (!snapshot.hasImages) {
-              final details = StringBuffer(
-                'No encrypted news images were found in ${snapshot.newsDirectory.path}.',
-              );
-              if (snapshot.skippedUnsupportedCount > 0) {
-                details.write(
-                  '\n\nSkipped non-encrypted or unsupported files: ${snapshot.skippedUnsupportedCount}.',
+              if (!snapshot.newsDirectoryExists) {
+                return _OfflineNewsEmptyState(
+                  icon: Icons.folder_off,
+                  title: 'No news folder found',
+                  message:
+                      'Create this folder and add encrypted news images: ${snapshot.newsDirectory.path}',
+                  ctaLabel: 'Refresh',
+                  onPressed: _onRefresh,
                 );
               }
-              details.write(
-                '\nSupported encrypted formats: ${snapshot.supportedFormats.join(', ')}',
-              );
 
-              return _OfflineNewsEmptyState(
-                icon: Icons.image_not_supported_outlined,
-                title: 'No encrypted news images yet',
-                message: details.toString(),
-                ctaLabel: 'Refresh',
-                onPressed: _onRefresh,
-              );
-            }
+              if (!snapshot.hasImages) {
+                final details = StringBuffer(
+                  'No encrypted news images were found in ${snapshot.newsDirectory.path}.',
+                );
+                if (snapshot.skippedUnsupportedCount > 0) {
+                  details.write(
+                    '\n\nSkipped non-encrypted or unsupported files: ${snapshot.skippedUnsupportedCount}.',
+                  );
+                }
+                details.write(
+                  '\nSupported encrypted formats: ${snapshot.supportedFormats.join(', ')}',
+                );
 
-            final maxIndex = snapshot.images.length - 1;
-            if (_currentIndex > maxIndex) {
-              _currentIndex = maxIndex;
-            }
+                return _OfflineNewsEmptyState(
+                  icon: Icons.image_not_supported_outlined,
+                  title: 'No encrypted news images yet',
+                  message: details.toString(),
+                  ctaLabel: 'Refresh',
+                  onPressed: _onRefresh,
+                );
+              }
 
-            return RefreshIndicator(
-              onRefresh: _onRefresh,
-              child: Column(
-                children: [
-                  Expanded(
-                    child: PageView.builder(
-                      controller: _pageController,
-                      itemCount: snapshot.images.length,
-                      onPageChanged: (index) {
-                        unawaited(
-                          ref
-                              .read(
-                                offlineContentRefreshControllerProvider
-                                    .notifier,
-                              )
-                              .markNewsItemSeen(snapshot.images[index]),
-                        );
-                        setState(() {
-                          _currentIndex = index;
-                        });
-                        _scrollThumbnailStrip(index);
-                      },
-                      itemBuilder: (context, index) {
-                        final media = snapshot.images[index];
-                        return _OfflineNewsPage(media: media);
-                      },
+              final maxIndex = snapshot.images.length - 1;
+              if (_currentIndex > maxIndex) {
+                _currentIndex = maxIndex;
+              }
+
+              return RefreshIndicator(
+                onRefresh: _onRefresh,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: snapshot.images.length,
+                        onPageChanged: (index) {
+                          unawaited(
+                            ref
+                                .read(
+                                  offlineContentRefreshControllerProvider
+                                      .notifier,
+                                )
+                                .markNewsItemSeen(snapshot.images[index]),
+                          );
+                          setState(() {
+                            _currentIndex = index;
+                          });
+                          _scrollThumbnailStrip(index);
+                        },
+                        itemBuilder: (context, index) {
+                          final media = snapshot.images[index];
+                          return _OfflineNewsPage(media: media);
+                        },
+                      ),
                     ),
-                  ),
-                  _OfflineNewsFooter(
-                    currentIndex: _currentIndex,
-                    total: snapshot.images.length,
-                    currentFileName: snapshot.images[_currentIndex].fileName,
-                    unreadableCount: snapshot.unreadableCount,
-                    skippedUnsupportedCount: snapshot.skippedUnsupportedCount,
-                  ),
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    height: 84,
-                    child: ListView.builder(
-                      controller: _thumbnailScrollController,
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: snapshot.images.length,
-                      itemBuilder: (context, index) {
-                        final media = snapshot.images[index];
-                        final selected = index == _currentIndex;
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: GestureDetector(
-                            onTap: () {
-                              if (_selectionMode) {
-                                _toggleNewsSelection(media);
-                                return;
-                              }
-                              _pageController.animateToPage(
-                                index,
-                                duration: const Duration(milliseconds: 220),
-                                curve: Curves.easeOut,
-                              );
-                            },
-                            onLongPress: () {
-                              if (_selectionMode) {
-                                _toggleNewsSelection(media);
-                                return;
-                              }
-                              _startSelection(media);
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              width: 68,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  width: selected ? 2 : 1,
-                                  color:
-                                      _selectedNewsIds.contains(
-                                            offlineContentNewsItemId(media),
-                                          )
-                                          ? Theme.of(context).colorScheme.error
-                                          : selected
-                                          ? Theme.of(
-                                            context,
-                                          ).colorScheme.primary
-                                          : Theme.of(
-                                            context,
-                                          ).colorScheme.outlineVariant,
+                    _OfflineNewsFooter(
+                      currentIndex: _currentIndex,
+                      total: snapshot.images.length,
+                      currentFileName: snapshot.images[_currentIndex].fileName,
+                      unreadableCount: snapshot.unreadableCount,
+                      skippedUnsupportedCount: snapshot.skippedUnsupportedCount,
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 84,
+                      child: ListView.builder(
+                        controller: _thumbnailScrollController,
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        itemCount: snapshot.images.length,
+                        itemBuilder: (context, index) {
+                          final media = snapshot.images[index];
+                          final selected = index == _currentIndex;
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: GestureDetector(
+                              onTap: () {
+                                if (_selectionMode) {
+                                  _toggleNewsSelection(media);
+                                  return;
+                                }
+                                _pageController.animateToPage(
+                                  index,
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOut,
+                                );
+                              },
+                              onLongPress: () {
+                                if (_selectionMode) {
+                                  _toggleNewsSelection(media);
+                                  return;
+                                }
+                                _startSelection(media);
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                width: 68,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    width: selected ? 2 : 1,
+                                    color:
+                                        _selectedNewsIds.contains(
+                                              offlineContentNewsItemId(media),
+                                            )
+                                            ? Theme.of(
+                                              context,
+                                            ).colorScheme.error
+                                            : selected
+                                            ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
+                                            : Theme.of(
+                                              context,
+                                            ).colorScheme.outlineVariant,
+                                  ),
                                 ),
-                              ),
-                              clipBehavior: Clip.antiAlias,
-                              child: SecureFileImage(
-                                sourceFile: media.file,
-                                fit: BoxFit.cover,
-                                loadingWidget: _ThumbnailLoadingState(
-                                  isSelected: selected,
-                                ),
-                                errorBuilder:
-                                    (context, error, stackTrace) => Container(
-                                      color:
-                                          Theme.of(
-                                            context,
-                                          ).colorScheme.surfaceContainerHighest,
-                                      alignment: Alignment.center,
-                                      child: const Icon(
-                                        Icons.broken_image_outlined,
+                                clipBehavior: Clip.antiAlias,
+                                child: SecureFileImage(
+                                  sourceFile: media.file,
+                                  fit: BoxFit.cover,
+                                  loadingWidget: _ThumbnailLoadingState(
+                                    isSelected: selected,
+                                  ),
+                                  errorBuilder:
+                                      (context, error, stackTrace) => Container(
+                                        color:
+                                            Theme.of(context)
+                                                .colorScheme
+                                                .surfaceContainerHighest,
+                                        alignment: Alignment.center,
+                                        child: const Icon(
+                                          Icons.broken_image_outlined,
+                                        ),
                                       ),
-                                    ),
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-              ),
-            );
-          },
+                    const SizedBox(height: 10),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
