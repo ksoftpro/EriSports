@@ -5,6 +5,7 @@ import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
 import 'package:eri_sports/features/media/presentation/media_playback_screen.dart';
+import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,6 +36,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
   Widget build(BuildContext context) {
     final mediaAsync = ref.watch(daylySportMediaSnapshotProvider);
     final badges = ref.watch(offlineContentBadgeCountsProvider);
+    final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
     final snapshot = mediaAsync.valueOrNull;
     final allItems =
         snapshot == null
@@ -102,50 +104,53 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
           ],
         ),
       ),
-      body: mediaAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error:
-            (_, __) => const Center(
-              child: Text('Unable to load local daylySport media.'),
-            ),
-        data: (snapshot) {
-          _scheduleEncryptedPrewarm(snapshot);
-          return TabBarView(
-            controller: _tabs,
-            children: [
-              _SectionMediaGrid(
-                title: 'Highlights',
-                section: snapshot.section(DaylySportMediaSection.highlights),
-                onOpenMedia: _openMediaItem,
-                isSelectionMode: _selectionMode,
-                selectedIds: _selectedMediaIds,
-                onToggleSelection: _toggleMediaSelection,
-                onStartSelection: _startSelection,
-                onDeleteMedia: _deleteSingleMedia,
+      body: OfflineContentDeleteProgressScope(
+        progress: deleteProgress,
+        child: mediaAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error:
+              (_, __) => const Center(
+                child: Text('Unable to load local daylySport media.'),
               ),
-              _SectionMediaGrid(
-                title: 'News',
-                section: snapshot.section(DaylySportMediaSection.news),
-                onOpenMedia: _openMediaItem,
-                isSelectionMode: _selectionMode,
-                selectedIds: _selectedMediaIds,
-                onToggleSelection: _toggleMediaSelection,
-                onStartSelection: _startSelection,
-                onDeleteMedia: _deleteSingleMedia,
-              ),
-              _SectionMediaGrid(
-                title: 'Updates',
-                section: snapshot.section(DaylySportMediaSection.updates),
-                onOpenMedia: _openMediaItem,
-                isSelectionMode: _selectionMode,
-                selectedIds: _selectedMediaIds,
-                onToggleSelection: _toggleMediaSelection,
-                onStartSelection: _startSelection,
-                onDeleteMedia: _deleteSingleMedia,
-              ),
-            ],
-          );
-        },
+          data: (snapshot) {
+            _scheduleEncryptedPrewarm(snapshot);
+            return TabBarView(
+              controller: _tabs,
+              children: [
+                _SectionMediaGrid(
+                  title: 'Highlights',
+                  section: snapshot.section(DaylySportMediaSection.highlights),
+                  onOpenMedia: _openMediaItem,
+                  isSelectionMode: _selectionMode,
+                  selectedIds: _selectedMediaIds,
+                  onToggleSelection: _toggleMediaSelection,
+                  onStartSelection: _startSelection,
+                  onDeleteMedia: _deleteSingleMedia,
+                ),
+                _SectionMediaGrid(
+                  title: 'News',
+                  section: snapshot.section(DaylySportMediaSection.news),
+                  onOpenMedia: _openMediaItem,
+                  isSelectionMode: _selectionMode,
+                  selectedIds: _selectedMediaIds,
+                  onToggleSelection: _toggleMediaSelection,
+                  onStartSelection: _startSelection,
+                  onDeleteMedia: _deleteSingleMedia,
+                ),
+                _SectionMediaGrid(
+                  title: 'Updates',
+                  section: snapshot.section(DaylySportMediaSection.updates),
+                  onOpenMedia: _openMediaItem,
+                  isSelectionMode: _selectionMode,
+                  selectedIds: _selectedMediaIds,
+                  onToggleSelection: _toggleMediaSelection,
+                  onStartSelection: _startSelection,
+                  onDeleteMedia: _deleteSingleMedia,
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

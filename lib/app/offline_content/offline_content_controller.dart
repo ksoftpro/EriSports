@@ -137,6 +137,46 @@ class OfflineContentBadgeCounts {
       newsImages > 0;
 }
 
+class OfflineContentDeletionProgress {
+  const OfflineContentDeletionProgress({
+    required this.totalCount,
+    required this.currentIndex,
+    required this.completedCount,
+    required this.currentLabel,
+    required this.currentFileName,
+    required this.deletedCount,
+    required this.missingCount,
+    required this.failedCount,
+  });
+
+  final int totalCount;
+  final int currentIndex;
+  final int completedCount;
+  final String currentLabel;
+  final String currentFileName;
+  final int deletedCount;
+  final int missingCount;
+  final int failedCount;
+
+  double get progressValue {
+    if (totalCount <= 0) {
+      return 0;
+    }
+    return (currentIndex / totalCount).clamp(0.0, 1.0);
+  }
+
+  int get progressPercent => (progressValue * 100).round().clamp(0, 100);
+
+  String get progressText => 'Deleting $currentIndex of $totalCount items...';
+
+  String get detailText {
+    if (currentFileName.isEmpty) {
+      return currentLabel;
+    }
+    return '$currentLabel • $currentFileName';
+  }
+}
+
 class OfflineContentDeleteResult {
   const OfflineContentDeleteResult({
     required this.requestedCount,
@@ -174,6 +214,7 @@ class OfflineContentRefreshState {
     required this.isBusy,
     required this.statusText,
     required this.badges,
+    this.deletionProgress,
     this.lastCompletedAtUtc,
     this.lastError,
   });
@@ -182,12 +223,14 @@ class OfflineContentRefreshState {
     : isBusy = false,
       statusText = 'Offline content is ready',
       badges = const OfflineContentBadgeCounts.zero(),
+      deletionProgress = null,
       lastCompletedAtUtc = null,
       lastError = null;
 
   final bool isBusy;
   final String statusText;
   final OfflineContentBadgeCounts badges;
+  final OfflineContentDeletionProgress? deletionProgress;
   final DateTime? lastCompletedAtUtc;
   final String? lastError;
 
@@ -195,14 +238,20 @@ class OfflineContentRefreshState {
     bool? isBusy,
     String? statusText,
     OfflineContentBadgeCounts? badges,
+    OfflineContentDeletionProgress? deletionProgress,
     DateTime? lastCompletedAtUtc,
     String? lastError,
     bool clearError = false,
+    bool clearDeletionProgress = false,
   }) {
     return OfflineContentRefreshState(
       isBusy: isBusy ?? this.isBusy,
       statusText: statusText ?? this.statusText,
       badges: badges ?? this.badges,
+      deletionProgress:
+          clearDeletionProgress
+              ? null
+              : (deletionProgress ?? this.deletionProgress),
       lastCompletedAtUtc: lastCompletedAtUtc ?? this.lastCompletedAtUtc,
       lastError: clearError ? null : (lastError ?? this.lastError),
     );
@@ -219,6 +268,11 @@ final offlineContentBadgeCountsProvider = Provider<OfflineContentBadgeCounts>((
 ) {
   return ref.watch(offlineContentRefreshControllerProvider).badges;
 });
+
+final offlineContentDeletionProgressProvider =
+    Provider<OfflineContentDeletionProgress?>((ref) {
+      return ref.watch(offlineContentRefreshControllerProvider).deletionProgress;
+    });
 
 class OfflineContentRefreshController
     extends Notifier<OfflineContentRefreshState> {
@@ -324,8 +378,9 @@ class OfflineContentRefreshController
 
     state = state.copyWith(
       isBusy: true,
-      statusText: 'Deleting offline content',
+      statusText: 'Preparing deletion',
       clearError: true,
+      clearDeletionProgress: true,
     );
 
     final services = ref.read(appServicesProvider);
@@ -338,7 +393,17 @@ class OfflineContentRefreshController
     var failedCount = 0;
     var cacheWarningCount = 0;
 
-    for (final target in targets) {
+    for (var index = 0; index < targets.length; index++) {
+      final target = targets[index];
+      _setDeletionProgress(
+        targets: targets,
+        currentIndex: index + 1,
+        completedCount: deletedCount + missingCount + failedCount,
+        deletedCount: deletedCount,
+        missingCount: missingCount,
+        failedCount: failedCount,
+      );
+
       final outcome = await _deleteTarget(services, target);
       if (outcome.deleted) {
         deletedCount += 1;
@@ -354,6 +419,16 @@ class OfflineContentRefreshController
         cacheWarningCount += 1;
       }
     }
+
+    _setDeletionProgress(
+      targets: targets,
+      currentIndex: targets.length,
+      completedCount: targets.length,
+      deletedCount: deletedCount,
+      missingCount: missingCount,
+      failedCount: failedCount,
+      statusText: 'Finalizing offline content deletion...',
+    );
 
     try {
       if (removedIds.isNotEmpty) {
@@ -391,12 +466,14 @@ class OfflineContentRefreshController
                 ? 'Unable to delete $failedCount item${failedCount == 1 ? '' : 's'}.'
                 : null,
         clearError: !hasHardFailures,
+        clearDeletionProgress: true,
       );
     } catch (error) {
       state = state.copyWith(
         isBusy: false,
         statusText: 'Offline content deletion failed',
         lastError: '$error',
+        clearDeletionProgress: true,
       );
     }
 
@@ -445,6 +522,7 @@ class OfflineContentRefreshController
       isBusy: true,
       statusText: statusText,
       clearError: true,
+      clearDeletionProgress: true,
     );
     final services = ref.read(appServicesProvider);
 
@@ -472,14 +550,50 @@ class OfflineContentRefreshController
         badges: synced.badges,
         lastCompletedAtUtc: DateTime.now().toUtc(),
         clearError: true,
+        clearDeletionProgress: true,
       );
     } catch (error) {
       state = state.copyWith(
         isBusy: false,
         statusText: 'Offline content refresh failed',
         lastError: '$error',
+        clearDeletionProgress: true,
       );
     }
+  }
+
+  void _setDeletionProgress({
+    required List<_OfflineDeletionTarget> targets,
+    required int currentIndex,
+    required int completedCount,
+    required int deletedCount,
+    required int missingCount,
+    required int failedCount,
+    String? statusText,
+  }) {
+    if (targets.isEmpty) {
+      return;
+    }
+
+    final safeIndex = currentIndex.clamp(1, targets.length);
+    final target = targets[safeIndex - 1];
+    final progress = OfflineContentDeletionProgress(
+      totalCount: targets.length,
+      currentIndex: safeIndex,
+      completedCount: completedCount.clamp(0, targets.length),
+      currentLabel: _deletionLabelForKind(target.kind),
+      currentFileName: _fileNameForPath(target.file.path),
+      deletedCount: deletedCount,
+      missingCount: missingCount,
+      failedCount: failedCount,
+    );
+
+    state = state.copyWith(
+      isBusy: true,
+      statusText: statusText ?? progress.progressText,
+      deletionProgress: progress,
+      clearError: true,
+    );
   }
 
   Future<void> _prewarmDetectedContent({
@@ -815,6 +929,27 @@ class OfflineContentRefreshController
       missing: missing,
       cacheWarning: cacheWarning,
     );
+  }
+
+  String _deletionLabelForKind(OfflineContentKind kind) {
+    switch (kind) {
+      case OfflineContentKind.reel:
+        return 'Reel';
+      case OfflineContentKind.videoHighlights:
+      case OfflineContentKind.videoNews:
+      case OfflineContentKind.videoUpdates:
+        return 'Video';
+      case OfflineContentKind.newsImage:
+        return 'News image';
+    }
+  }
+
+  String _fileNameForPath(String path) {
+    final file = File(path);
+    if (file.uri.pathSegments.isNotEmpty) {
+      return file.uri.pathSegments.last;
+    }
+    return path;
   }
 }
 
