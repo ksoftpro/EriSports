@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "eri_sports" "\0"
+            VALUE "FileDescription", "EriSport" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "eri_sports" "\0"
+            VALUE "InternalName", "EriSport" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "eri_sports.exe" "\0"
-            VALUE "ProductName", "eri_sports" "\0"
+            VALUE "OriginalFilename", "EriSport.exe" "\0"
+            VALUE "ProductName", "EriSport" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
