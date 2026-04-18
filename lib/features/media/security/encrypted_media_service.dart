@@ -92,27 +92,33 @@ class EncryptedMediaService {
       );
     }
 
-    return _cacheManager.resolve(
-      sourceFile: sourceFile,
-      outputExtensionResolver: readMediaFileOriginalExtensionInIsolate,
-      materializeToPath: (sourcePath, destinationPath) {
-        return runMediaFileDecryptInIsolate(
-          sourcePath: sourcePath,
-          destinationPath: destinationPath,
-          masterKey: _mediaKey,
-          overwrite: true,
-        );
-      },
-    ).then((cached) {
-      return ResolvedPlayableMedia(
-        file: cached.file,
-        usedCache: cached.usedCache,
-        wasDecrypted: cached.wasDecrypted,
-      );
-    });
+    return _cacheManager
+        .resolve(
+          sourceFile: sourceFile,
+          outputExtensionResolver: readMediaFileOriginalExtensionInIsolate,
+          materializeToPath: (sourcePath, destinationPath) {
+            return runMediaFileDecryptInIsolate(
+              sourcePath: sourcePath,
+              destinationPath: destinationPath,
+              masterKey: _mediaKey,
+              overwrite: true,
+            );
+          },
+        )
+        .then((cached) {
+          return ResolvedPlayableMedia(
+            file: cached.file,
+            usedCache: cached.usedCache,
+            wasDecrypted: cached.wasDecrypted,
+          );
+        });
   }
 
   Future<void> clearCache() async {
     await _cacheManager.clearCache();
+  }
+
+  Future<void> evictSourceFile(File sourceFile) async {
+    await _cacheManager.evictSourcePath(sourceFile.path);
   }
 }

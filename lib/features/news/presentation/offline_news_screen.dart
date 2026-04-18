@@ -17,7 +17,10 @@ class OfflineNewsScreen extends ConsumerStatefulWidget {
 class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
   late final PageController _pageController;
   final ScrollController _thumbnailScrollController = ScrollController();
+  final Set<String> _selectedNewsIds = <String>{};
   int _currentIndex = 0;
+  bool _selectionMode = false;
+  bool _isDeleting = false;
 
   @override
   void initState() {
@@ -40,13 +43,17 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
   Widget build(BuildContext context) {
     final galleryAsync = ref.watch(offlineNewsGalleryProvider);
     final badges = ref.watch(offlineContentBadgeCountsProvider);
+    final snapshot = galleryAsync.valueOrNull;
+    final selectedCount = _selectedNewsIds.length;
 
     return Scaffold(
       appBar: AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Offline News'),
+            Text(
+              _selectionMode ? 'Select news ($selectedCount)' : 'Offline News',
+            ),
             if (badges.newsImages > 0) ...[
               const SizedBox(width: 8),
               Container(
@@ -67,9 +74,56 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
           ],
         ),
         actions: [
+          if (snapshot != null && snapshot.images.isNotEmpty && !_selectionMode)
+            IconButton(
+              tooltip: 'Select news images',
+              onPressed: _isDeleting ? null : () => _setSelectionMode(true),
+              icon: const Icon(Icons.checklist_rounded),
+            ),
+          if (_selectionMode && snapshot != null && snapshot.images.isNotEmpty)
+            IconButton(
+              tooltip: 'Toggle current image',
+              onPressed:
+                  _isDeleting
+                      ? null
+                      : () =>
+                          _toggleNewsSelection(snapshot.images[_currentIndex]),
+              icon: Icon(
+                _selectedNewsIds.contains(
+                      offlineContentNewsItemId(snapshot.images[_currentIndex]),
+                    )
+                    ? Icons.check_circle
+                    : Icons.radio_button_unchecked,
+              ),
+            ),
+          if (_selectionMode)
+            IconButton(
+              tooltip: 'Cancel selection',
+              onPressed: _isDeleting ? null : _clearSelection,
+              icon: const Icon(Icons.close),
+            )
+          else if (snapshot != null && snapshot.images.isNotEmpty)
+            IconButton(
+              tooltip: 'Delete current image',
+              onPressed:
+                  _isDeleting
+                      ? null
+                      : () =>
+                          _deleteCurrentNews(snapshot.images[_currentIndex]),
+              icon: const Icon(Icons.delete_outline_rounded),
+            ),
+          if (_selectionMode)
+            IconButton(
+              tooltip: 'Delete selected images',
+              onPressed:
+                  _isDeleting || _selectedNewsIds.isEmpty || snapshot == null
+                      ? null
+                      : () => _deleteSelectedNews(snapshot),
+              icon: const Icon(Icons.delete_sweep_outlined),
+            ),
           IconButton(
             tooltip: 'Refresh encrypted news',
-            onPressed: _onRefresh,
+            onPressed: _isDeleting ? null : _onRefresh,
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -180,11 +234,22 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: GestureDetector(
                             onTap: () {
+                              if (_selectionMode) {
+                                _toggleNewsSelection(media);
+                                return;
+                              }
                               _pageController.animateToPage(
                                 index,
                                 duration: const Duration(milliseconds: 220),
                                 curve: Curves.easeOut,
                               );
+                            },
+                            onLongPress: () {
+                              if (_selectionMode) {
+                                _toggleNewsSelection(media);
+                                return;
+                              }
+                              _startSelection(media);
                             },
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 180),
@@ -194,7 +259,11 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                                 border: Border.all(
                                   width: selected ? 2 : 1,
                                   color:
-                                      selected
+                                      _selectedNewsIds.contains(
+                                            offlineContentNewsItemId(media),
+                                          )
+                                          ? Theme.of(context).colorScheme.error
+                                          : selected
                                           ? Theme.of(
                                             context,
                                           ).colorScheme.primary
@@ -256,6 +325,168 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
       curve: Curves.easeOut,
     );
   }
+
+  void _setSelectionMode(bool value) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectionMode = value;
+      if (!value) {
+        _selectedNewsIds.clear();
+      }
+    });
+  }
+
+  void _clearSelection() {
+    _setSelectionMode(false);
+  }
+
+  void _startSelection(OfflineNewsMediaItem item) {
+    if (_isDeleting) {
+      return;
+    }
+    setState(() {
+      _selectionMode = true;
+      _selectedNewsIds
+        ..clear()
+        ..add(offlineContentNewsItemId(item));
+    });
+  }
+
+  void _toggleNewsSelection(OfflineNewsMediaItem item) {
+    if (_isDeleting) {
+      return;
+    }
+    final itemId = offlineContentNewsItemId(item);
+    setState(() {
+      _selectionMode = true;
+      if (!_selectedNewsIds.add(itemId)) {
+        _selectedNewsIds.remove(itemId);
+      }
+      if (_selectedNewsIds.isEmpty) {
+        _selectionMode = false;
+      }
+    });
+  }
+
+  Future<void> _deleteCurrentNews(OfflineNewsMediaItem item) async {
+    final confirmed = await _confirmDelete(
+      context,
+      count: 1,
+      label: 'news image',
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    await _runDeletion(newsItems: [item]);
+  }
+
+  Future<void> _deleteSelectedNews(OfflineNewsGallerySnapshot snapshot) async {
+    final selected = snapshot.images
+        .where(
+          (item) => _selectedNewsIds.contains(offlineContentNewsItemId(item)),
+        )
+        .toList(growable: false);
+    if (selected.isEmpty) {
+      _clearSelection();
+      return;
+    }
+
+    final confirmed = await _confirmDelete(
+      context,
+      count: selected.length,
+      label: 'news image',
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    await _runDeletion(newsItems: selected, clearSelectionAfter: true);
+  }
+
+  Future<void> _runDeletion({
+    required List<OfflineNewsMediaItem> newsItems,
+    bool clearSelectionAfter = false,
+  }) async {
+    if (newsItems.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isDeleting = true;
+    });
+
+    try {
+      final result = await ref
+          .read(offlineContentRefreshControllerProvider.notifier)
+          .deleteItems(newsItems: newsItems);
+      if (!mounted) {
+        return;
+      }
+      if (clearSelectionAfter) {
+        _clearSelection();
+      }
+      final message = _deletionSummary(result, singularLabel: 'news image');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+        });
+      }
+    }
+  }
+}
+
+Future<bool?> _confirmDelete(
+  BuildContext context, {
+  required int count,
+  required String label,
+}) {
+  return showDialog<bool>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: Text(count == 1 ? 'Delete $label?' : 'Delete $count ${label}s?'),
+        content: Text(
+          count == 1
+              ? 'This removes the source image from internal storage, clears its cached decrypted copy, and updates offline badges immediately.'
+              : 'This removes the selected source images from internal storage, clears related cached decrypted copies, and updates offline badges immediately.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+String _deletionSummary(
+  OfflineContentDeleteResult result, {
+  required String singularLabel,
+}) {
+  if (result.requestedCount == 0) {
+    return 'Nothing was selected.';
+  }
+
+  final removed = result.removedOrMissingCount;
+  final label = removed == 1 ? singularLabel : '${singularLabel}s';
+  if (result.failedCount == 0 && result.cacheWarningCount == 0) {
+    return 'Deleted $removed $label.';
+  }
+  if (result.failedCount == 0) {
+    return 'Deleted $removed $label. Some cache files will be retried later.';
+  }
+  return 'Deleted $removed $label, but ${result.failedCount} item${result.failedCount == 1 ? '' : 's'} could not be removed.';
 }
 
 class _OfflineNewsPage extends StatelessWidget {

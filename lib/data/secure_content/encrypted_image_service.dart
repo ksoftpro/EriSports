@@ -47,6 +47,10 @@ class EncryptedImageService {
     await _cacheManager.clearCache();
   }
 
+  Future<void> evictSourceFile(File sourceFile) async {
+    await _cacheManager.evictSourcePath(sourceFile.path);
+  }
+
   Future<ResolvedSecureImage> resolveImageFile(File sourceFile) async {
     final normalizedPath = sourceFile.path;
     if (!isEncryptedImagePath(normalizedPath)) {

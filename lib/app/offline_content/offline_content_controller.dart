@@ -5,13 +5,23 @@ import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
+import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
 import 'package:eri_sports/features/news/data/offline_news_repository.dart';
+import 'package:eri_sports/features/news/presentation/offline_news_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const _offlineContentScope = 'offline_content_v1';
 const _offlineSeenKey = 'seen_items';
 const _offlineMediaInventoryKey = 'media_inventory';
 const _offlineNewsInventoryKey = 'news_inventory';
+
+String offlineContentMediaItemId(DaylySportMediaItem item) {
+  return 'media|${item.relativePath}|${item.lastModified.toUtc().millisecondsSinceEpoch}|${item.sizeBytes}';
+}
+
+String offlineContentNewsItemId(OfflineNewsMediaItem item) {
+  return 'news|${item.file.path}|${item.lastModified.toUtc().millisecondsSinceEpoch}|${item.sizeBytes}';
+}
 
 enum OfflineContentManualAction { sync, decrypt, cache }
 
@@ -127,6 +137,38 @@ class OfflineContentBadgeCounts {
       newsImages > 0;
 }
 
+class OfflineContentDeleteResult {
+  const OfflineContentDeleteResult({
+    required this.requestedCount,
+    required this.deletedCount,
+    required this.missingCount,
+    required this.failedCount,
+    required this.cacheWarningCount,
+    required this.failedPaths,
+  });
+
+  const OfflineContentDeleteResult.zero()
+    : requestedCount = 0,
+      deletedCount = 0,
+      missingCount = 0,
+      failedCount = 0,
+      cacheWarningCount = 0,
+      failedPaths = const <String>[];
+
+  final int requestedCount;
+  final int deletedCount;
+  final int missingCount;
+  final int failedCount;
+  final int cacheWarningCount;
+  final List<String> failedPaths;
+
+  int get removedOrMissingCount => deletedCount + missingCount;
+
+  bool get hasFailures => failedCount > 0;
+
+  bool get hasCacheWarnings => cacheWarningCount > 0;
+}
+
 class OfflineContentRefreshState {
   const OfflineContentRefreshState({
     required this.isBusy,
@@ -237,16 +279,135 @@ class OfflineContentRefreshController
   }
 
   Future<void> markMediaItemSeen(DaylySportMediaItem item) async {
-    await _markSeen(_mediaItemId(item));
+    await _markSeen(offlineContentMediaItemId(item));
   }
 
   Future<void> markNewsItemSeen(OfflineNewsMediaItem item) async {
-    await _markSeen(_newsItemId(item));
+    await _markSeen(offlineContentNewsItemId(item));
   }
 
   Future<void> markNewsItemsSeen(Iterable<OfflineNewsMediaItem> items) async {
-    final ids = items.map(_newsItemId).toSet();
+    final ids = items.map(offlineContentNewsItemId).toSet();
     await _markSeenMany(ids);
+  }
+
+  Future<OfflineContentDeleteResult> deleteItems({
+    Iterable<DaylySportMediaItem> mediaItems = const <DaylySportMediaItem>[],
+    Iterable<OfflineNewsMediaItem> newsItems = const <OfflineNewsMediaItem>[],
+  }) async {
+    final pendingRefresh = _activeRefresh;
+    if (pendingRefresh != null) {
+      try {
+        await pendingRefresh;
+      } catch (_) {
+        // Ignore stale refresh failures; deletion still needs to proceed.
+      }
+    }
+
+    final targets = <String, _OfflineDeletionTarget>{
+      for (final item in mediaItems)
+        item.file.path: _OfflineDeletionTarget.media(
+          id: offlineContentMediaItemId(item),
+          file: item.file,
+          kind: _contentKindForMedia(item),
+        ),
+      for (final item in newsItems)
+        item.file.path: _OfflineDeletionTarget.news(
+          id: offlineContentNewsItemId(item),
+          file: item.file,
+        ),
+    }.values.toList(growable: false);
+
+    if (targets.isEmpty) {
+      return const OfflineContentDeleteResult.zero();
+    }
+
+    state = state.copyWith(
+      isBusy: true,
+      statusText: 'Deleting offline content',
+      clearError: true,
+    );
+
+    final services = ref.read(appServicesProvider);
+    final previousMedia = _loadMediaInventory(services);
+    final previousNews = _loadNewsInventory(services);
+    final removedIds = <String>{};
+    final failedPaths = <String>[];
+    var deletedCount = 0;
+    var missingCount = 0;
+    var failedCount = 0;
+    var cacheWarningCount = 0;
+
+    for (final target in targets) {
+      final outcome = await _deleteTarget(services, target);
+      if (outcome.deleted) {
+        deletedCount += 1;
+        removedIds.add(target.id);
+      } else if (outcome.missing) {
+        missingCount += 1;
+        removedIds.add(target.id);
+      } else {
+        failedCount += 1;
+        failedPaths.add(target.file.path);
+      }
+      if (outcome.cacheWarning) {
+        cacheWarningCount += 1;
+      }
+    }
+
+    try {
+      if (removedIds.isNotEmpty) {
+        final seenIds = _loadSeenItemIds(services)..removeAll(removedIds);
+        await _persistSeenItemIds(services, seenIds);
+      }
+
+      final synced = await _scanAndPersistOfflineContent(
+        services: services,
+        previousMedia: previousMedia,
+        previousNews: previousNews,
+        prewarm: false,
+      );
+
+      if (removedIds.isNotEmpty) {
+        ref.read(daylysportRefreshBusProvider.notifier).bumpAll();
+        ref.invalidate(daylySportMediaRepositoryProvider);
+        ref.invalidate(daylySportMediaSnapshotProvider);
+        ref.invalidate(offlineNewsRepositoryProvider);
+        ref.invalidate(offlineNewsGalleryProvider);
+      }
+
+      final hasHardFailures = failedCount > 0;
+      final statusText =
+          hasHardFailures
+              ? 'Offline content deleted with some issues'
+              : 'Offline content is ready';
+      state = state.copyWith(
+        isBusy: false,
+        statusText: statusText,
+        badges: synced.badges,
+        lastCompletedAtUtc: DateTime.now().toUtc(),
+        lastError:
+            hasHardFailures
+                ? 'Unable to delete $failedCount item${failedCount == 1 ? '' : 's'}.'
+                : null,
+        clearError: !hasHardFailures,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isBusy: false,
+        statusText: 'Offline content deletion failed',
+        lastError: '$error',
+      );
+    }
+
+    return OfflineContentDeleteResult(
+      requestedCount: targets.length,
+      deletedCount: deletedCount,
+      missingCount: missingCount,
+      failedCount: failedCount,
+      cacheWarningCount: cacheWarningCount,
+      failedPaths: failedPaths,
+    );
   }
 
   Future<void> _runRefresh({
@@ -294,47 +455,21 @@ class OfflineContentRefreshController
             .runManualSync();
       }
 
-      final mediaRepository = DaylySportMediaRepository(
-        daylySportLocator: services.daylySportLocator,
-      );
-      final newsRepository = OfflineNewsRepository(
-        daylySportLocator: services.daylySportLocator,
-      );
-
-      final mediaSnapshot = await mediaRepository.loadSnapshot(
-        forceRefresh: true,
-      );
-      final newsSnapshot = await newsRepository.loadGallery(forceRefresh: true);
-
       final previousMedia = _loadMediaInventory(services);
       final previousNews = _loadNewsInventory(services);
 
-      final mediaRecords = _buildMediaRecords(mediaSnapshot, previousMedia);
-      final newsRecords = _buildNewsRecords(newsSnapshot, previousNews);
-
-      await _persistMediaInventory(services, mediaRecords);
-      await _persistNewsInventory(services, newsRecords);
-
-      await _prewarmDetectedContent(
+      final synced = await _scanAndPersistOfflineContent(
         services: services,
-        mediaSnapshot: mediaSnapshot,
-        newsSnapshot: newsSnapshot,
         previousMedia: previousMedia,
         previousNews: previousNews,
-        forcePrewarm:
+        prewarm:
             forcePrewarm || trigger == OfflineContentRefreshTrigger.startup,
-      );
-
-      final badges = _buildBadges(
-        mediaRecords,
-        newsRecords,
-        _loadSeenItemIds(services),
       );
 
       state = state.copyWith(
         isBusy: false,
         statusText: 'Offline content is ready',
-        badges: badges,
+        badges: synced.badges,
         lastCompletedAtUtc: DateTime.now().toUtc(),
         clearError: true,
       );
@@ -361,7 +496,7 @@ class OfflineContentRefreshController
     final mediaToPrewarm = <File>[];
     for (final section in DaylySportMediaSection.values) {
       for (final item in mediaSnapshot.section(section).videoItems) {
-        final id = _mediaItemId(item);
+        final id = offlineContentMediaItemId(item);
         if (forcePrewarm || !previousMediaIds.contains(id)) {
           mediaToPrewarm.add(item.file);
         }
@@ -370,7 +505,7 @@ class OfflineContentRefreshController
 
     final newsToPrewarm = <File>[];
     for (final item in newsSnapshot.images) {
-      final id = _newsItemId(item);
+      final id = offlineContentNewsItemId(item);
       if (forcePrewarm || !previousNewsIds.contains(id)) {
         newsToPrewarm.add(item.file);
       }
@@ -471,7 +606,7 @@ class OfflineContentRefreshController
 
     for (final section in DaylySportMediaSection.values) {
       for (final item in snapshot.section(section).videoItems) {
-        final id = _mediaItemId(item);
+        final id = offlineContentMediaItemId(item);
         final existing = previousById[id];
         next.add(
           OfflineContentItemRecord(
@@ -498,7 +633,7 @@ class OfflineContentRefreshController
     final previousById = {for (final item in previous) item.id: item};
     final next = <OfflineContentItemRecord>[];
     for (final item in snapshot.images) {
-      final id = _newsItemId(item);
+      final id = offlineContentNewsItemId(item);
       final existing = previousById[id];
       next.add(
         OfflineContentItemRecord(
@@ -527,14 +662,6 @@ class OfflineContentRefreshController
       case DaylySportMediaSection.updates:
         return OfflineContentKind.videoUpdates;
     }
-  }
-
-  String _mediaItemId(DaylySportMediaItem item) {
-    return 'media|${item.relativePath}|${item.lastModified.toUtc().millisecondsSinceEpoch}|${item.sizeBytes}';
-  }
-
-  String _newsItemId(OfflineNewsMediaItem item) {
-    return 'news|${item.file.path}|${item.lastModified.toUtc().millisecondsSinceEpoch}|${item.sizeBytes}';
   }
 
   Set<String> _loadSeenItemIds(AppServices services) {
@@ -603,4 +730,150 @@ class OfflineContentRefreshController
       records.map((record) => record.toJson()).toList(growable: false),
     );
   }
+
+  Future<_OfflineContentScanResult> _scanAndPersistOfflineContent({
+    required AppServices services,
+    required List<OfflineContentItemRecord> previousMedia,
+    required List<OfflineContentItemRecord> previousNews,
+    required bool prewarm,
+  }) async {
+    final mediaRepository = DaylySportMediaRepository(
+      daylySportLocator: services.daylySportLocator,
+    );
+    final newsRepository = OfflineNewsRepository(
+      daylySportLocator: services.daylySportLocator,
+    );
+
+    final mediaSnapshot = await mediaRepository.loadSnapshot(
+      forceRefresh: true,
+    );
+    final newsSnapshot = await newsRepository.loadGallery(forceRefresh: true);
+
+    final mediaRecords = _buildMediaRecords(mediaSnapshot, previousMedia);
+    final newsRecords = _buildNewsRecords(newsSnapshot, previousNews);
+
+    await _persistMediaInventory(services, mediaRecords);
+    await _persistNewsInventory(services, newsRecords);
+
+    if (prewarm) {
+      await _prewarmDetectedContent(
+        services: services,
+        mediaSnapshot: mediaSnapshot,
+        newsSnapshot: newsSnapshot,
+        previousMedia: previousMedia,
+        previousNews: previousNews,
+        forcePrewarm: true,
+      );
+    }
+
+    return _OfflineContentScanResult(
+      mediaRecords: mediaRecords,
+      newsRecords: newsRecords,
+      badges: _buildBadges(
+        mediaRecords,
+        newsRecords,
+        _loadSeenItemIds(services),
+      ),
+    );
+  }
+
+  Future<_OfflineDeletionOutcome> _deleteTarget(
+    AppServices services,
+    _OfflineDeletionTarget target,
+  ) async {
+    var cacheWarning = false;
+    var deleted = false;
+    var missing = false;
+
+    try {
+      if (await target.file.exists()) {
+        await target.file.delete();
+        deleted = true;
+      } else {
+        missing = true;
+      }
+    } catch (_) {
+      return const _OfflineDeletionOutcome.failed();
+    }
+
+    try {
+      switch (target.kind) {
+        case OfflineContentKind.newsImage:
+          await services.encryptedImageService.evictSourceFile(target.file);
+        case OfflineContentKind.reel:
+        case OfflineContentKind.videoHighlights:
+        case OfflineContentKind.videoNews:
+        case OfflineContentKind.videoUpdates:
+          await services.encryptedMediaService.evictSourceFile(target.file);
+      }
+    } catch (_) {
+      cacheWarning = true;
+    }
+
+    return _OfflineDeletionOutcome(
+      deleted: deleted,
+      missing: missing,
+      cacheWarning: cacheWarning,
+    );
+  }
+}
+
+class _OfflineContentScanResult {
+  const _OfflineContentScanResult({
+    required this.mediaRecords,
+    required this.newsRecords,
+    required this.badges,
+  });
+
+  final List<OfflineContentItemRecord> mediaRecords;
+  final List<OfflineContentItemRecord> newsRecords;
+  final OfflineContentBadgeCounts badges;
+}
+
+class _OfflineDeletionTarget {
+  const _OfflineDeletionTarget._({
+    required this.id,
+    required this.file,
+    required this.kind,
+  });
+
+  factory _OfflineDeletionTarget.media({
+    required String id,
+    required File file,
+    required OfflineContentKind kind,
+  }) {
+    return _OfflineDeletionTarget._(id: id, file: file, kind: kind);
+  }
+
+  factory _OfflineDeletionTarget.news({
+    required String id,
+    required File file,
+  }) {
+    return _OfflineDeletionTarget._(
+      id: id,
+      file: file,
+      kind: OfflineContentKind.newsImage,
+    );
+  }
+
+  final String id;
+  final File file;
+  final OfflineContentKind kind;
+}
+
+class _OfflineDeletionOutcome {
+  const _OfflineDeletionOutcome({
+    required this.deleted,
+    required this.missing,
+    required this.cacheWarning,
+  });
+
+  const _OfflineDeletionOutcome.failed()
+    : deleted = false,
+      missing = false,
+      cacheWarning = false;
+
+  final bool deleted;
+  final bool missing;
+  final bool cacheWarning;
 }

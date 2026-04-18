@@ -48,6 +48,12 @@ class EncryptedJsonService {
     await _cacheManager.clearCache();
   }
 
+  Future<void> evictSourceFile(File sourceFile) async {
+    final sourcePrefix = sourcePrefixForPath(sourceFile.path);
+    _decodedCache.removeWhere((key, _) => key.startsWith('${sourcePrefix}_'));
+    await _cacheManager.evictSourcePath(sourceFile.path);
+  }
+
   Future<ResolvedPlainJsonFile> resolvePlaintextFile(File sourceFile) async {
     final normalizedPath = sourceFile.path;
     if (!isEncryptedJsonPath(normalizedPath)) {

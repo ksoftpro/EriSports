@@ -60,6 +60,24 @@ class DecryptedFileCacheManager {
     await fingerprintCache?.clearNamespace(namespace);
   }
 
+  Future<void> evictSourcePath(String sourcePath) async {
+    final inFlight = _inFlight[sourcePath];
+    if (inFlight != null) {
+      try {
+        await inFlight;
+      } catch (_) {
+        // Ignore failed in-flight work; eviction still needs to run.
+      }
+    }
+
+    final cacheDirectory = await _getOrCreateCacheDirectory();
+    await _deleteCacheFilesForSourcePrefix(
+      cacheDirectory,
+      sourcePrefixForPath(sourcePath),
+    );
+    await fingerprintCache?.remove(namespace, sourcePath);
+  }
+
   Future<CachedDecryptedFile> resolve({
     required File sourceFile,
     required Future<String> Function(String sourcePath) outputExtensionResolver,
@@ -238,13 +256,20 @@ class DecryptedFileCacheManager {
     Directory cacheDirectory,
     String sourcePrefix,
   ) async {
+    await _deleteCacheFilesForSourcePrefix(cacheDirectory, sourcePrefix);
+  }
+
+  Future<void> _deleteCacheFilesForSourcePrefix(
+    Directory cacheDirectory,
+    String sourcePrefix,
+  ) async {
     await for (final entity in cacheDirectory.list(followLinks: false)) {
       if (entity is! File) {
         continue;
       }
 
       final name = p.basename(entity.path);
-      if (name.startsWith('${sourcePrefix}_') && !name.endsWith('.part')) {
+      if (name.startsWith('${sourcePrefix}_')) {
         await entity.delete();
       }
     }
