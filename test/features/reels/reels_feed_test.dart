@@ -211,7 +211,7 @@ void main() {
 
     expect(find.text('first.mp4:active'), findsOneWidget);
 
-    await controller.animateToPage(
+    controller.animateToPage(
       1,
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOut,

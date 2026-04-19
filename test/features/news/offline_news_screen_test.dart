@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:eri_sports/app/bootstrap/app_services.dart';
-import 'package:eri_sports/data/secure_content/secure_content_crypto.dart';
+import 'package:eri_sports/features/news/data/offline_news_repository.dart';
+import 'package:eri_sports/features/news/presentation/offline_news_providers.dart';
 import 'package:eri_sports/features/news/presentation/offline_news_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -31,41 +32,65 @@ void main() {
     final services = await AppServices.create(sharedPreferences: preferences);
     addTearDown(() => services.database.close());
 
-    final daylySportDir = Directory(
+    final rootDir = Directory(
       '${tempDir.path}${Platform.pathSeparator}daylySport',
-    );
-    await services.daylySportLocator.setCustomDirectoryPath(daylySportDir.path);
-
-    final sourceDir = Directory(
-      '${tempDir.path}${Platform.pathSeparator}source',
     )..createSync(recursive: true);
+    final newsDir = Directory('${rootDir.path}${Platform.pathSeparator}news')
+      ..createSync(recursive: true);
     final sourceImage = File(
-      '${sourceDir.path}${Platform.pathSeparator}very_visible_name.png',
+      '${newsDir.path}${Platform.pathSeparator}very_visible_name.png.esi',
     )..writeAsBytesSync(_singlePixelPngBytes);
-    final encryptedImage = File(
-      '${daylySportDir.path}${Platform.pathSeparator}news${Platform.pathSeparator}very_visible_name.png.esi',
-    )..parent.createSync(recursive: true);
-
-    encryptSecureFileSync(
-      sourcePath: sourceImage.path,
-      destinationPath: encryptedImage.path,
-      masterKey: services.secureContentCoordinator.secureContentMasterKey,
-      contentType: SecureContentType.image,
+    final snapshot = OfflineNewsGallerySnapshot(
+      rootDirectory: rootDir,
+      newsDirectory: newsDir,
+      images: [
+        OfflineNewsMediaItem(
+          file: sourceImage,
+          lastModified: DateTime.utc(2026, 4, 19, 8),
+          sizeBytes: _singlePixelPngBytes.length,
+        ),
+      ],
+      supportedFormats: const <String>['.esi'],
+      skippedUnsupportedCount: 0,
+      unreadableCount: 0,
+      scannedAt: DateTime.utc(2026, 4, 19, 8),
+      newsDirectoryExists: true,
     );
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [appServicesProvider.overrideWithValue(services)],
+        overrides: [
+          appServicesProvider.overrideWithValue(services),
+          offlineNewsGalleryProvider.overrideWith(
+            () => _TestOfflineNewsGalleryNotifier(snapshot),
+          ),
+        ],
         child: const MaterialApp(home: OfflineNewsScreen()),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    for (var i = 0; i < 12; i++) {
+      if (find.byType(PageView).evaluate().isNotEmpty) {
+        break;
+      }
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
     expect(find.text('Offline News'), findsOneWidget);
-    expect(find.text('1 / 1'), findsOneWidget);
+    expect(find.byType(PageView), findsOneWidget);
     expect(find.textContaining('very_visible_name'), findsNothing);
     expect(find.textContaining('very_visible_name.png'), findsNothing);
   });
+}
+
+class _TestOfflineNewsGalleryNotifier
+    extends AsyncNotifier<OfflineNewsGallerySnapshot> {
+  _TestOfflineNewsGalleryNotifier(this.snapshot);
+
+  final OfflineNewsGallerySnapshot snapshot;
+
+  @override
+  Future<OfflineNewsGallerySnapshot> build() async => snapshot;
 }
 
 const MethodChannel _pathProviderChannel = MethodChannel(
