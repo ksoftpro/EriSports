@@ -50,6 +50,8 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
     final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
     final seenItemIds = ref.watch(offlineSeenItemIdsProvider);
     final snapshot = galleryAsync.valueOrNull;
+    final displayedImages =
+      snapshot == null ? const <OfflineNewsMediaItem>[] : _sortedImagesForSnapshot(snapshot);
     final selectedCount = _selectedNewsIds.length;
 
     return Scaffold(
@@ -80,23 +82,22 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
           ],
         ),
         actions: [
-          if (snapshot != null && snapshot.images.isNotEmpty && !_selectionMode)
+          if (displayedImages.isNotEmpty && !_selectionMode)
             IconButton(
               tooltip: 'Select news images',
               onPressed: _isDeleting ? null : () => _setSelectionMode(true),
               icon: const Icon(Icons.checklist_rounded),
             ),
-          if (_selectionMode && snapshot != null && snapshot.images.isNotEmpty)
+          if (_selectionMode && displayedImages.isNotEmpty)
             IconButton(
               tooltip: 'Toggle current image',
               onPressed:
                   _isDeleting
                       ? null
-                      : () =>
-                          _toggleNewsSelection(snapshot.images[_currentIndex]),
+                      : () => _toggleNewsSelection(displayedImages[_currentIndex]),
               icon: Icon(
                 _selectedNewsIds.contains(
-                      offlineContentNewsItemId(snapshot.images[_currentIndex]),
+                      offlineContentNewsItemId(displayedImages[_currentIndex]),
                     )
                     ? Icons.check_circle
                     : Icons.radio_button_unchecked,
@@ -108,14 +109,13 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
               onPressed: _isDeleting ? null : _clearSelection,
               icon: const Icon(Icons.close),
             )
-          else if (snapshot != null && snapshot.images.isNotEmpty)
+          else if (displayedImages.isNotEmpty)
             IconButton(
               tooltip: 'Delete current image',
               onPressed:
                   _isDeleting
                       ? null
-                      : () =>
-                          _deleteCurrentNews(snapshot.images[_currentIndex]),
+                      : () => _deleteCurrentNews(displayedImages[_currentIndex]),
               icon: const Icon(Icons.delete_outline_rounded),
             ),
           if (_selectionMode)
@@ -421,7 +421,7 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
   }
 
   Future<void> _deleteSelectedNews(OfflineNewsGallerySnapshot snapshot) async {
-    final selected = snapshot.images
+    final selected = _sortedImagesForSnapshot(snapshot)
         .where(
           (item) => _selectedNewsIds.contains(offlineContentNewsItemId(item)),
         )

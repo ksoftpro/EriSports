@@ -116,7 +116,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
               onPressed: _isDeleting ? null : _clearSelection,
               icon: const Icon(Icons.close),
             )
-          else if (availableItems.isNotEmpty)
+          else if (sortedItems.isNotEmpty)
             IconButton(
               tooltip: 'Select reels',
               onPressed: _isDeleting ? null : () => _setSelectionMode(true),
