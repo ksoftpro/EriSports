@@ -9,6 +9,7 @@ import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
 import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
+import 'package:eri_sports/shared/widgets/offline_video_thumbnail.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -23,6 +24,8 @@ class ReelsScreen extends ConsumerStatefulWidget {
 
 class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   DateTime? _lastPrewarmScanAt;
+  late final PageController _reelsPageController = PageController();
+  final ScrollController _reelsRailController = ScrollController();
   ModalRoute<dynamic>? _route;
   bool _routeVisible = true;
   bool _selectionMode = false;
@@ -62,6 +65,8 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
     if (_route is PageRoute<dynamic>) {
       ref.read(appRouteObserverProvider).unsubscribe(this);
     }
+    _reelsPageController.dispose();
+    _reelsRailController.dispose();
     super.dispose();
   }
 
@@ -188,11 +193,35 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
               );
             }
 
-            return ReelsFeed(
-              items: items,
-              isScreenActive: isScreenActive,
-              onActiveIndexChanged: (index) {
-                _currentActiveIndex = index;
+            _syncReelPage(items.length);
+
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final railWidth = constraints.maxWidth >= 780 ? 104.0 : 82.0;
+                return Row(
+                  children: [
+                    Expanded(
+                      child: ReelsFeed(
+                        items: items,
+                        pageController: _reelsPageController,
+                        isScreenActive: isScreenActive,
+                        onActiveIndexChanged: (index) {
+                          _currentActiveIndex = index;
+                          _scrollReelRail(index);
+                        },
+                      ),
+                    ),
+                    SizedBox(
+                      width: railWidth,
+                      child: _ReelSideRail(
+                        items: items,
+                        activeIndex: _currentActiveIndex,
+                        controller: _reelsRailController,
+                        onSelect: _jumpToReel,
+                      ),
+                    ),
+                  ],
+                );
               },
             );
           },
@@ -208,6 +237,55 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
     setState(() {
       _routeVisible = value;
     });
+  }
+
+  void _syncReelPage(int itemCount) {
+    if (itemCount <= 0) {
+      return;
+    }
+    final maxIndex = itemCount - 1;
+    if (_currentActiveIndex > maxIndex) {
+      _currentActiveIndex = maxIndex;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_reelsPageController.hasClients) {
+        return;
+      }
+      final currentPage = _reelsPageController.page?.round() ?? 0;
+      if (currentPage != _currentActiveIndex) {
+        _reelsPageController.jumpToPage(_currentActiveIndex);
+      }
+      _scrollReelRail(_currentActiveIndex);
+    });
+  }
+
+  void _jumpToReel(int index) {
+    if (!_reelsPageController.hasClients || _isDeleting) {
+      return;
+    }
+    _reelsPageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _scrollReelRail(int index) {
+    if (!_reelsRailController.hasClients) {
+      return;
+    }
+
+    const itemExtent = 96.0;
+    final target = (index * itemExtent) - 120;
+    final clamped =
+        target
+            .clamp(0.0, _reelsRailController.position.maxScrollExtent)
+            .toDouble();
+    _reelsRailController.animateTo(
+      clamped,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+    );
   }
 
   void _scheduleEncryptedPrewarm(
@@ -358,6 +436,7 @@ typedef ReelsFeedItemBuilder =
 class ReelsFeed extends StatefulWidget {
   const ReelsFeed({
     required this.items,
+    this.pageController,
     this.isScreenActive = true,
     this.itemBuilder,
     this.onActiveIndexChanged,
@@ -365,6 +444,7 @@ class ReelsFeed extends StatefulWidget {
   });
 
   final List<DaylySportMediaItem> items;
+  final PageController? pageController;
   final bool isScreenActive;
   final ReelsFeedItemBuilder? itemBuilder;
   final ValueChanged<int>? onActiveIndexChanged;
@@ -374,8 +454,11 @@ class ReelsFeed extends StatefulWidget {
 }
 
 class _ReelsFeedState extends State<ReelsFeed> {
-  late final PageController _pageController = PageController();
+  late final PageController _fallbackPageController = PageController();
   int _activeIndex = 0;
+
+  PageController get _pageController =>
+      widget.pageController ?? _fallbackPageController;
 
   @override
   void didUpdateWidget(covariant ReelsFeed oldWidget) {
@@ -399,7 +482,9 @@ class _ReelsFeedState extends State<ReelsFeed> {
 
   @override
   void dispose() {
-    _pageController.dispose();
+    if (widget.pageController == null) {
+      _fallbackPageController.dispose();
+    }
     super.dispose();
   }
 
@@ -427,6 +512,88 @@ class _ReelsFeedState extends State<ReelsFeed> {
         }
         return _ReelCard(item: item, isActive: isActive);
       },
+    );
+  }
+}
+
+class _ReelSideRail extends StatelessWidget {
+  const _ReelSideRail({
+    required this.items,
+    required this.activeIndex,
+    required this.controller,
+    required this.onSelect,
+  });
+
+  final List<DaylySportMediaItem> items;
+  final int activeIndex;
+  final ScrollController controller;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(0, 10, 10, 16),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: ListView.builder(
+        controller: controller,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          final isActive = index == activeIndex;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => onSelect(index),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color:
+                      isActive
+                          ? scheme.primaryContainer.withValues(alpha: 0.75)
+                          : scheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isActive ? scheme.primary : scheme.outlineVariant,
+                    width: isActive ? 1.6 : 1,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    AspectRatio(
+                      aspectRatio: 9 / 16,
+                      child: OfflineVideoThumbnail(
+                        item: item,
+                        maxDimension: 240,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${index + 1}',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color:
+                            isActive
+                                ? scheme.onPrimaryContainer
+                                : scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

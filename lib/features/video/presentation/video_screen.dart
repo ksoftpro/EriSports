@@ -5,7 +5,9 @@ import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
 import 'package:eri_sports/features/media/presentation/media_playback_screen.dart';
+import 'package:eri_sports/features/media/presentation/video_list_layout_controller.dart';
 import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
+import 'package:eri_sports/shared/widgets/offline_video_thumbnail.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,6 +39,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
     final mediaAsync = ref.watch(daylySportMediaSnapshotProvider);
     final badges = ref.watch(offlineContentBadgeCountsProvider);
     final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
+    final layoutMode = ref.watch(videoListLayoutModeProvider);
     final snapshot = mediaAsync.valueOrNull;
     final allItems =
         snapshot == null
@@ -71,6 +74,36 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
                       : () => _deleteSelectedMedia(snapshot),
               icon: const Icon(Icons.delete_outline_rounded),
             ),
+          PopupMenuButton<VideoListLayoutMode>(
+            tooltip: 'Change video layout',
+            initialValue: layoutMode,
+            onSelected:
+                _isDeleting
+                    ? null
+                    : (value) {
+                      unawaited(
+                        ref
+                            .read(videoListLayoutModeProvider.notifier)
+                            .setMode(value),
+                      );
+                    },
+            itemBuilder: (context) {
+              return [
+                for (final mode in VideoListLayoutMode.values)
+                  PopupMenuItem<VideoListLayoutMode>(
+                    value: mode,
+                    child: Row(
+                      children: [
+                        Icon(mode.icon, size: 18),
+                        const SizedBox(width: 10),
+                        Text(mode.label),
+                      ],
+                    ),
+                  ),
+              ];
+            },
+            icon: Icon(layoutMode.icon),
+          ),
           IconButton(
             tooltip: 'Refresh media',
             onPressed:
@@ -120,6 +153,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
                 _SectionMediaGrid(
                   title: 'Highlights',
                   section: snapshot.section(DaylySportMediaSection.highlights),
+                  layoutMode: layoutMode,
                   onOpenMedia: _openMediaItem,
                   isSelectionMode: _selectionMode,
                   selectedIds: _selectedMediaIds,
@@ -130,6 +164,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
                 _SectionMediaGrid(
                   title: 'News',
                   section: snapshot.section(DaylySportMediaSection.news),
+                  layoutMode: layoutMode,
                   onOpenMedia: _openMediaItem,
                   isSelectionMode: _selectionMode,
                   selectedIds: _selectedMediaIds,
@@ -140,6 +175,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
                 _SectionMediaGrid(
                   title: 'Updates',
                   section: snapshot.section(DaylySportMediaSection.updates),
+                  layoutMode: layoutMode,
                   onOpenMedia: _openMediaItem,
                   isSelectionMode: _selectionMode,
                   selectedIds: _selectedMediaIds,
@@ -364,6 +400,7 @@ class _SectionMediaGrid extends StatelessWidget {
   const _SectionMediaGrid({
     required this.title,
     required this.section,
+    required this.layoutMode,
     required this.onOpenMedia,
     required this.isSelectionMode,
     required this.selectedIds,
@@ -374,6 +411,7 @@ class _SectionMediaGrid extends StatelessWidget {
 
   final String title;
   final DaylySportMediaSectionSnapshot section;
+  final VideoListLayoutMode layoutMode;
   final ValueChanged<DaylySportMediaItem> onOpenMedia;
   final bool isSelectionMode;
   final Set<String> selectedIds;
@@ -413,28 +451,70 @@ class _SectionMediaGrid extends StatelessWidget {
       );
     }
 
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 360,
-        mainAxisExtent: 252,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-      ),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return _MediaCard(
-          item: item,
-          onOpen: onOpenMedia,
-          isSelectionMode: isSelectionMode,
-          isSelected: selectedIds.contains(offlineContentMediaItemId(item)),
-          onToggleSelection: () => onToggleSelection(item),
-          onStartSelection: () => onStartSelection(item),
-          onDelete: () => onDeleteMedia(item),
+    switch (layoutMode) {
+      case VideoListLayoutMode.details:
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+          itemCount: items.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 10),
+          itemBuilder: (context, index) {
+            final item = items[index];
+            return _MediaCard(
+              item: item,
+              onOpen: onOpenMedia,
+              isSelectionMode: isSelectionMode,
+              isSelected: selectedIds.contains(offlineContentMediaItemId(item)),
+              onToggleSelection: () => onToggleSelection(item),
+              onStartSelection: () => onStartSelection(item),
+              onDelete: () => onDeleteMedia(item),
+              layoutMode: layoutMode,
+            );
+          },
         );
-      },
-    );
+      case VideoListLayoutMode.tiles:
+      case VideoListLayoutMode.largeThumbnails:
+      case VideoListLayoutMode.mediumThumbnails:
+      case VideoListLayoutMode.smallThumbnails:
+        final metrics = _gridMetricsFor(layoutMode);
+        return GridView.builder(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: metrics.maxCrossAxisExtent,
+            mainAxisExtent: metrics.mainAxisExtent,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+          ),
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final item = items[index];
+            return _MediaCard(
+              item: item,
+              onOpen: onOpenMedia,
+              isSelectionMode: isSelectionMode,
+              isSelected: selectedIds.contains(offlineContentMediaItemId(item)),
+              onToggleSelection: () => onToggleSelection(item),
+              onStartSelection: () => onStartSelection(item),
+              onDelete: () => onDeleteMedia(item),
+              layoutMode: layoutMode,
+            );
+          },
+        );
+    }
+  }
+
+  _VideoGridMetrics _gridMetricsFor(VideoListLayoutMode layoutMode) {
+    switch (layoutMode) {
+      case VideoListLayoutMode.tiles:
+        return const _VideoGridMetrics(360, 250);
+      case VideoListLayoutMode.largeThumbnails:
+        return const _VideoGridMetrics(420, 284);
+      case VideoListLayoutMode.mediumThumbnails:
+        return const _VideoGridMetrics(320, 238);
+      case VideoListLayoutMode.smallThumbnails:
+        return const _VideoGridMetrics(220, 194);
+      case VideoListLayoutMode.details:
+        return const _VideoGridMetrics(360, 252);
+    }
   }
 }
 
@@ -447,6 +527,7 @@ class _MediaCard extends StatelessWidget {
     required this.onToggleSelection,
     required this.onStartSelection,
     required this.onDelete,
+    required this.layoutMode,
   });
 
   final DaylySportMediaItem item;
@@ -456,6 +537,7 @@ class _MediaCard extends StatelessWidget {
   final VoidCallback onToggleSelection;
   final VoidCallback onStartSelection;
   final VoidCallback onDelete;
+  final VideoListLayoutMode layoutMode;
 
   @override
   Widget build(BuildContext context) {
@@ -463,6 +545,116 @@ class _MediaCard extends StatelessWidget {
     final titleStyle = Theme.of(
       context,
     ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700);
+    final timestamp = DateFormat(
+      'd MMM HH:mm',
+    ).format(item.lastModified.toLocal());
+    final isDetails = layoutMode == VideoListLayoutMode.details;
+    final aspectRatio = switch (layoutMode) {
+      VideoListLayoutMode.largeThumbnails => 16 / 10,
+      VideoListLayoutMode.smallThumbnails => 4 / 3,
+      _ => 16 / 9,
+    };
+
+    final thumbnail = AspectRatio(
+      aspectRatio: aspectRatio,
+      child:
+          item.type == DaylySportMediaType.image
+              ? SecureFileImage(sourceFile: item.file, fit: BoxFit.cover)
+              : OfflineVideoThumbnail(
+                item: item,
+                maxDimension: switch (layoutMode) {
+                  VideoListLayoutMode.largeThumbnails => 640,
+                  VideoListLayoutMode.mediumThumbnails => 480,
+                  VideoListLayoutMode.smallThumbnails => 320,
+                  VideoListLayoutMode.tiles => 420,
+                  VideoListLayoutMode.details => 360,
+                },
+              ),
+    );
+
+    final actionOverlay = Positioned(
+      right: 6,
+      top: 6,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isSelectionMode)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                shape: BoxShape.circle,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Icon(
+                  isSelected
+                      ? Icons.check_circle
+                      : Icons.radio_button_unchecked,
+                  color: isSelected ? scheme.primary : Colors.white,
+                ),
+              ),
+            )
+          else
+            IconButton.filledTonal(
+              tooltip: 'Delete video',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline_rounded),
+            ),
+        ],
+      ),
+    );
+
+    if (isDetails) {
+      return Card(
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: InkWell(
+          onTap: isSelectionMode ? onToggleSelection : () => onOpen(item),
+          onLongPress: isSelectionMode ? onToggleSelection : onStartSelection,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 154,
+                child: Stack(children: [thumbnail, actionOverlay]),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.fileName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: titleStyle,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        item.relativePath,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _VideoMetaChip(label: sectionLabel(item.section)),
+                          _VideoMetaChip(label: timestamp),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -473,60 +665,7 @@ class _MediaCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Stack(
-              children: [
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child:
-                      item.type == DaylySportMediaType.image
-                          ? SecureFileImage(
-                            sourceFile: item.file,
-                            fit: BoxFit.cover,
-                          )
-                          : ColoredBox(
-                            color: const Color(0xFF141A24),
-                            child: Center(
-                              child: Icon(
-                                Icons.play_circle_fill_rounded,
-                                size: 56,
-                                color: Colors.white.withValues(alpha: 0.85),
-                              ),
-                            ),
-                          ),
-                ),
-                Positioned(
-                  right: 6,
-                  top: 6,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isSelectionMode)
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.55),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(6),
-                            child: Icon(
-                              isSelected
-                                  ? Icons.check_circle
-                                  : Icons.radio_button_unchecked,
-                              color: isSelected ? scheme.primary : Colors.white,
-                            ),
-                          ),
-                        )
-                      else
-                        IconButton.filledTonal(
-                          tooltip: 'Delete video',
-                          onPressed: onDelete,
-                          icon: const Icon(Icons.delete_outline_rounded),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            Stack(children: [thumbnail, actionOverlay]),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
               child: Text(
@@ -539,7 +678,18 @@ class _MediaCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: Text(
-                '${item.relativePath} • ${DateFormat('d MMM HH:mm').format(item.lastModified.toLocal())}',
+                '${sectionLabel(item.section)} · $timestamp',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: Text(
+                item.relativePath,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -552,6 +702,51 @@ class _MediaCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String sectionLabel(DaylySportMediaSection section) {
+  switch (section) {
+    case DaylySportMediaSection.reels:
+      return 'Reel';
+    case DaylySportMediaSection.highlights:
+      return 'Highlights';
+    case DaylySportMediaSection.news:
+      return 'News';
+    case DaylySportMediaSection.updates:
+      return 'Updates';
+  }
+}
+
+class _VideoMetaChip extends StatelessWidget {
+  const _VideoMetaChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoGridMetrics {
+  const _VideoGridMetrics(this.maxCrossAxisExtent, this.mainAxisExtent);
+
+  final double maxCrossAxisExtent;
+  final double mainAxisExtent;
 }
 
 Future<bool?> _confirmDelete(

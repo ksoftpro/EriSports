@@ -1,0 +1,174 @@
+import 'dart:io';
+
+import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/data/secure_content/secure_content_crypto.dart';
+import 'package:eri_sports/features/news/presentation/offline_news_screen.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('does not show the visible news image file name', (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync('eri_news_screen_');
+    addTearDown(() async {
+      await _clearPathProviderMock();
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    await _installPathProviderMock(tempDir);
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final services = await AppServices.create(sharedPreferences: preferences);
+    addTearDown(() => services.database.close());
+
+    final daylySportDir = Directory(
+      '${tempDir.path}${Platform.pathSeparator}daylySport',
+    );
+    await services.daylySportLocator.setCustomDirectoryPath(daylySportDir.path);
+
+    final sourceDir = Directory(
+      '${tempDir.path}${Platform.pathSeparator}source',
+    )..createSync(recursive: true);
+    final sourceImage = File(
+      '${sourceDir.path}${Platform.pathSeparator}very_visible_name.png',
+    )..writeAsBytesSync(_singlePixelPngBytes);
+    final encryptedImage = File(
+      '${daylySportDir.path}${Platform.pathSeparator}news${Platform.pathSeparator}very_visible_name.png.esi',
+    )..parent.createSync(recursive: true);
+
+    encryptSecureFileSync(
+      sourcePath: sourceImage.path,
+      destinationPath: encryptedImage.path,
+      masterKey: services.secureContentCoordinator.secureContentMasterKey,
+      contentType: SecureContentType.image,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appServicesProvider.overrideWithValue(services)],
+        child: const MaterialApp(home: OfflineNewsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Offline News'), findsOneWidget);
+    expect(find.text('1 / 1'), findsOneWidget);
+    expect(find.textContaining('very_visible_name'), findsNothing);
+    expect(find.textContaining('very_visible_name.png'), findsNothing);
+  });
+}
+
+const MethodChannel _pathProviderChannel = MethodChannel(
+  'plugins.flutter.io/path_provider',
+);
+
+Future<void> _installPathProviderMock(Directory tempRoot) {
+  final tempPath = tempRoot.path;
+  TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(_pathProviderChannel, (call) async {
+        switch (call.method) {
+          case 'getTemporaryDirectory':
+          case 'getApplicationDocumentsDirectory':
+          case 'getApplicationSupportDirectory':
+          case 'getLibraryDirectory':
+          case 'getDownloadsDirectory':
+          case 'getExternalStorageDirectory':
+            return tempPath;
+          case 'getExternalCacheDirectories':
+          case 'getExternalStorageDirectories':
+            return <String>[tempPath];
+        }
+        return tempPath;
+      });
+  return Future<void>.value();
+}
+
+Future<void> _clearPathProviderMock() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(_pathProviderChannel, null);
+  return Future<void>.value();
+}
+
+const List<int> _singlePixelPngBytes = <int>[
+  137,
+  80,
+  78,
+  71,
+  13,
+  10,
+  26,
+  10,
+  0,
+  0,
+  0,
+  13,
+  73,
+  72,
+  68,
+  82,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  1,
+  8,
+  6,
+  0,
+  0,
+  0,
+  31,
+  21,
+  196,
+  137,
+  0,
+  0,
+  0,
+  13,
+  73,
+  68,
+  65,
+  84,
+  120,
+  156,
+  99,
+  248,
+  255,
+  255,
+  63,
+  0,
+  5,
+  254,
+  2,
+  254,
+  167,
+  53,
+  129,
+  132,
+  0,
+  0,
+  0,
+  0,
+  73,
+  69,
+  78,
+  68,
+  174,
+  66,
+  96,
+  130,
+];

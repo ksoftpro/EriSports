@@ -219,7 +219,6 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                     _OfflineNewsFooter(
                       currentIndex: _currentIndex,
                       total: snapshot.images.length,
-                      currentFileName: snapshot.images[_currentIndex].fileName,
                       unreadableCount: snapshot.unreadableCount,
                       skippedUnsupportedCount: snapshot.skippedUnsupportedCount,
                     ),
@@ -526,12 +525,10 @@ class _OfflineNewsPage extends StatelessWidget {
                       alignment: Alignment.topCenter,
                       filterQuality: FilterQuality.high,
                       gaplessPlayback: true,
-                      loadingWidget: _NewsImageLoadingState(
-                        fileName: media.fileName,
-                      ),
+                      loadingWidget: const _NewsImageLoadingState(),
                       errorBuilder:
                           (context, error, stackTrace) =>
-                              _CorruptedImageState(fileName: media.fileName),
+                              const _CorruptedImageState(),
                     ),
                   ),
                 ),
@@ -545,9 +542,7 @@ class _OfflineNewsPage extends StatelessWidget {
 }
 
 class _NewsImageLoadingState extends StatelessWidget {
-  const _NewsImageLoadingState({required this.fileName});
-
-  final String fileName;
+  const _NewsImageLoadingState();
 
   @override
   Widget build(BuildContext context) {
@@ -579,16 +574,6 @@ class _NewsImageLoadingState extends StatelessWidget {
                 'Preparing a cached copy for smoother next loads.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                fileName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -633,14 +618,12 @@ class _OfflineNewsFooter extends StatelessWidget {
   const _OfflineNewsFooter({
     required this.currentIndex,
     required this.total,
-    required this.currentFileName,
     required this.unreadableCount,
     required this.skippedUnsupportedCount,
   });
 
   final int currentIndex;
   final int total;
-  final String currentFileName;
   final int unreadableCount;
   final int skippedUnsupportedCount;
 
@@ -665,13 +648,6 @@ class _OfflineNewsFooter extends StatelessWidget {
                 Text('Unreadable: $unreadableCount', style: style),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            currentFileName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: style,
-          ),
         ],
       ),
     );
@@ -679,9 +655,7 @@ class _OfflineNewsFooter extends StatelessWidget {
 }
 
 class _CorruptedImageState extends StatelessWidget {
-  const _CorruptedImageState({required this.fileName});
-
-  final String fileName;
+  const _CorruptedImageState();
 
   @override
   Widget build(BuildContext context) {
@@ -702,14 +676,6 @@ class _CorruptedImageState extends StatelessWidget {
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(color: Colors.white),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              fileName,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: Colors.white70),
             ),
           ],
         ),
