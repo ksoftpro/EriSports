@@ -7,6 +7,7 @@ import 'package:eri_sports/features/media/presentation/daylysport_media_provider
 import 'package:eri_sports/features/media/presentation/media_playback_screen.dart';
 import 'package:eri_sports/features/media/presentation/video_list_layout_controller.dart';
 import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
+import 'package:eri_sports/shared/widgets/new_content_badge.dart';
 import 'package:eri_sports/shared/widgets/offline_video_thumbnail.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +28,9 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
   bool _selectionMode = false;
   bool _isDeleting = false;
   final Set<String> _selectedMediaIds = <String>{};
+  DateTime? _lastSortedSnapshotAt;
+  Map<DaylySportMediaSection, List<DaylySportMediaItem>> _sortedSections =
+      const <DaylySportMediaSection, List<DaylySportMediaItem>>{};
 
   @override
   void dispose() {
@@ -39,6 +43,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
     final mediaAsync = ref.watch(daylySportMediaSnapshotProvider);
     final badges = ref.watch(offlineContentBadgeCountsProvider);
     final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
+    final seenItemIds = ref.watch(offlineSeenItemIdsProvider);
     final layoutMode = ref.watch(videoListLayoutModeProvider);
     final snapshot = mediaAsync.valueOrNull;
     final allItems =
@@ -147,12 +152,15 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
               ),
           data: (snapshot) {
             _scheduleEncryptedPrewarm(snapshot);
+            _ensureSortedSections(snapshot);
             return TabBarView(
               controller: _tabs,
               children: [
                 _SectionMediaGrid(
                   title: 'Highlights',
                   section: snapshot.section(DaylySportMediaSection.highlights),
+                  items: _sortedItemsForSection(DaylySportMediaSection.highlights),
+                  seenItemIds: seenItemIds,
                   layoutMode: layoutMode,
                   onOpenMedia: _openMediaItem,
                   isSelectionMode: _selectionMode,
@@ -164,6 +172,8 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
                 _SectionMediaGrid(
                   title: 'News',
                   section: snapshot.section(DaylySportMediaSection.news),
+                  items: _sortedItemsForSection(DaylySportMediaSection.news),
+                  seenItemIds: seenItemIds,
                   layoutMode: layoutMode,
                   onOpenMedia: _openMediaItem,
                   isSelectionMode: _selectionMode,
@@ -175,6 +185,8 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
                 _SectionMediaGrid(
                   title: 'Updates',
                   section: snapshot.section(DaylySportMediaSection.updates),
+                  items: _sortedItemsForSection(DaylySportMediaSection.updates),
+                  seenItemIds: seenItemIds,
                   layoutMode: layoutMode,
                   onOpenMedia: _openMediaItem,
                   isSelectionMode: _selectionMode,
@@ -245,6 +257,30 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
       ...snapshot.section(DaylySportMediaSection.news).videoItems,
       ...snapshot.section(DaylySportMediaSection.updates).videoItems,
     ];
+  }
+
+  void _ensureSortedSections(DaylySportMediaSnapshot snapshot) {
+    if (_lastSortedSnapshotAt == snapshot.scannedAt) {
+      return;
+    }
+
+    final seenItemIds = ref.read(offlineSeenItemIdsProvider);
+    _sortedSections = {
+      for (final section in const <DaylySportMediaSection>[
+        DaylySportMediaSection.highlights,
+        DaylySportMediaSection.news,
+        DaylySportMediaSection.updates,
+      ])
+        section: sortOfflineMediaItemsForDisplay(
+          snapshot.section(section).videoItems,
+          seenItemIds,
+        ),
+    };
+    _lastSortedSnapshotAt = snapshot.scannedAt;
+  }
+
+  List<DaylySportMediaItem> _sortedItemsForSection(DaylySportMediaSection section) {
+    return _sortedSections[section] ?? const <DaylySportMediaItem>[];
   }
 
   void _setSelectionMode(bool value) {
@@ -400,6 +436,8 @@ class _SectionMediaGrid extends StatelessWidget {
   const _SectionMediaGrid({
     required this.title,
     required this.section,
+    required this.items,
+    required this.seenItemIds,
     required this.layoutMode,
     required this.onOpenMedia,
     required this.isSelectionMode,
@@ -411,6 +449,8 @@ class _SectionMediaGrid extends StatelessWidget {
 
   final String title;
   final DaylySportMediaSectionSnapshot section;
+  final List<DaylySportMediaItem> items;
+  final Set<String> seenItemIds;
   final VideoListLayoutMode layoutMode;
   final ValueChanged<DaylySportMediaItem> onOpenMedia;
   final bool isSelectionMode;
@@ -421,8 +461,6 @@ class _SectionMediaGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = section.videoItems;
-
     if (items.isEmpty) {
       return Center(
         child: ConstrainedBox(
@@ -467,6 +505,7 @@ class _SectionMediaGrid extends StatelessWidget {
               onToggleSelection: () => onToggleSelection(item),
               onStartSelection: () => onStartSelection(item),
               onDelete: () => onDeleteMedia(item),
+              isNew: !isOfflineMediaItemSeen(item, seenItemIds),
               layoutMode: layoutMode,
             );
           },
@@ -495,6 +534,7 @@ class _SectionMediaGrid extends StatelessWidget {
               onToggleSelection: () => onToggleSelection(item),
               onStartSelection: () => onStartSelection(item),
               onDelete: () => onDeleteMedia(item),
+              isNew: !isOfflineMediaItemSeen(item, seenItemIds),
               layoutMode: layoutMode,
             );
           },
@@ -527,6 +567,7 @@ class _MediaCard extends StatelessWidget {
     required this.onToggleSelection,
     required this.onStartSelection,
     required this.onDelete,
+    required this.isNew,
     required this.layoutMode,
   });
 
@@ -537,6 +578,7 @@ class _MediaCard extends StatelessWidget {
   final VoidCallback onToggleSelection;
   final VoidCallback onStartSelection;
   final VoidCallback onDelete;
+  final bool isNew;
   final VideoListLayoutMode layoutMode;
 
   @override
@@ -604,6 +646,12 @@ class _MediaCard extends StatelessWidget {
       ),
     );
 
+    final newBadgeOverlay = Positioned(
+      left: 8,
+      top: 8,
+      child: isNew ? const NewContentBadge() : const SizedBox.shrink(),
+    );
+
     if (isDetails) {
       return Card(
         clipBehavior: Clip.antiAlias,
@@ -616,7 +664,9 @@ class _MediaCard extends StatelessWidget {
             children: [
               SizedBox(
                 width: 154,
-                child: Stack(children: [thumbnail, actionOverlay]),
+                child: Stack(
+                  children: [thumbnail, newBadgeOverlay, actionOverlay],
+                ),
               ),
               Expanded(
                 child: Padding(
@@ -665,7 +715,7 @@ class _MediaCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Stack(children: [thumbnail, actionOverlay]),
+            Stack(children: [thumbnail, newBadgeOverlay, actionOverlay]),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
               child: Text(

@@ -23,6 +23,77 @@ String offlineContentNewsItemId(OfflineNewsMediaItem item) {
   return 'news|${item.file.path}|${item.lastModified.toUtc().millisecondsSinceEpoch}|${item.sizeBytes}';
 }
 
+bool isOfflineMediaItemSeen(
+  DaylySportMediaItem item,
+  Set<String> seenItemIds,
+) {
+  return seenItemIds.contains(offlineContentMediaItemId(item));
+}
+
+bool isOfflineNewsItemSeen(
+  OfflineNewsMediaItem item,
+  Set<String> seenItemIds,
+) {
+  return seenItemIds.contains(offlineContentNewsItemId(item));
+}
+
+List<DaylySportMediaItem> sortOfflineMediaItemsForDisplay(
+  Iterable<DaylySportMediaItem> items,
+  Set<String> seenItemIds,
+) {
+  final sorted = items.toList(growable: false);
+  sorted.sort((a, b) {
+    return _compareOfflineDisplayPriority(
+      aSeen: isOfflineMediaItemSeen(a, seenItemIds),
+      bSeen: isOfflineMediaItemSeen(b, seenItemIds),
+      aModifiedAtUtc: a.lastModified,
+      bModifiedAtUtc: b.lastModified,
+      aTieBreaker: a.relativePath,
+      bTieBreaker: b.relativePath,
+    );
+  });
+  return sorted;
+}
+
+List<OfflineNewsMediaItem> sortOfflineNewsItemsForDisplay(
+  Iterable<OfflineNewsMediaItem> items,
+  Set<String> seenItemIds,
+) {
+  final sorted = items.toList(growable: false);
+  sorted.sort((a, b) {
+    return _compareOfflineDisplayPriority(
+      aSeen: isOfflineNewsItemSeen(a, seenItemIds),
+      bSeen: isOfflineNewsItemSeen(b, seenItemIds),
+      aModifiedAtUtc: a.lastModified,
+      bModifiedAtUtc: b.lastModified,
+      aTieBreaker: a.file.path,
+      bTieBreaker: b.file.path,
+    );
+  });
+  return sorted;
+}
+
+int _compareOfflineDisplayPriority({
+  required bool aSeen,
+  required bool bSeen,
+  required DateTime aModifiedAtUtc,
+  required DateTime bModifiedAtUtc,
+  required String aTieBreaker,
+  required String bTieBreaker,
+}) {
+  final seenComparison = (aSeen ? 1 : 0).compareTo(bSeen ? 1 : 0);
+  if (seenComparison != 0) {
+    return seenComparison;
+  }
+
+  final modifiedComparison = bModifiedAtUtc.compareTo(aModifiedAtUtc);
+  if (modifiedComparison != 0) {
+    return modifiedComparison;
+  }
+
+  return aTieBreaker.toLowerCase().compareTo(bTieBreaker.toLowerCase());
+}
+
 enum OfflineContentManualAction { sync, decrypt, cache }
 
 enum OfflineContentRefreshTrigger { startup, manual, syncResult }
@@ -214,6 +285,7 @@ class OfflineContentRefreshState {
     required this.isBusy,
     required this.statusText,
     required this.badges,
+    required this.seenItemIds,
     this.deletionProgress,
     this.lastCompletedAtUtc,
     this.lastError,
@@ -223,6 +295,7 @@ class OfflineContentRefreshState {
     : isBusy = false,
       statusText = 'Offline content is ready',
       badges = const OfflineContentBadgeCounts.zero(),
+      seenItemIds = const <String>{},
       deletionProgress = null,
       lastCompletedAtUtc = null,
       lastError = null;
@@ -230,6 +303,7 @@ class OfflineContentRefreshState {
   final bool isBusy;
   final String statusText;
   final OfflineContentBadgeCounts badges;
+  final Set<String> seenItemIds;
   final OfflineContentDeletionProgress? deletionProgress;
   final DateTime? lastCompletedAtUtc;
   final String? lastError;
@@ -238,6 +312,7 @@ class OfflineContentRefreshState {
     bool? isBusy,
     String? statusText,
     OfflineContentBadgeCounts? badges,
+    Set<String>? seenItemIds,
     OfflineContentDeletionProgress? deletionProgress,
     DateTime? lastCompletedAtUtc,
     String? lastError,
@@ -248,6 +323,7 @@ class OfflineContentRefreshState {
       isBusy: isBusy ?? this.isBusy,
       statusText: statusText ?? this.statusText,
       badges: badges ?? this.badges,
+        seenItemIds: seenItemIds ?? this.seenItemIds,
       deletionProgress:
           clearDeletionProgress
               ? null
@@ -269,6 +345,10 @@ final offlineContentBadgeCountsProvider = Provider<OfflineContentBadgeCounts>((
   return ref.watch(offlineContentRefreshControllerProvider).badges;
 });
 
+final offlineSeenItemIdsProvider = Provider<Set<String>>((ref) {
+  return ref.watch(offlineContentRefreshControllerProvider).seenItemIds;
+});
+
 final offlineContentDeletionProgressProvider =
     Provider<OfflineContentDeletionProgress?>((ref) {
       return ref
@@ -283,13 +363,15 @@ class OfflineContentRefreshController
   @override
   OfflineContentRefreshState build() {
     final services = ref.read(appServicesProvider);
+    final seenItemIds = _loadSeenItemIds(services);
     final existingBadges = _buildBadges(
       _loadMediaInventory(services),
       _loadNewsInventory(services),
-      _loadSeenItemIds(services),
+      seenItemIds,
     );
     return OfflineContentRefreshState.initial().copyWith(
       badges: existingBadges,
+      seenItemIds: seenItemIds,
     );
   }
 
@@ -462,6 +544,7 @@ class OfflineContentRefreshController
         isBusy: false,
         statusText: statusText,
         badges: synced.badges,
+        seenItemIds: _loadSeenItemIds(services),
         lastCompletedAtUtc: DateTime.now().toUtc(),
         lastError:
             hasHardFailures
@@ -550,6 +633,7 @@ class OfflineContentRefreshController
         isBusy: false,
         statusText: 'Offline content is ready',
         badges: synced.badges,
+        seenItemIds: _loadSeenItemIds(services),
         lastCompletedAtUtc: DateTime.now().toUtc(),
         clearError: true,
         clearDeletionProgress: true,
@@ -660,6 +744,7 @@ class OfflineContentRefreshController
     final seenIds = _loadSeenItemIds(services)..addAll(ids);
     await _persistSeenItemIds(services, seenIds);
     state = state.copyWith(
+      seenItemIds: seenIds,
       badges: _buildBadges(
         _loadMediaInventory(services),
         _loadNewsInventory(services),

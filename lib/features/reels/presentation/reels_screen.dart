@@ -10,6 +10,7 @@ import 'package:eri_sports/features/media/data/daylysport_media_repository.dart'
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
 import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
 import 'package:eri_sports/shared/widgets/offline_video_thumbnail.dart';
+import 'package:eri_sports/shared/widgets/new_content_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -33,6 +34,8 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   bool _isDeleting = false;
   int _currentActiveIndex = 0;
   final Set<String> _selectedMediaIds = <String>{};
+  DateTime? _lastSortedSnapshotAt;
+  List<DaylySportMediaItem> _sortedReelItems = const <DaylySportMediaItem>[];
 
   @override
   void didChangeDependencies() {
@@ -87,13 +90,14 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   Widget build(BuildContext context) {
     final mediaAsync = ref.watch(daylySportMediaSnapshotProvider);
     final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
+    final seenItemIds = ref.watch(offlineSeenItemIdsProvider);
     final shellIndex = ref.watch(currentShellBranchIndexProvider);
     final lifecycleState = ref.watch(appLifecycleStateProvider);
     final snapshot = mediaAsync.valueOrNull;
     final availableItems =
         snapshot == null
             ? const <DaylySportMediaItem>[]
-            : _reelItemsFromSnapshot(snapshot);
+        : _reelItemsFromSnapshot(snapshot);
     final selectedCount = _selectedMediaIds.length;
     final isScreenActive =
         shellIndex == 3 &&
@@ -201,6 +205,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
               activeIndex: _currentActiveIndex,
               pageController: _reelsPageController,
               overlayController: _reelsRailController,
+              seenItemIds: seenItemIds,
               isScreenActive: isScreenActive,
               onActiveIndexChanged: (index) {
                 _currentActiveIndex = index;
@@ -295,12 +300,22 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   List<DaylySportMediaItem> _reelItemsFromSnapshot(
     DaylySportMediaSnapshot snapshot,
   ) {
+    if (_lastSortedSnapshotAt == snapshot.scannedAt) {
+      return _sortedReelItems;
+    }
+
     final reelsSection = snapshot.section(DaylySportMediaSection.reels);
     final highlightFallback =
         snapshot.section(DaylySportMediaSection.highlights).videoItems;
-    return reelsSection.hasVideoItems
+    final items = reelsSection.hasVideoItems
         ? reelsSection.videoItems
         : highlightFallback;
+    _sortedReelItems = sortOfflineMediaItemsForDisplay(
+      items,
+      ref.read(offlineSeenItemIdsProvider),
+    );
+    _lastSortedSnapshotAt = snapshot.scannedAt;
+    return _sortedReelItems;
   }
 
   void _setSelectionMode(bool value) {
@@ -429,6 +444,7 @@ class ReelsPlaybackStage extends StatelessWidget {
     required this.activeIndex,
     required this.pageController,
     required this.overlayController,
+    required this.seenItemIds,
     required this.isScreenActive,
     required this.onActiveIndexChanged,
     required this.onSelectReel,
@@ -441,6 +457,7 @@ class ReelsPlaybackStage extends StatelessWidget {
   final int activeIndex;
   final PageController pageController;
   final ScrollController overlayController;
+  final Set<String> seenItemIds;
   final bool isScreenActive;
   final ValueChanged<int> onActiveIndexChanged;
   final ValueChanged<int> onSelectReel;
@@ -502,6 +519,7 @@ class ReelsPlaybackStage extends StatelessWidget {
                   items: items,
                   activeIndex: activeIndex,
                   controller: overlayController,
+                  seenItemIds: seenItemIds,
                   onSelect: onSelectReel,
                   thumbnailBuilder: overlayThumbnailBuilder,
                 ),
@@ -602,6 +620,7 @@ class ReelsOverlayRail extends StatelessWidget {
     required this.items,
     required this.activeIndex,
     required this.controller,
+    required this.seenItemIds,
     required this.onSelect,
     this.thumbnailBuilder,
     super.key,
@@ -610,6 +629,7 @@ class ReelsOverlayRail extends StatelessWidget {
   final List<DaylySportMediaItem> items;
   final int activeIndex;
   final ScrollController controller;
+  final Set<String> seenItemIds;
   final ValueChanged<int> onSelect;
   final ReelOverlayThumbnailBuilder? thumbnailBuilder;
 
@@ -624,6 +644,7 @@ class ReelsOverlayRail extends StatelessWidget {
       itemBuilder: (context, index) {
         final item = items[index];
         final isActive = index == activeIndex;
+        final isNew = !isOfflineMediaItemSeen(item, seenItemIds);
         final thumbnail =
             thumbnailBuilder?.call(context, item, isActive) ??
             OfflineVideoThumbnail(
@@ -685,6 +706,14 @@ class ReelsOverlayRail extends StatelessWidget {
                                   ),
                                 ),
                               ),
+                            ),
+                            Positioned(
+                              left: 8,
+                              top: 8,
+                              child:
+                                  isNew
+                                      ? const NewContentBadge()
+                                      : const SizedBox.shrink(),
                             ),
                             Positioned(
                               top: 8,

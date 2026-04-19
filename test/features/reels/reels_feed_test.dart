@@ -1,3 +1,4 @@
+import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'dart:io';
 
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
@@ -278,6 +279,7 @@ void main() {
               activeIndex: 0,
               pageController: pageController,
               overlayController: scrollController,
+              seenItemIds: const <String>{},
               isScreenActive: true,
               onActiveIndexChanged: (_) {},
               onSelectReel: (index) {
@@ -372,6 +374,7 @@ void main() {
               items: items,
               activeIndex: 0,
               controller: controller,
+              seenItemIds: const <String>{},
               onSelect: (_) {},
               thumbnailBuilder: (context, item, isActive) {
                 return const ColoredBox(color: Colors.black);
@@ -396,6 +399,73 @@ void main() {
         expect(decoration.border, isNull);
       }
     }
+  });
+
+  testWidgets('shows New badge only for unseen overlay reel items', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_reels_overlay_new_badge_',
+    );
+    addTearDown(() async {
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final firstFile = File(
+      '${tempDir.path}${Platform.pathSeparator}first.mp4.esv',
+    )..writeAsBytesSync(const <int>[1, 2, 3]);
+    final secondFile = File(
+      '${tempDir.path}${Platform.pathSeparator}second.mp4.esv',
+    )..writeAsBytesSync(const <int>[4, 5, 6]);
+
+    final firstItem = DaylySportMediaItem(
+      file: firstFile,
+      relativePath: 'reels/first.mp4.esv',
+      section: DaylySportMediaSection.reels,
+      type: DaylySportMediaType.video,
+      lastModified: DateTime.utc(2026, 4, 16, 12),
+      sizeBytes: 3,
+    );
+    final secondItem = DaylySportMediaItem(
+      file: secondFile,
+      relativePath: 'reels/second.mp4.esv',
+      section: DaylySportMediaSection.reels,
+      type: DaylySportMediaType.video,
+      lastModified: DateTime.utc(2026, 4, 16, 12, 1),
+      sizeBytes: 3,
+    );
+    final seenItemIds = <String>{offlineContentMediaItemId(firstItem)};
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 92,
+            child: ReelsOverlayRail(
+              items: [firstItem, secondItem],
+              activeIndex: 0,
+              controller: controller,
+              seenItemIds: seenItemIds,
+              onSelect: (_) {},
+              thumbnailBuilder: (context, item, isActive) {
+                return const ColoredBox(color: Colors.black);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('New'), findsOneWidget);
   });
 
   testWidgets(

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:eri_sports/features/news/data/offline_news_repository.dart';
 import 'package:eri_sports/features/news/presentation/offline_news_providers.dart';
 import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
+import 'package:eri_sports/shared/widgets/new_content_badge.dart';
 import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,8 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
   int _currentIndex = 0;
   bool _selectionMode = false;
   bool _isDeleting = false;
+  DateTime? _lastSortedSnapshotAt;
+  List<OfflineNewsMediaItem> _sortedImages = const <OfflineNewsMediaItem>[];
 
   @override
   void initState() {
@@ -45,6 +48,7 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
     final galleryAsync = ref.watch(offlineNewsGalleryProvider);
     final badges = ref.watch(offlineContentBadgeCountsProvider);
     final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
+    final seenItemIds = ref.watch(offlineSeenItemIdsProvider);
     final snapshot = galleryAsync.valueOrNull;
     final selectedCount = _selectedNewsIds.length;
 
@@ -145,10 +149,11 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                   onPressed: _onRefresh,
                 ),
             data: (snapshot) {
+              final images = _sortedImagesForSnapshot(snapshot);
               unawaited(
                 ref
                     .read(offlineContentRefreshControllerProvider.notifier)
-                    .markNewsItemsSeen(snapshot.images.take(1)),
+                    .markNewsItemsSeen(images.take(1)),
               );
               if (!snapshot.newsDirectoryExists) {
                 return _OfflineNewsEmptyState(
@@ -183,7 +188,7 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                 );
               }
 
-              final maxIndex = snapshot.images.length - 1;
+              final maxIndex = images.length - 1;
               if (_currentIndex > maxIndex) {
                 _currentIndex = maxIndex;
               }
@@ -195,7 +200,7 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                     Expanded(
                       child: PageView.builder(
                         controller: _pageController,
-                        itemCount: snapshot.images.length,
+                        itemCount: images.length,
                         onPageChanged: (index) {
                           unawaited(
                             ref
@@ -203,7 +208,7 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                                   offlineContentRefreshControllerProvider
                                       .notifier,
                                 )
-                                .markNewsItemSeen(snapshot.images[index]),
+                                .markNewsItemSeen(images[index]),
                           );
                           setState(() {
                             _currentIndex = index;
@@ -211,14 +216,14 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                           _scrollThumbnailStrip(index);
                         },
                         itemBuilder: (context, index) {
-                          final media = snapshot.images[index];
+                          final media = images[index];
                           return _OfflineNewsPage(media: media);
                         },
                       ),
                     ),
                     _OfflineNewsFooter(
                       currentIndex: _currentIndex,
-                      total: snapshot.images.length,
+                      total: images.length,
                       unreadableCount: snapshot.unreadableCount,
                       skippedUnsupportedCount: snapshot.skippedUnsupportedCount,
                     ),
@@ -229,10 +234,11 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                         controller: _thumbnailScrollController,
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(horizontal: 12),
-                        itemCount: snapshot.images.length,
+                        itemCount: images.length,
                         itemBuilder: (context, index) {
-                          final media = snapshot.images[index];
+                          final media = images[index];
                           final selected = index == _currentIndex;
+                          final isNew = !isOfflineNewsItemSeen(media, seenItemIds);
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: GestureDetector(
@@ -278,23 +284,34 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                                   ),
                                 ),
                                 clipBehavior: Clip.antiAlias,
-                                child: SecureFileImage(
-                                  sourceFile: media.file,
-                                  fit: BoxFit.cover,
-                                  loadingWidget: _ThumbnailLoadingState(
-                                    isSelected: selected,
-                                  ),
-                                  errorBuilder:
-                                      (context, error, stackTrace) => Container(
-                                        color:
-                                            Theme.of(context)
-                                                .colorScheme
-                                                .surfaceContainerHighest,
-                                        alignment: Alignment.center,
-                                        child: const Icon(
-                                          Icons.broken_image_outlined,
-                                        ),
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    SecureFileImage(
+                                      sourceFile: media.file,
+                                      fit: BoxFit.cover,
+                                      loadingWidget: _ThumbnailLoadingState(
+                                        isSelected: selected,
                                       ),
+                                      errorBuilder:
+                                          (context, error, stackTrace) => Container(
+                                            color:
+                                                Theme.of(context)
+                                                    .colorScheme
+                                                    .surfaceContainerHighest,
+                                            alignment: Alignment.center,
+                                            child: const Icon(
+                                              Icons.broken_image_outlined,
+                                            ),
+                                          ),
+                                    ),
+                                    if (isNew)
+                                      const Positioned(
+                                        left: 4,
+                                        top: 4,
+                                        child: NewContentBadge(),
+                                      ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -311,6 +328,21 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
         ),
       ),
     );
+  }
+
+  List<OfflineNewsMediaItem> _sortedImagesForSnapshot(
+    OfflineNewsGallerySnapshot snapshot,
+  ) {
+    if (_lastSortedSnapshotAt == snapshot.scannedAt) {
+      return _sortedImages;
+    }
+
+    _sortedImages = sortOfflineNewsItemsForDisplay(
+      snapshot.images,
+      ref.read(offlineSeenItemIdsProvider),
+    );
+    _lastSortedSnapshotAt = snapshot.scannedAt;
+    return _sortedImages;
   }
 
   void _scrollThumbnailStrip(int index) {

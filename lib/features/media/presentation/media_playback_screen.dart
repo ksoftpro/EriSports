@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
+import 'package:eri_sports/features/media/presentation/video_playback_position_store.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,6 +32,7 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   AppLifecycleState _lifecycleState =
       WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
   ModalRoute<dynamic>? _route;
+  bool _isSavingPosition = false;
 
   @override
   void initState() {
@@ -112,6 +114,15 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
       final controller = VideoPlayerController.file(File(playable.file.path));
       await controller.initialize();
       await controller.setLooping(true);
+
+      final savedPosition = ref
+          .read(videoPlaybackPositionStoreProvider)
+          .readPosition(widget.item);
+      if (savedPosition != null &&
+          savedPosition > Duration.zero &&
+          savedPosition < controller.value.duration) {
+        await controller.seekTo(savedPosition);
+      }
 
       if (!mounted) {
         await controller.dispose();
@@ -260,7 +271,10 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
         await controller.play();
       }
     } else if (controller.value.isPlaying) {
+      await _persistPlaybackPosition(controller);
       await controller.pause();
+    } else {
+      await _persistPlaybackPosition(controller);
     }
 
     if (mounted) {
@@ -271,9 +285,29 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   Future<void> _pauseAndDisposeController(
     VideoPlayerController controller,
   ) async {
+    await _persistPlaybackPosition(controller);
     if (controller.value.isInitialized && controller.value.isPlaying) {
       await controller.pause();
     }
     await controller.dispose();
+  }
+
+  Future<void> _persistPlaybackPosition(VideoPlayerController controller) async {
+    if (_isSavingPosition || !controller.value.isInitialized) {
+      return;
+    }
+
+    _isSavingPosition = true;
+    try {
+      await ref
+          .read(videoPlaybackPositionStoreProvider)
+          .writePosition(
+            widget.item,
+            controller.value.position,
+            duration: controller.value.duration,
+          );
+    } finally {
+      _isSavingPosition = false;
+    }
   }
 }
