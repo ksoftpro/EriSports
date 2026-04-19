@@ -222,6 +222,183 @@ void main() {
   });
 
   testWidgets(
+    'renders the reels list as an overlay and keeps overlay taps working',
+    (tester) async {
+      tester.view.physicalSize = const Size(430, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final tempDir = Directory.systemTemp.createTempSync(
+        'eri_reels_overlay_stage_',
+      );
+      addTearDown(() async {
+        if (tempDir.existsSync()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+
+      final firstFile = File(
+        '${tempDir.path}${Platform.pathSeparator}first.mp4.esv',
+      )..writeAsBytesSync(const <int>[1, 2, 3]);
+      final secondFile = File(
+        '${tempDir.path}${Platform.pathSeparator}second.mp4.esv',
+      )..writeAsBytesSync(const <int>[4, 5, 6]);
+
+      final items = <DaylySportMediaItem>[
+        DaylySportMediaItem(
+          file: firstFile,
+          relativePath: 'reels/first.mp4.esv',
+          section: DaylySportMediaSection.reels,
+          type: DaylySportMediaType.video,
+          lastModified: DateTime.utc(2026, 4, 16, 12),
+          sizeBytes: 3,
+        ),
+        DaylySportMediaItem(
+          file: secondFile,
+          relativePath: 'reels/second.mp4.esv',
+          section: DaylySportMediaSection.reels,
+          type: DaylySportMediaType.video,
+          lastModified: DateTime.utc(2026, 4, 16, 12, 1),
+          sizeBytes: 3,
+        ),
+      ];
+
+      final pageController = PageController();
+      final scrollController = ScrollController();
+      addTearDown(pageController.dispose);
+      addTearDown(scrollController.dispose);
+
+      int? selectedIndex;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ReelsPlaybackStage(
+              items: items,
+              activeIndex: 0,
+              pageController: pageController,
+              overlayController: scrollController,
+              isScreenActive: true,
+              onActiveIndexChanged: (_) {},
+              onSelectReel: (index) {
+                selectedIndex = index;
+              },
+              feedItemBuilder: (context, item, isActive) {
+                return ColoredBox(
+                  color: isActive ? Colors.black : Colors.blueGrey,
+                  child: Center(
+                    child: Text(
+                      item.fileName,
+                      textDirection: TextDirection.ltr,
+                    ),
+                  ),
+                );
+              },
+              overlayThumbnailBuilder: (context, item, isActive) {
+                return ColoredBox(
+                  color: isActive ? Colors.orange : Colors.grey,
+                  child: Center(
+                    child: Text(
+                      item.fileName,
+                      textDirection: TextDirection.ltr,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ReelsPlaybackStage), findsOneWidget);
+      expect(find.byType(Stack), findsWidgets);
+      expect(find.byKey(const ValueKey<String>('reels-overlay-rail')), findsOneWidget);
+
+      final overlayPositioned = tester.widget<Positioned>(
+        find.ancestor(
+          of: find.byKey(const ValueKey<String>('reels-overlay-rail')),
+          matching: find.byType(Positioned),
+        ).first,
+      );
+      expect(overlayPositioned.right, isNotNull);
+      expect(overlayPositioned.top, isNotNull);
+      expect(overlayPositioned.bottom, isNotNull);
+
+      await tester.tap(find.byKey(const ValueKey<String>('reels-overlay-item-1')));
+      await tester.pumpAndSettle();
+
+      expect(selectedIndex, 1);
+    },
+  );
+
+  testWidgets('overlay rail decorations stay borderless', (tester) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_reels_overlay_borderless_',
+    );
+    addTearDown(() async {
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final file = File('${tempDir.path}${Platform.pathSeparator}first.mp4.esv')
+      ..writeAsBytesSync(const <int>[1, 2, 3]);
+
+    final items = <DaylySportMediaItem>[
+      DaylySportMediaItem(
+        file: file,
+        relativePath: 'reels/first.mp4.esv',
+        section: DaylySportMediaSection.reels,
+        type: DaylySportMediaType.video,
+        lastModified: DateTime.utc(2026, 4, 16, 12),
+        sizeBytes: 3,
+      ),
+    ];
+
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 92,
+            child: ReelsOverlayRail(
+              items: items,
+              activeIndex: 0,
+              controller: controller,
+              onSelect: (_) {},
+              thumbnailBuilder: (context, item, isActive) {
+                return const ColoredBox(color: Colors.black);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+      await tester.pumpAndSettle();
+
+    final decorations = tester.widgetList<DecoratedBox>(
+      find.descendant(
+        of: find.byType(ReelsOverlayRail),
+        matching: find.byType(DecoratedBox),
+      ),
+    );
+
+    for (final decoratedBox in decorations) {
+      final decoration = decoratedBox.decoration;
+      if (decoration is BoxDecoration) {
+        expect(decoration.border, isNull);
+      }
+    }
+  });
+
+  testWidgets(
     'marks reels inactive when another route is pushed over the screen and restores on pop',
     (tester) async {
       tester.view.physicalSize = const Size(800, 1200);

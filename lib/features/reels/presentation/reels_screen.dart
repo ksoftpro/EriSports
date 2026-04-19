@@ -23,6 +23,7 @@ class ReelsScreen extends ConsumerStatefulWidget {
 }
 
 class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
+  static const double _overlayItemExtent = 172.0;
   DateTime? _lastPrewarmScanAt;
   late final PageController _reelsPageController = PageController();
   final ScrollController _reelsRailController = ScrollController();
@@ -195,34 +196,17 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
 
             _syncReelPage(items.length);
 
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                final railWidth = constraints.maxWidth >= 780 ? 104.0 : 82.0;
-                return Row(
-                  children: [
-                    Expanded(
-                      child: ReelsFeed(
-                        items: items,
-                        pageController: _reelsPageController,
-                        isScreenActive: isScreenActive,
-                        onActiveIndexChanged: (index) {
-                          _currentActiveIndex = index;
-                          _scrollReelRail(index);
-                        },
-                      ),
-                    ),
-                    SizedBox(
-                      width: railWidth,
-                      child: _ReelSideRail(
-                        items: items,
-                        activeIndex: _currentActiveIndex,
-                        controller: _reelsRailController,
-                        onSelect: _jumpToReel,
-                      ),
-                    ),
-                  ],
-                );
+            return ReelsPlaybackStage(
+              items: items,
+              activeIndex: _currentActiveIndex,
+              pageController: _reelsPageController,
+              overlayController: _reelsRailController,
+              isScreenActive: isScreenActive,
+              onActiveIndexChanged: (index) {
+                _currentActiveIndex = index;
+                _scrollReelRail(index);
               },
+              onSelectReel: _jumpToReel,
             );
           },
         ),
@@ -275,8 +259,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
       return;
     }
 
-    const itemExtent = 96.0;
-    final target = (index * itemExtent) - 120;
+    final target = (index * _overlayItemExtent) - 140;
     final clamped =
         target
             .clamp(0.0, _reelsRailController.position.maxScrollExtent)
@@ -426,12 +409,110 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   }
 }
 
+typedef ReelOverlayThumbnailBuilder =
+    Widget Function(
+      BuildContext context,
+      DaylySportMediaItem item,
+      bool isActive,
+    );
+
 typedef ReelsFeedItemBuilder =
     Widget Function(
       BuildContext context,
       DaylySportMediaItem item,
       bool isActive,
     );
+
+class ReelsPlaybackStage extends StatelessWidget {
+  const ReelsPlaybackStage({
+    required this.items,
+    required this.activeIndex,
+    required this.pageController,
+    required this.overlayController,
+    required this.isScreenActive,
+    required this.onActiveIndexChanged,
+    required this.onSelectReel,
+    this.feedItemBuilder,
+    this.overlayThumbnailBuilder,
+    super.key,
+  });
+
+  final List<DaylySportMediaItem> items;
+  final int activeIndex;
+  final PageController pageController;
+  final ScrollController overlayController;
+  final bool isScreenActive;
+  final ValueChanged<int> onActiveIndexChanged;
+  final ValueChanged<int> onSelectReel;
+  final ReelsFeedItemBuilder? feedItemBuilder;
+  final ReelOverlayThumbnailBuilder? overlayThumbnailBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final overlayWidth =
+            constraints.maxWidth >= 780
+                ? 108.0
+                : constraints.maxWidth >= 520
+                ? 92.0
+                : 84.0;
+        final horizontalInset = constraints.maxWidth >= 520 ? 16.0 : 10.0;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: ReelsFeed(
+                items: items,
+                pageController: pageController,
+                isScreenActive: isScreenActive,
+                itemBuilder: feedItemBuilder,
+                onActiveIndexChanged: onActiveIndexChanged,
+              ),
+            ),
+            Positioned(
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: overlayWidth + (horizontalInset * 2),
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerRight,
+                      end: Alignment.centerLeft,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.28),
+                        Colors.black.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 14,
+              right: horizontalInset,
+              bottom: 20,
+              child: SizedBox(
+                width: overlayWidth,
+                child: ReelsOverlayRail(
+                  key: const ValueKey<String>('reels-overlay-rail'),
+                  items: items,
+                  activeIndex: activeIndex,
+                  controller: overlayController,
+                  onSelect: onSelectReel,
+                  thumbnailBuilder: overlayThumbnailBuilder,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
 
 class ReelsFeed extends StatefulWidget {
   const ReelsFeed({
@@ -516,84 +597,149 @@ class _ReelsFeedState extends State<ReelsFeed> {
   }
 }
 
-class _ReelSideRail extends StatelessWidget {
-  const _ReelSideRail({
+class ReelsOverlayRail extends StatelessWidget {
+  const ReelsOverlayRail({
     required this.items,
     required this.activeIndex,
     required this.controller,
     required this.onSelect,
+    this.thumbnailBuilder,
+    super.key,
   });
 
   final List<DaylySportMediaItem> items;
   final int activeIndex;
   final ScrollController controller;
   final ValueChanged<int> onSelect;
+  final ReelOverlayThumbnailBuilder? thumbnailBuilder;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(0, 10, 10, 16),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: ListView.builder(
-        controller: controller,
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        itemCount: items.length,
-        itemBuilder: (context, index) {
-          final item = items[index];
-          final isActive = index == activeIndex;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () => onSelect(index),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color:
-                      isActive
-                          ? scheme.primaryContainer.withValues(alpha: 0.75)
-                          : scheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isActive ? scheme.primary : scheme.outlineVariant,
-                    width: isActive ? 1.6 : 1,
+    return ListView.builder(
+      controller: controller,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final isActive = index == activeIndex;
+        final thumbnail =
+            thumbnailBuilder?.call(context, item, isActive) ??
+            OfflineVideoThumbnail(
+              item: item,
+              maxDimension: 240,
+              showPlayBadge: false,
+            );
+
+        return Padding(
+          padding: EdgeInsets.only(bottom: index == items.length - 1 ? 0 : 12),
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            scale: isActive ? 1 : 0.92,
+            alignment: Alignment.centerRight,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 180),
+              opacity: isActive ? 1 : 0.72,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  key: ValueKey<String>('reels-overlay-item-$index'),
+                  customBorder: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(22),
                   ),
-                ),
-                child: Column(
-                  children: [
-                    AspectRatio(
+                  onTap: () => onSelect(index),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(22),
+                      boxShadow: [
+                        if (isActive)
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.26),
+                            blurRadius: 18,
+                            offset: const Offset(0, 10),
+                          ),
+                      ],
+                    ),
+                    child: AspectRatio(
                       aspectRatio: 9 / 16,
-                      child: OfflineVideoThumbnail(
-                        item: item,
-                        maxDimension: 240,
-                        borderRadius: BorderRadius.circular(12),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(22),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            thumbnail,
+                            IgnorePointer(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.black.withValues(alpha: 0.04),
+                                      Colors.black.withValues(
+                                        alpha: isActive ? 0.24 : 0.36,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color:
+                                      isActive
+                                          ? scheme.primary
+                                          : Colors.white70,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: SizedBox(
+                                  width: isActive ? 10 : 8,
+                                  height: isActive ? 10 : 8,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: 8,
+                              bottom: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(
+                                    alpha: isActive ? 0.48 : 0.34,
+                                  ),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  '${index + 1}',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${index + 1}',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color:
-                            isActive
-                                ? scheme.onPrimaryContainer
-                                : scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
