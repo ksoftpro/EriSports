@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
-import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/bootstrap/admin_app_services.dart';
 import 'package:eri_sports/data/secure_content/daylysport_secure_content_coordinator.dart';
 import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:eri_sports/data/secure_content/secure_content_encryption_job_manager.dart';
@@ -11,7 +10,6 @@ import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
@@ -69,7 +67,8 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
   @override
   void initState() {
     super.initState();
-    _jobManager = ref.read(appServicesProvider).secureContentEncryptionJobManager;
+    _jobManager =
+        ref.read(adminAppServicesProvider).secureContentEncryptionJobManager;
     _jobSnapshot = _jobManager.snapshot;
     _isEncrypting = _jobSnapshot.isRunning;
     _jobSubscription = _jobManager.stream.listen((snapshot) {
@@ -104,7 +103,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     });
 
     try {
-      final services = ref.read(appServicesProvider);
+      final services = ref.read(adminAppServicesProvider);
       final directory =
           await services.daylySportLocator.getOrCreateDaylySportDirectory();
       final inventory = await scanSecureContentInventoryInIsolate(
@@ -143,7 +142,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     });
 
     try {
-      await ref.read(appServicesProvider).secureContentCoordinator.warmUp();
+      await ref.read(adminAppServicesProvider).secureContentCoordinator.warmUp();
       if (!mounted) {
         return;
       }
@@ -181,7 +180,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
 
     try {
       await ref
-          .read(appServicesProvider)
+          .read(adminAppServicesProvider)
           .secureContentCoordinator
           .clearCaches();
       if (!mounted) {
@@ -440,7 +439,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     });
 
     try {
-      final services = ref.read(appServicesProvider);
+      final services = ref.read(adminAppServicesProvider);
       final requests = _selectedSources
           .map(
             (source) => SecureContentEncryptionRequest(
@@ -457,10 +456,6 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         requests: requests,
         overwrite: _overwriteExisting,
       );
-
-      if (result.importedJson) {
-        await ref.read(daylysportSyncControllerProvider.notifier).runManualSync();
-      }
       await _refreshInventory();
 
       if (!mounted) {
@@ -650,11 +645,6 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                                 ? 'Clearing caches...'
                                 : 'Clear decrypted caches',
                           ),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => context.push('/sync'),
-                          icon: const Icon(Icons.sync_rounded),
-                          label: const Text('Open sync tools'),
                         ),
                       ],
                     ),

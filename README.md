@@ -28,7 +28,7 @@ Android package IDs:
 - Entry point: `lib/main_admin.dart`
 - Purpose: prepare encrypted files for distribution
 - Includes: the secure content encryption workflow only
-- Excludes: the normal client navigation shell and user-facing runtime features
+- Excludes: the normal client navigation shell, sync tooling, bundled sports image assets, and user-facing runtime features
 
 ## Shared vs Variant-specific Code
 
@@ -104,6 +104,7 @@ Recommended workflow:
 ## Notes
 
 - The client build no longer exposes the admin secure-content route from Settings.
-- The admin build skips the normal startup import and navigation shell so it opens directly into the encryption workflow.
+- The admin build now uses a dedicated minimal bootstrap path and single-screen app so it avoids loading the client router and client service graph.
 - Android now uses distinct product flavors, launcher icons, labels, and application IDs so the Admin and Client APKs are separate installable apps.
 - The Android package namespace is shared at source level, while each flavor publishes with its own install package ID.
+- Flutter assets are flavor-scoped, so sports banners, league art, player images, team badges, and placeholders are bundled only in the client flavor.

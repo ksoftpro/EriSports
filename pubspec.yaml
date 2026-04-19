@@ -76,13 +76,24 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/icon/
-    - assets/placeholders/
-    - assets/teams/
-    - assets/players/
-    - assets/player/
-    - assets/leagues/
-    - assets/banners/
+    - path: assets/placeholders/
+      flavors:
+        - client
+    - path: assets/teams/
+      flavors:
+        - client
+    - path: assets/players/
+      flavors:
+        - client
+    - path: assets/player/
+      flavors:
+        - client
+    - path: assets/leagues/
+      flavors:
+        - client
+    - path: assets/banners/
+      flavors:
+        - client
 
 flutter_launcher_icons:
   android: true
