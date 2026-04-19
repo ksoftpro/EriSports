@@ -83,8 +83,7 @@ void main() {
   });
 }
 
-class _TestOfflineNewsGalleryNotifier
-    extends AsyncNotifier<OfflineNewsGallerySnapshot> {
+class _TestOfflineNewsGalleryNotifier extends OfflineNewsGalleryNotifier {
   _TestOfflineNewsGalleryNotifier(this.snapshot);
 
   final OfflineNewsGallerySnapshot snapshot;

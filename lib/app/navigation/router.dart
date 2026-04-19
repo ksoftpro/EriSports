@@ -1,4 +1,5 @@
 import 'package:eri_sports/app/navigation/app_shell.dart';
+import 'package:eri_sports/app/config/app_product_variant.dart';
 import 'package:eri_sports/features/bookmarks/presentation/bookmarks_screen.dart';
 import 'package:eri_sports/features/home/presentation/calendar_screen.dart';
 import 'package:eri_sports/features/home/presentation/home_screen.dart';
@@ -25,172 +26,187 @@ final appRouteObserverProvider = Provider<RouteObserver<ModalRoute<void>>>(
 );
 
 final appRouterProvider = Provider<GoRouter>((ref) {
+  final variant = ref.watch(appProductVariantProvider);
+
   return GoRouter(
-    initialLocation: '/home',
+    initialLocation: variant.initialLocation,
     observers: [ref.watch(appRouteObserverProvider)],
-    routes: [
-      StatefulShellRoute.indexedStack(
-        builder:
-            (context, state, navigationShell) =>
-                AppShell(navigationShell: navigationShell),
-        branches: [
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/home',
-                name: 'home',
-                pageBuilder:
-                    (context, state) => NoTransitionPage(
-                      key: state.pageKey,
-                      child: HomeScreen(
-                        initialDateIso: state.uri.queryParameters['date'],
-                        initialDateFocusToken:
-                            state.uri.queryParameters['focus'],
-                      ),
-                    ),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/news',
-                name: 'news',
-                pageBuilder:
-                    (context, state) =>
-                        const NoTransitionPage(child: OfflineNewsScreen()),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/leagues',
-                name: 'leagues',
-                pageBuilder:
-                    (context, state) =>
-                        const NoTransitionPage(child: LeaguesScreen()),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/reels',
-                name: 'reels',
-                pageBuilder:
-                    (context, state) =>
-                        const NoTransitionPage(child: ReelsScreen()),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/video',
-                name: 'video',
-                pageBuilder:
-                    (context, state) =>
-                        const NoTransitionPage(child: VideoScreen()),
-              ),
-            ],
-          ),
-        ],
-      ),
-      GoRoute(
-        path: '/following',
-        name: 'following',
-        builder: (context, state) => const BookmarksScreen(),
-      ),
-      GoRoute(path: '/bookmarks', redirect: (context, state) => '/following'),
-      GoRoute(path: '/more', redirect: (context, state) => '/settings'),
-      GoRoute(
-        path: '/settings',
-        name: 'settings',
-        builder: (context, state) => const MoreScreen(),
-      ),
-      GoRoute(
-        path: '/about',
-        name: 'about',
-        builder: (context, state) => const AboutScreen(),
-      ),
-      GoRoute(
-        path: '/secure-content',
-        name: 'secure-content',
-        builder: (context, state) => const SecureContentScreen(),
-      ),
-      GoRoute(
-        path: '/search',
-        name: 'search',
-        builder: (context, state) => const SearchScreen(),
-      ),
-      GoRoute(
-        path: '/calendar',
-        name: 'calendar',
-        builder: (context, state) => const CalendarScreen(),
-      ),
-      GoRoute(
-        path: '/league/:leagueId',
-        builder:
-            (context, state) => LeagueOverviewScreen(
-              competitionId: state.pathParameters['leagueId']!,
-              competitionNameHint: state.uri.queryParameters['leagueName'],
-            ),
-      ),
-      GoRoute(
-        path: '/standings/:competitionId',
-        builder:
-            (context, state) => LeagueOverviewScreen(
-              competitionId: state.pathParameters['competitionId']!,
-              competitionNameHint: state.uri.queryParameters['leagueName'],
-            ),
-      ),
-      GoRoute(
-        path: '/match/:matchId',
-        builder: (context, state) {
-          final rawMatchId = state.pathParameters['matchId']!;
-          String resolvedMatchId;
-          try {
-            resolvedMatchId = Uri.decodeComponent(rawMatchId);
-          } catch (_) {
-            resolvedMatchId = rawMatchId;
-          }
-
-          return MatchDetailScreen(matchId: resolvedMatchId);
-        },
-      ),
-      GoRoute(
-        path: '/team/:teamId',
-        builder:
-            (context, state) =>
-                TeamScreen(teamId: state.pathParameters['teamId']!),
-      ),
-      GoRoute(
-        path: '/player/:playerId',
-        builder: (context, state) {
-          final rawPlayerId = state.pathParameters['playerId']!;
-          String resolvedPlayerId;
-          try {
-            resolvedPlayerId = Uri.decodeComponent(rawPlayerId);
-          } catch (_) {
-            resolvedPlayerId = rawPlayerId;
-          }
-
-          return PlayerScreen(playerId: resolvedPlayerId);
-        },
-      ),
-      GoRoute(
-        path: '/player-stats',
-        builder:
-            (context, state) => PlayerStatsScreen(
-              initialCompetitionId: state.uri.queryParameters['competitionId'],
-              initialStatType: state.uri.queryParameters['statType'],
-            ),
-      ),
-      GoRoute(
-        path: '/sync',
-        builder: (context, state) => const DaylysportSyncScreen(),
-      ),
-    ],
+    routes:
+        variant == AppProductVariant.admin
+            ? _buildAdminRoutes()
+            : _buildClientRoutes(),
   );
 });
+
+List<RouteBase> _buildClientRoutes() {
+  return [
+    StatefulShellRoute.indexedStack(
+      builder:
+          (context, state, navigationShell) =>
+              AppShell(navigationShell: navigationShell),
+      branches: [
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/home',
+              name: 'home',
+              pageBuilder:
+                  (context, state) => NoTransitionPage(
+                    key: state.pageKey,
+                    child: HomeScreen(
+                      initialDateIso: state.uri.queryParameters['date'],
+                      initialDateFocusToken: state.uri.queryParameters['focus'],
+                    ),
+                  ),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/news',
+              name: 'news',
+              pageBuilder:
+                  (context, state) =>
+                      const NoTransitionPage(child: OfflineNewsScreen()),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/leagues',
+              name: 'leagues',
+              pageBuilder:
+                  (context, state) =>
+                      const NoTransitionPage(child: LeaguesScreen()),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/reels',
+              name: 'reels',
+              pageBuilder:
+                  (context, state) =>
+                      const NoTransitionPage(child: ReelsScreen()),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/video',
+              name: 'video',
+              pageBuilder:
+                  (context, state) =>
+                      const NoTransitionPage(child: VideoScreen()),
+            ),
+          ],
+        ),
+      ],
+    ),
+    GoRoute(path: '/', redirect: (context, state) => '/home'),
+    GoRoute(
+      path: '/following',
+      name: 'following',
+      builder: (context, state) => const BookmarksScreen(),
+    ),
+    GoRoute(path: '/bookmarks', redirect: (context, state) => '/following'),
+    GoRoute(path: '/more', redirect: (context, state) => '/settings'),
+    GoRoute(
+      path: '/settings',
+      name: 'settings',
+      builder: (context, state) => const MoreScreen(),
+    ),
+    GoRoute(
+      path: '/about',
+      name: 'about',
+      builder: (context, state) => const AboutScreen(),
+    ),
+    GoRoute(
+      path: '/search',
+      name: 'search',
+      builder: (context, state) => const SearchScreen(),
+    ),
+    GoRoute(
+      path: '/calendar',
+      name: 'calendar',
+      builder: (context, state) => const CalendarScreen(),
+    ),
+    GoRoute(
+      path: '/league/:leagueId',
+      builder:
+          (context, state) => LeagueOverviewScreen(
+            competitionId: state.pathParameters['leagueId']!,
+            competitionNameHint: state.uri.queryParameters['leagueName'],
+          ),
+    ),
+    GoRoute(
+      path: '/standings/:competitionId',
+      builder:
+          (context, state) => LeagueOverviewScreen(
+            competitionId: state.pathParameters['competitionId']!,
+            competitionNameHint: state.uri.queryParameters['leagueName'],
+          ),
+    ),
+    GoRoute(
+      path: '/match/:matchId',
+      builder: (context, state) {
+        final rawMatchId = state.pathParameters['matchId']!;
+        String resolvedMatchId;
+        try {
+          resolvedMatchId = Uri.decodeComponent(rawMatchId);
+        } catch (_) {
+          resolvedMatchId = rawMatchId;
+        }
+
+        return MatchDetailScreen(matchId: resolvedMatchId);
+      },
+    ),
+    GoRoute(
+      path: '/team/:teamId',
+      builder:
+          (context, state) =>
+              TeamScreen(teamId: state.pathParameters['teamId']!),
+    ),
+    GoRoute(
+      path: '/player/:playerId',
+      builder: (context, state) {
+        final rawPlayerId = state.pathParameters['playerId']!;
+        String resolvedPlayerId;
+        try {
+          resolvedPlayerId = Uri.decodeComponent(rawPlayerId);
+        } catch (_) {
+          resolvedPlayerId = rawPlayerId;
+        }
+
+        return PlayerScreen(playerId: resolvedPlayerId);
+      },
+    ),
+    GoRoute(
+      path: '/player-stats',
+      builder:
+          (context, state) => PlayerStatsScreen(
+            initialCompetitionId: state.uri.queryParameters['competitionId'],
+            initialStatType: state.uri.queryParameters['statType'],
+          ),
+    ),
+    GoRoute(
+      path: '/sync',
+      builder: (context, state) => const DaylysportSyncScreen(),
+    ),
+  ];
+}
+
+List<RouteBase> _buildAdminRoutes() {
+  return [
+    GoRoute(path: '/', redirect: (context, state) => '/secure-content'),
+    GoRoute(
+      path: '/secure-content',
+      name: 'secure-content',
+      builder: (context, state) => const SecureContentScreen(),
+    ),
+  ];
+}

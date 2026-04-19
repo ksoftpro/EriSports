@@ -24,7 +24,6 @@ import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
 import 'package:eri_sports/data/secure_content/file_fingerprint_cache.dart';
 import 'package:eri_sports/data/secure_content/secure_content_encryption_job_manager.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
-import 'package:eri_sports/features/home/presentation/home_screen.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
@@ -141,7 +140,9 @@ void main() {
   ) async {
     final harness = await _WidgetHarness.create(
       tester,
-      homeDayOffsets: [for (var dayOffset = -6; dayOffset <= 6; dayOffset++) dayOffset],
+      homeDayOffsets: [
+        for (var dayOffset = -6; dayOffset <= 6; dayOffset++) dayOffset,
+      ],
     );
     addTearDown(() => harness.dispose(tester));
 
@@ -255,6 +256,7 @@ class _WidgetHarness {
 
     final services = AppServices(
       database: database,
+      cacheStore: cacheStore,
       daylySportLocator: locator,
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
@@ -270,7 +272,7 @@ class _WidgetHarness {
     );
 
     final startupReport = await seedOfflineDbForTests(database);
-  await _seedExtraHomeFeedDays(database, homeDayOffsets);
+    await _seedExtraHomeFeedDays(database, homeDayOffsets);
 
     await tester.pumpWidget(
       ProviderScope(
@@ -649,10 +651,7 @@ Future<void> _pumpUntilVisible(
   }
 }
 
-Future<void> _expectDateTabCentered(
-  WidgetTester tester,
-  String label,
-) async {
+Future<void> _expectDateTabCentered(WidgetTester tester, String label) async {
   final stripFinder = find.byKey(const ValueKey('home-day-tab-strip'));
   expect(stripFinder, findsOneWidget);
 
@@ -673,7 +672,9 @@ Future<void> _expectDateTabCentered(
     }
   }
 
-  fail('Expected "$label" tab to center within 60px, got ${lastDelta?.toStringAsFixed(1)}px.');
+  fail(
+    'Expected "$label" tab to center within 60px, got ${lastDelta?.toStringAsFixed(1)}px.',
+  );
 }
 
 Future<void> _seedExtraHomeFeedDays(
@@ -690,21 +691,23 @@ Future<void> _seedExtraHomeFeedDays(
     );
     final matchId = 'seed-home-$dayOffset';
 
-    await database.into(database.matches).insertOnConflictUpdate(
-      MatchesCompanion.insert(
-        id: matchId,
-        competitionId: '47',
-        seasonId: const Value('2025/2026'),
-        homeTeamId: '9825',
-        awayTeamId: '8650',
-        kickoffUtc: kickoff,
-        status: const Value('scheduled'),
-        homeScore: const Value(0),
-        awayScore: const Value(0),
-        roundLabel: Value('Day ${dayOffset + 7}'),
-        updatedAtUtc: DateTime.now().toUtc(),
-      ),
-    );
+    await database
+        .into(database.matches)
+        .insertOnConflictUpdate(
+          MatchesCompanion.insert(
+            id: matchId,
+            competitionId: '47',
+            seasonId: const Value('2025/2026'),
+            homeTeamId: '9825',
+            awayTeamId: '8650',
+            kickoffUtc: kickoff,
+            status: const Value('scheduled'),
+            homeScore: const Value(0),
+            awayScore: const Value(0),
+            roundLabel: Value('Day ${dayOffset + 7}'),
+            updatedAtUtc: DateTime.now().toUtc(),
+          ),
+        );
   }
 }
 

@@ -398,9 +398,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
             const SizedBox(height: 12),
             _SectionCard(
               icon: Icons.lock_outline_rounded,
-              title: 'Offline Content Security',
+              title: 'Offline Content Runtime',
               subtitle:
-                  'Inspect encrypted content, warm caches, and clear decrypted runtime files.',
+                  'Run sync tools, warm decrypted caches, and inspect offline runtime status.',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -418,11 +418,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     spacing: 10,
                     runSpacing: 10,
                     children: [
-                      FilledButton.icon(
-                        onPressed: () => context.push('/secure-content'),
-                        icon: const Icon(Icons.admin_panel_settings_outlined),
-                        label: const Text('Open secure content'),
-                      ),
                       OutlinedButton.icon(
                         onPressed: () => context.push('/sync'),
                         icon: const Icon(Icons.sync_rounded),

@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/config/app_product_variant.dart';
 import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/app/bootstrap/startup_controller.dart';
 import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
@@ -23,8 +27,16 @@ class _EriSportsAppState extends ConsumerState<EriSportsApp> {
     super.initState();
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
     Future.microtask(() {
-      ref.read(startupControllerProvider.notifier).ensureStarted();
-      if (ref.read(daylysportAutoMonitoringEnabledProvider)) {
+      final variant = ref.read(appProductVariantProvider);
+      if (variant.runsStartupBootstrap) {
+        ref.read(startupControllerProvider.notifier).ensureStarted();
+      } else {
+        unawaited(
+          ref.read(appServicesProvider).secureContentCoordinator.warmUp(),
+        );
+      }
+      if (variant.supportsBackgroundMonitoring &&
+          ref.read(daylysportAutoMonitoringEnabledProvider)) {
         ref
             .read(daylysportSyncControllerProvider.notifier)
             .ensureMonitoringStarted();
@@ -44,7 +56,9 @@ class _EriSportsAppState extends ConsumerState<EriSportsApp> {
           ref.read(appLifecycleStateProvider.notifier).state = state;
         },
         onResume: () {
-          if (ref.read(daylysportAutoMonitoringEnabledProvider)) {
+          final variant = ref.read(appProductVariantProvider);
+          if (variant.supportsBackgroundMonitoring &&
+              ref.read(daylysportAutoMonitoringEnabledProvider)) {
             ref
                 .read(daylysportSyncControllerProvider.notifier)
                 .runResumeSyncIfNeeded();
@@ -54,13 +68,17 @@ class _EriSportsAppState extends ConsumerState<EriSportsApp> {
 
   @override
   Widget build(BuildContext context) {
+    final variant = ref.watch(appProductVariantProvider);
     final router = ref.watch(appRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
-    final startup = ref.watch(startupControllerProvider);
+    final startup =
+        variant.showsStartupUi
+            ? ref.watch(startupControllerProvider)
+            : const StartupState.initial();
 
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
-      title: 'EriSports',
+      title: variant.appTitle,
       themeMode: themeMode,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
@@ -69,14 +87,14 @@ class _EriSportsAppState extends ConsumerState<EriSportsApp> {
         return Stack(
           children: [
             child ?? const SizedBox.shrink(),
-            if (startup.isBackgroundRefreshing)
+            if (variant.showsStartupUi && startup.isBackgroundRefreshing)
               const Positioned(
                 top: 0,
                 left: 0,
                 right: 0,
                 child: _StartupRefreshBanner(),
               ),
-            if (startup.showBlockingOverlay)
+            if (variant.showsStartupUi && startup.showBlockingOverlay)
               _StartupBlockingOverlay(
                 state: startup,
                 onRetry: () {
