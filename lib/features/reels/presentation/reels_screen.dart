@@ -94,7 +94,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
     final shellIndex = ref.watch(currentShellBranchIndexProvider);
     final lifecycleState = ref.watch(appLifecycleStateProvider);
     final snapshot = mediaAsync.valueOrNull;
-    final availableItems =
+    final sortedItems =
         snapshot == null
             ? const <DaylySportMediaItem>[]
         : _reelItemsFromSnapshot(snapshot);
@@ -131,15 +131,13 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
                       : () => _deleteSelectedReels(snapshot),
               icon: const Icon(Icons.delete_sweep_outlined),
             )
-          else if (availableItems.isNotEmpty)
+          else if (sortedItems.isNotEmpty)
             IconButton(
               tooltip: 'Delete current reel',
               onPressed:
                   _isDeleting
                       ? null
-                      : () => _deleteCurrentReel(
-                        availableItems[_currentActiveIndex],
-                      ),
+                      : () => _deleteCurrentReel(sortedItems[_currentActiveIndex]),
               icon: const Icon(Icons.delete_outline_rounded),
             ),
           IconButton(
@@ -170,10 +168,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
             final highlightFallback =
                 snapshot.section(DaylySportMediaSection.highlights).videoItems;
 
-            final items =
-                reelsSection.hasVideoItems
-                    ? reelsSection.videoItems
-                    : highlightFallback;
+            final items = _reelItemsFromSnapshot(snapshot);
 
             _scheduleEncryptedPrewarm(snapshot, items);
 
