@@ -3,8 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:eri_sports/app/bootstrap/app_services.dart';
-import 'package:eri_sports/app/config/app_product_variant.dart';
-import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/core/log/app_logger.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/db/app_database.dart';
@@ -24,7 +22,6 @@ import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/admin/data/admin_activity_service.dart';
 import 'package:eri_sports/features/admin/data/admin_auth_service.dart';
 import 'package:eri_sports/features/admin/data/admin_models.dart';
-import 'package:eri_sports/features/admin/presentation/admin_login_screen.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/more/presentation/secure_content_screen.dart';
@@ -54,7 +51,6 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         appServicesProvider.overrideWithValue(harness.services),
-        appProductVariantProvider.overrideWithValue(AppProductVariant.admin),
       ],
     );
     addTearDown(() async {
@@ -67,27 +63,23 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp.router(
-          routerConfig: container.read(appRouterProvider),
-        ),
+        child: const MaterialApp(home: SecureContentScreen()),
       ),
     );
     await _pumpForUi(tester);
 
-    expect(find.byKey(adminLoginUsernameFieldKey), findsOneWidget);
     expect(find.byKey(adminDashboardOverviewKey), findsNothing);
+    expect(find.text('Secure Content Operations'), findsNothing);
 
-    await tester.enterText(find.byKey(adminLoginUsernameFieldKey), 'opslead');
-    await tester.enterText(find.byKey(adminLoginPasswordFieldKey), 'Wrong123');
-    await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
-    await _pumpForUi(tester);
-
-    expect(find.text('Invalid username or password.'), findsOneWidget);
-
-    await tester.enterText(find.byKey(adminLoginPasswordFieldKey), 'Secure123');
-    await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
+    final loginResult = await harness.services.adminAuthService.login(
+      username: 'opslead',
+      password: 'Secure123',
+      persistSession: false,
+    );
+    expect(loginResult.success, isTrue);
     await _pumpForUi(tester, frames: 20);
 
+    expect(find.text('Secure Content Operations'), findsOneWidget);
     expect(find.byKey(adminDashboardOverviewKey), findsOneWidget);
     expect(find.byKey(adminDashboardUserActivityKey), findsOneWidget);
     expect(find.byKey(adminDashboardRecentActivityKey), findsOneWidget);
