@@ -1,10 +1,17 @@
 import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
+import 'package:eri_sports/app/app.dart';
+import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/navigation/app_shell.dart';
+import 'package:eri_sports/app/navigation/router.dart';
 import 'dart:io';
 
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
+import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
 import 'package:eri_sports/features/reels/presentation/reels_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -280,6 +287,7 @@ void main() {
               pageController: pageController,
               overlayController: scrollController,
               seenItemIds: const <String>{},
+              isRailVisible: true,
               isScreenActive: true,
               onActiveIndexChanged: (_) {},
               onSelectReel: (index) {
@@ -326,6 +334,11 @@ void main() {
       expect(overlayPositioned.right, isNotNull);
       expect(overlayPositioned.top, isNotNull);
       expect(overlayPositioned.bottom, isNotNull);
+
+      final overlayShellSize = tester.getSize(
+        find.byKey(const ValueKey<String>('reels-overlay-shell')),
+      );
+      expect(overlayShellSize.width, greaterThan(0));
 
       await tester.tap(find.byKey(const ValueKey<String>('reels-overlay-item-1')));
       await tester.pumpAndSettle();
@@ -374,6 +387,7 @@ void main() {
               items: items,
               activeIndex: 0,
               controller: controller,
+              railWidth: 92,
               seenItemIds: const <String>{},
               onSelect: (_) {},
               thumbnailBuilder: (context, item, isActive) {
@@ -453,6 +467,7 @@ void main() {
               items: [firstItem, secondItem],
               activeIndex: 0,
               controller: controller,
+              railWidth: 92,
               seenItemIds: seenItemIds,
               onSelect: (_) {},
               thumbnailBuilder: (context, item, isActive) {
@@ -466,6 +481,142 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('New'), findsOneWidget);
+  });
+
+  testWidgets('animates rail visibility in the playback stage', (tester) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_reels_overlay_toggle_stage_',
+    );
+    addTearDown(() async {
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final items = _buildItems(tempDir, 2);
+    final pageController = PageController();
+    final scrollController = ScrollController();
+    addTearDown(pageController.dispose);
+    addTearDown(scrollController.dispose);
+
+    Future<void> pumpStage({required bool isRailVisible}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ReelsPlaybackStage(
+              items: items,
+              activeIndex: 0,
+              pageController: pageController,
+              overlayController: scrollController,
+              seenItemIds: const <String>{},
+              isRailVisible: isRailVisible,
+              isScreenActive: true,
+              onActiveIndexChanged: (_) {},
+              onSelectReel: (_) {},
+              feedItemBuilder: (context, item, isActive) {
+                return ColoredBox(
+                  color: isActive ? Colors.black : Colors.blueGrey,
+                );
+              },
+              overlayThumbnailBuilder: (context, item, isActive) {
+                return ColoredBox(
+                  color: isActive ? Colors.orange : Colors.grey,
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pumpStage(isRailVisible: true);
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSize(find.byKey(const ValueKey<String>('reels-overlay-shell'))).width,
+      greaterThan(0),
+    );
+
+    await pumpStage(isRailVisible: false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 110));
+    expect(
+      tester.getSize(find.byKey(const ValueKey<String>('reels-overlay-shell'))).width,
+      greaterThan(0),
+    );
+
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byKey(const ValueKey<String>('reels-overlay-shell'))).width,
+      0,
+    );
+  });
+
+  testWidgets('overlay rail scrolls reliably with fixed item extents', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_reels_overlay_scroll_stage_',
+    );
+    addTearDown(() async {
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final items = _buildItems(tempDir, 12);
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 92,
+            child: ReelsOverlayRail(
+              items: items,
+              activeIndex: 0,
+              controller: controller,
+              railWidth: 92,
+              seenItemIds: const <String>{},
+              onSelect: (_) {},
+              thumbnailBuilder: (context, item, isActive) {
+                return ColoredBox(
+                  color: isActive ? Colors.orange : Colors.grey,
+                  child: Center(
+                    child: Text(item.fileName, textDirection: TextDirection.ltr),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey<String>('reels-overlay-item-11')), findsNothing);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('reels-overlay-item-11')),
+      220,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey<String>('reels-overlay-scroll-view')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.offset, greaterThan(0));
+    expect(find.byKey(const ValueKey<String>('reels-overlay-item-11')), findsOneWidget);
   });
 
   testWidgets(
@@ -526,6 +677,144 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('first.mp4:active'), findsOneWidget);
+    },
+  );
+
+  testWidgets('header toggle shows and hides the reels rail smoothly', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_reels_screen_toggle_',
+    );
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final services = await AppServices.create(sharedPreferences: preferences);
+    addTearDown(() async {
+      await services.database.close();
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final snapshot = _buildSnapshot(tempDir, itemCount: 6);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appServicesProvider.overrideWithValue(services),
+          appRouteObserverProvider.overrideWithValue(
+            RouteObserver<ModalRoute<void>>(),
+          ),
+          currentShellBranchIndexProvider.overrideWith(
+            (ref) => 3,
+          ),
+          appLifecycleStateProvider.overrideWith(
+            (ref) => AppLifecycleState.resumed,
+          ),
+          daylySportMediaSnapshotProvider.overrideWith(
+            () => _TestDaylySportMediaSnapshotNotifier(snapshot),
+          ),
+        ],
+        child: MaterialApp(
+          home: ReelsScreen(
+            enableEncryptedPrewarm: false,
+            feedItemBuilder: (context, item, isActive) {
+              return ColoredBox(
+                color: isActive ? Colors.black : Colors.blueGrey,
+                child: Center(
+                  child: Text(item.fileName, textDirection: TextDirection.ltr),
+                ),
+              );
+            },
+            overlayThumbnailBuilder: (context, item, isActive) {
+              return ColoredBox(
+                color: isActive ? Colors.orange : Colors.grey,
+                child: Center(
+                  child: Text(item.fileName, textDirection: TextDirection.ltr),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final shellFinder = find.byKey(const ValueKey<String>('reels-overlay-shell'));
+    final toggleFinder = find.byKey(const ValueKey<String>('reels-rail-toggle'));
+
+    expect(tester.getSize(shellFinder).width, greaterThan(0));
+
+    await tester.tap(toggleFinder);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(shellFinder).width, 0);
+
+    await tester.tap(toggleFinder);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(shellFinder).width, greaterThan(0));
+  });
+}
+
+class _TestDaylySportMediaSnapshotNotifier
+    extends DaylySportMediaSnapshotNotifier {
+  _TestDaylySportMediaSnapshotNotifier(this.snapshot);
+
+  final DaylySportMediaSnapshot snapshot;
+
+  @override
+  Future<DaylySportMediaSnapshot> build() async => snapshot;
+}
+
+List<DaylySportMediaItem> _buildItems(Directory tempDir, int count) {
+  return List<DaylySportMediaItem>.generate(count, (index) {
+    final file = File(
+      '${tempDir.path}${Platform.pathSeparator}item_$index.mp4.esv',
+    )..writeAsBytesSync(<int>[index + 1, index + 2, index + 3]);
+    return DaylySportMediaItem(
+      file: file,
+      relativePath: 'reels/item_$index.mp4.esv',
+      section: DaylySportMediaSection.reels,
+      type: DaylySportMediaType.video,
+      lastModified: DateTime.utc(2026, 4, 16, 12, index),
+      sizeBytes: 3,
+    );
+  });
+}
+
+DaylySportMediaSnapshot _buildSnapshot(Directory tempDir, {required int itemCount}) {
+  final items = _buildItems(tempDir, itemCount);
+  return DaylySportMediaSnapshot(
+    rootDirectory: tempDir,
+    scannedAt: DateTime.utc(2026, 4, 20, 10),
+    sections: {
+      DaylySportMediaSection.reels: DaylySportMediaSectionSnapshot(
+        section: DaylySportMediaSection.reels,
+        items: items,
+        existingDirectories: <String>[tempDir.path],
+        scannedDirectories: <String>[tempDir.path],
+      ),
+      DaylySportMediaSection.highlights: const DaylySportMediaSectionSnapshot(
+        section: DaylySportMediaSection.highlights,
+        items: <DaylySportMediaItem>[],
+        existingDirectories: <String>[],
+        scannedDirectories: <String>[],
+      ),
+      DaylySportMediaSection.news: const DaylySportMediaSectionSnapshot(
+        section: DaylySportMediaSection.news,
+        items: <DaylySportMediaItem>[],
+        existingDirectories: <String>[],
+        scannedDirectories: <String>[],
+      ),
+      DaylySportMediaSection.updates: const DaylySportMediaSectionSnapshot(
+        section: DaylySportMediaSection.updates,
+        items: <DaylySportMediaItem>[],
+        existingDirectories: <String>[],
+        scannedDirectories: <String>[],
+      ),
     },
   );
 }

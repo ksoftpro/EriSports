@@ -17,19 +17,31 @@ import 'package:intl/intl.dart';
 import 'package:video_player/video_player.dart';
 
 class ReelsScreen extends ConsumerStatefulWidget {
-  const ReelsScreen({super.key});
+  const ReelsScreen({
+    this.feedItemBuilder,
+    this.overlayThumbnailBuilder,
+    this.enableEncryptedPrewarm = true,
+    super.key,
+  });
+
+  final ReelsFeedItemBuilder? feedItemBuilder;
+  final ReelOverlayThumbnailBuilder? overlayThumbnailBuilder;
+  final bool enableEncryptedPrewarm;
 
   @override
   ConsumerState<ReelsScreen> createState() => _ReelsScreenState();
 }
 
 class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
-  static const double _overlayItemExtent = 172.0;
+  static const Duration _railAnimationDuration = Duration(milliseconds: 220);
+  double _overlayItemExtent = 172.0;
   DateTime? _lastPrewarmScanAt;
   late final PageController _reelsPageController = PageController();
   final ScrollController _reelsRailController = ScrollController();
   ModalRoute<dynamic>? _route;
+  RouteObserver<ModalRoute<void>>? _routeObserver;
   bool _routeVisible = true;
+  bool _isRailVisible = true;
   bool _selectionMode = false;
   bool _isDeleting = false;
   int _currentActiveIndex = 0;
@@ -46,6 +58,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
     }
 
     final observer = ref.read(appRouteObserverProvider);
+    _routeObserver = observer;
     if (_route case final PageRoute<dynamic> currentRoute) {
       observer.unsubscribe(this);
       if (_routeVisible != currentRoute.isCurrent && mounted) {
@@ -66,9 +79,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
 
   @override
   void dispose() {
-    if (_route is PageRoute<dynamic>) {
-      ref.read(appRouteObserverProvider).unsubscribe(this);
-    }
+    _routeObserver?.unsubscribe(this);
     _reelsPageController.dispose();
     _reelsRailController.dispose();
     super.dispose();
@@ -122,6 +133,29 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
               onPressed: _isDeleting ? null : () => _setSelectionMode(true),
               icon: const Icon(Icons.checklist_rounded),
             ),
+          if (!_selectionMode && sortedItems.isNotEmpty)
+            IconButton(
+              key: const ValueKey<String>('reels-rail-toggle'),
+              tooltip: _isRailVisible ? 'Hide reels list' : 'Show reels list',
+              onPressed: _isDeleting ? null : _toggleRailVisibility,
+              icon: AnimatedSwitcher(
+                duration: _railAnimationDuration,
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(scale: animation, child: child),
+                  );
+                },
+                child: Icon(
+                  _isRailVisible
+                      ? Icons.view_sidebar_rounded
+                      : Icons.view_sidebar_outlined,
+                  key: ValueKey<bool>(_isRailVisible),
+                ),
+              ),
+            ),
           if (_selectionMode)
             IconButton(
               tooltip: 'Delete selected reels',
@@ -165,12 +199,11 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
               ),
           data: (snapshot) {
             final reelsSection = snapshot.section(DaylySportMediaSection.reels);
-            final highlightFallback =
-                snapshot.section(DaylySportMediaSection.highlights).videoItems;
-
             final items = _reelItemsFromSnapshot(snapshot);
 
-            _scheduleEncryptedPrewarm(snapshot, items);
+            if (widget.enableEncryptedPrewarm) {
+              _scheduleEncryptedPrewarm(snapshot, items);
+            }
 
             if (items.isNotEmpty && _currentActiveIndex >= items.length) {
               _currentActiveIndex = items.length - 1;
@@ -201,12 +234,18 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
               pageController: _reelsPageController,
               overlayController: _reelsRailController,
               seenItemIds: seenItemIds,
+              isRailVisible: _isRailVisible,
               isScreenActive: isScreenActive,
+              onRailItemExtentChanged: (itemExtent) {
+                _overlayItemExtent = itemExtent;
+              },
               onActiveIndexChanged: (index) {
                 _currentActiveIndex = index;
                 _scrollReelRail(index);
               },
               onSelectReel: _jumpToReel,
+              feedItemBuilder: widget.feedItemBuilder,
+              overlayThumbnailBuilder: widget.overlayThumbnailBuilder,
             );
           },
         ),
@@ -254,16 +293,39 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
     );
   }
 
-  void _scrollReelRail(int index) {
+  void _toggleRailVisibility() {
+    setState(() {
+      _isRailVisible = !_isRailVisible;
+    });
+    if (_isRailVisible) {
+      unawaited(
+        Future<void>.delayed(_railAnimationDuration, () {
+          if (!mounted) {
+            return;
+          }
+          _scrollReelRail(_currentActiveIndex, animated: false);
+        }),
+      );
+    }
+  }
+
+  void _scrollReelRail(int index, {bool animated = true}) {
     if (!_reelsRailController.hasClients) {
       return;
     }
 
-    final target = (index * _overlayItemExtent) - 140;
+    final viewportDimension = _reelsRailController.position.viewportDimension;
+    final target =
+        (index * _overlayItemExtent) -
+        ((viewportDimension - _overlayItemExtent) / 2);
     final clamped =
         target
             .clamp(0.0, _reelsRailController.position.maxScrollExtent)
             .toDouble();
+    if (!animated) {
+      _reelsRailController.jumpTo(clamped);
+      return;
+    }
     _reelsRailController.animateTo(
       clamped,
       duration: const Duration(milliseconds: 180),
@@ -440,9 +502,11 @@ class ReelsPlaybackStage extends StatelessWidget {
     required this.pageController,
     required this.overlayController,
     required this.seenItemIds,
+    required this.isRailVisible,
     required this.isScreenActive,
     required this.onActiveIndexChanged,
     required this.onSelectReel,
+    this.onRailItemExtentChanged,
     this.feedItemBuilder,
     this.overlayThumbnailBuilder,
     super.key,
@@ -453,9 +517,11 @@ class ReelsPlaybackStage extends StatelessWidget {
   final PageController pageController;
   final ScrollController overlayController;
   final Set<String> seenItemIds;
+  final bool isRailVisible;
   final bool isScreenActive;
   final ValueChanged<int> onActiveIndexChanged;
   final ValueChanged<int> onSelectReel;
+  final ValueChanged<double>? onRailItemExtentChanged;
   final ReelsFeedItemBuilder? feedItemBuilder;
   final ReelOverlayThumbnailBuilder? overlayThumbnailBuilder;
 
@@ -470,6 +536,9 @@ class ReelsPlaybackStage extends StatelessWidget {
                 ? 92.0
                 : 84.0;
         final horizontalInset = constraints.maxWidth >= 520 ? 16.0 : 10.0;
+        final railShellWidth = overlayWidth + (horizontalInset * 2);
+        final railItemExtent = _railItemExtentForWidth(overlayWidth);
+        onRailItemExtentChanged?.call(railItemExtent);
 
         return Stack(
           fit: StackFit.expand,
@@ -486,37 +555,62 @@ class ReelsPlaybackStage extends StatelessWidget {
             Positioned(
               top: 0,
               right: 0,
-              bottom: 0,
-              width: overlayWidth + (horizontalInset * 2),
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerRight,
-                      end: Alignment.centerLeft,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.28),
-                        Colors.black.withValues(alpha: 0.0),
-                      ],
+              bottom: 20,
+              child: AnimatedContainer(
+                key: const ValueKey<String>('reels-overlay-shell'),
+                duration: _ReelsOverlayRailMetrics.animationDuration,
+                curve: Curves.easeInOutCubic,
+                width: isRailVisible ? railShellWidth : 0,
+                child: ClipRect(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: SizedBox(
+                      width: railShellWidth,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          IgnorePointer(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.centerRight,
+                                  end: Alignment.centerLeft,
+                                  colors: [
+                                    Colors.black.withValues(alpha: 0.28),
+                                    Colors.black.withValues(alpha: 0.0),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 14,
+                            right: horizontalInset,
+                            bottom: 0,
+                            width: overlayWidth,
+                            child: IgnorePointer(
+                              ignoring: !isRailVisible,
+                              child: ExcludeSemantics(
+                                excluding: !isRailVisible,
+                                child: ReelsOverlayRail(
+                                  key: const ValueKey<String>(
+                                    'reels-overlay-rail',
+                                  ),
+                                  items: items,
+                                  activeIndex: activeIndex,
+                                  controller: overlayController,
+                                  railWidth: overlayWidth,
+                                  seenItemIds: seenItemIds,
+                                  onSelect: onSelectReel,
+                                  thumbnailBuilder: overlayThumbnailBuilder,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 14,
-              right: horizontalInset,
-              bottom: 20,
-              child: SizedBox(
-                width: overlayWidth,
-                child: ReelsOverlayRail(
-                  key: const ValueKey<String>('reels-overlay-rail'),
-                  items: items,
-                  activeIndex: activeIndex,
-                  controller: overlayController,
-                  seenItemIds: seenItemIds,
-                  onSelect: onSelectReel,
-                  thumbnailBuilder: overlayThumbnailBuilder,
                 ),
               ),
             ),
@@ -615,6 +709,7 @@ class ReelsOverlayRail extends StatelessWidget {
     required this.items,
     required this.activeIndex,
     required this.controller,
+    required this.railWidth,
     required this.seenItemIds,
     required this.onSelect,
     this.thumbnailBuilder,
@@ -624,6 +719,7 @@ class ReelsOverlayRail extends StatelessWidget {
   final List<DaylySportMediaItem> items;
   final int activeIndex;
   final ScrollController controller;
+  final double railWidth;
   final Set<String> seenItemIds;
   final ValueChanged<int> onSelect;
   final ReelOverlayThumbnailBuilder? thumbnailBuilder;
@@ -631,10 +727,18 @@ class ReelsOverlayRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final itemHeight = _railItemHeightForWidth(railWidth);
 
     return ListView.builder(
+      key: const ValueKey<String>('reels-overlay-scroll-view'),
       controller: controller,
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      padding: const EdgeInsets.symmetric(
+        vertical: _ReelsOverlayRailMetrics.verticalPadding,
+      ),
+      itemExtent: _railItemExtentForWidth(railWidth),
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
@@ -648,38 +752,39 @@ class ReelsOverlayRail extends StatelessWidget {
               showPlayBadge: false,
             );
 
-        return Padding(
-          padding: EdgeInsets.only(bottom: index == items.length - 1 ? 0 : 12),
-          child: AnimatedScale(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            scale: isActive ? 1 : 0.92,
-            alignment: Alignment.centerRight,
-            child: AnimatedOpacity(
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: railWidth,
+            height: itemHeight,
+            child: AnimatedScale(
               duration: const Duration(milliseconds: 180),
-              opacity: isActive ? 1 : 0.72,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  key: ValueKey<String>('reels-overlay-item-$index'),
-                  customBorder: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  onTap: () => onSelect(index),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
+              curve: Curves.easeOut,
+              scale: isActive ? 1 : 0.92,
+              alignment: Alignment.centerRight,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: isActive ? 1 : 0.72,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    key: ValueKey<String>('reels-overlay-item-$index'),
+                    customBorder: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(22),
-                      boxShadow: [
-                        if (isActive)
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.26),
-                            blurRadius: 18,
-                            offset: const Offset(0, 10),
-                          ),
-                      ],
                     ),
-                    child: AspectRatio(
-                      aspectRatio: 9 / 16,
+                    onTap: () => onSelect(index),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          if (isActive)
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.26),
+                              blurRadius: 18,
+                              offset: const Offset(0, 10),
+                            ),
+                        ],
+                      ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(22),
                         child: Stack(
@@ -766,6 +871,20 @@ class ReelsOverlayRail extends StatelessWidget {
       },
     );
   }
+}
+
+class _ReelsOverlayRailMetrics {
+  static const double itemSpacing = 12;
+  static const double verticalPadding = 8;
+  static const Duration animationDuration = Duration(milliseconds: 220);
+}
+
+double _railItemHeightForWidth(double width) {
+  return width * (16 / 9);
+}
+
+double _railItemExtentForWidth(double width) {
+  return _railItemHeightForWidth(width) + _ReelsOverlayRailMetrics.itemSpacing;
 }
 
 class _ReelsSelectionGrid extends StatelessWidget {
