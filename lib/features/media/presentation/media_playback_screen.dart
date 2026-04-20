@@ -22,6 +22,13 @@ class MediaPlaybackScreen extends ConsumerStatefulWidget {
 
 class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
     with WidgetsBindingObserver, RouteAware {
+  late final AppServices _services = ref.read(appServicesProvider);
+  late final VideoPlaybackPositionStore _playbackPositionStore = ref.read(
+    videoPlaybackPositionStoreProvider,
+  );
+  late final RouteObserver<ModalRoute<void>> _routeObserver = ref.read(
+    appRouteObserverProvider,
+  );
   VideoPlayerController? _controller;
   bool _isPreparing = false;
   String? _errorMessage;
@@ -51,14 +58,13 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
       return;
     }
 
-    final observer = ref.read(appRouteObserverProvider);
     if (_route is PageRoute<dynamic>) {
-      observer.unsubscribe(this);
+      _routeObserver.unsubscribe(this);
     }
 
     _route = route;
     if (route is PageRoute<dynamic>) {
-      observer.subscribe(this, route);
+      _routeObserver.subscribe(this, route);
       _routeVisible = route.isCurrent;
     } else {
       _routeVisible = true;
@@ -71,7 +77,7 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     if (_route is PageRoute<dynamic>) {
-      ref.read(appRouteObserverProvider).unsubscribe(this);
+      _routeObserver.unsubscribe(this);
     }
     final controller = _controller;
     _controller = null;
@@ -106,8 +112,7 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
     });
 
     try {
-      final services = ref.read(appServicesProvider);
-      final playable = await services.encryptedMediaService.resolvePlayableFile(
+      final playable = await _services.encryptedMediaService.resolvePlayableFile(
         widget.item.file,
       );
 
@@ -115,9 +120,7 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
       await controller.initialize();
       await controller.setLooping(true);
 
-      final savedPosition = ref
-          .read(videoPlaybackPositionStoreProvider)
-          .readPosition(widget.item);
+        final savedPosition = _playbackPositionStore.readPosition(widget.item);
       if (savedPosition != null &&
           savedPosition > Duration.zero &&
           savedPosition < controller.value.duration) {
@@ -271,8 +274,8 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
         await controller.play();
       }
     } else if (controller.value.isPlaying) {
-      await _persistPlaybackPosition(controller);
       await controller.pause();
+      await _persistPlaybackPosition(controller);
     } else {
       await _persistPlaybackPosition(controller);
     }
@@ -285,10 +288,10 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   Future<void> _pauseAndDisposeController(
     VideoPlayerController controller,
   ) async {
-    await _persistPlaybackPosition(controller);
     if (controller.value.isInitialized && controller.value.isPlaying) {
       await controller.pause();
     }
+    await _persistPlaybackPosition(controller);
     await controller.dispose();
   }
 
@@ -299,13 +302,11 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
 
     _isSavingPosition = true;
     try {
-      await ref
-          .read(videoPlaybackPositionStoreProvider)
-          .writePosition(
-            widget.item,
-            controller.value.position,
-            duration: controller.value.duration,
-          );
+      await _playbackPositionStore.writePosition(
+        widget.item,
+        controller.value.position,
+        duration: controller.value.duration,
+      );
     } finally {
       _isSavingPosition = false;
     }
