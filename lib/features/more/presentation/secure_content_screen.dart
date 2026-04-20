@@ -21,6 +21,16 @@ import 'package:path/path.dart' as p;
 const adminDashboardOverviewKey = Key('adminDashboardOverview');
 const adminDashboardUserActivityKey = Key('adminDashboardUserActivity');
 const adminDashboardRecentActivityKey = Key('adminDashboardRecentActivity');
+const adminDashboardMenuButtonKey = Key('adminDashboardMenuButton');
+const adminCreateUserDisplayNameFieldKey = Key('adminCreateUserDisplayNameField');
+const adminCreateUserUsernameFieldKey = Key('adminCreateUserUsernameField');
+const adminCreateUserPasswordFieldKey = Key('adminCreateUserPasswordField');
+const adminCreateUserConfirmPasswordFieldKey = Key('adminCreateUserConfirmPasswordField');
+const adminCreateUserSubmitButtonKey = Key('adminCreateUserSubmitButton');
+const adminChangePasswordCurrentFieldKey = Key('adminChangePasswordCurrentField');
+const adminChangePasswordNewFieldKey = Key('adminChangePasswordNewField');
+const adminChangePasswordConfirmFieldKey = Key('adminChangePasswordConfirmField');
+const adminChangePasswordSubmitButtonKey = Key('adminChangePasswordSubmitButton');
 
 class SecureContentScreen extends ConsumerStatefulWidget {
   const SecureContentScreen({super.key});
@@ -585,16 +595,19 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
+                      key: adminCreateUserDisplayNameFieldKey,
                       controller: displayNameController,
                       decoration: const InputDecoration(labelText: 'Display name'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
+                      key: adminCreateUserUsernameFieldKey,
                       controller: usernameController,
                       decoration: const InputDecoration(labelText: 'Username'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
+                      key: adminCreateUserPasswordFieldKey,
                       controller: passwordController,
                       obscureText: obscurePassword,
                       decoration: InputDecoration(
@@ -615,6 +628,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                     ),
                     const SizedBox(height: 12),
                     TextField(
+                      key: adminCreateUserConfirmPasswordFieldKey,
                       controller: confirmController,
                       obscureText: obscureConfirm,
                       decoration: InputDecoration(
@@ -651,6 +665,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
+                  key: adminCreateUserSubmitButtonKey,
                   onPressed: () async {
                     final navigator = Navigator.of(context);
                     final result = await ref
@@ -787,6 +802,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
+                      key: adminChangePasswordCurrentFieldKey,
                       controller: currentController,
                       obscureText: obscureCurrent,
                       decoration: InputDecoration(
@@ -807,6 +823,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                     ),
                     const SizedBox(height: 12),
                     TextField(
+                      key: adminChangePasswordNewFieldKey,
                       controller: nextController,
                       obscureText: obscureNext,
                       decoration: InputDecoration(
@@ -827,6 +844,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                     ),
                     const SizedBox(height: 12),
                     TextField(
+                      key: adminChangePasswordConfirmFieldKey,
                       controller: confirmController,
                       obscureText: obscureConfirm,
                       decoration: InputDecoration(
@@ -863,6 +881,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
+                  key: adminChangePasswordSubmitButtonKey,
                   onPressed: () async {
                     final navigator = Navigator.of(context);
                     final result = await ref
@@ -1052,6 +1071,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
             tooltip: 'Rescan offline content',
           ),
           PopupMenuButton<String>(
+            key: adminDashboardMenuButtonKey,
             onSelected: (value) {
               switch (value) {
                 case 'profile':

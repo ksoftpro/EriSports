@@ -41,6 +41,38 @@ import '../test/test_helpers/sqlite_test_helper.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('client settings updates theme mode and opens sync tools', (
+    tester,
+  ) async {
+    final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+    final harness = await _TestHarness.create(tester, binding);
+    addTearDown(harness.dispose);
+
+    await tester.tap(find.text('More').first.hitTestable());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Appearance'), findsOneWidget);
+    expect(find.text('Offline Content Runtime'), findsOneWidget);
+    expect(find.text('Open secure content'), findsNothing);
+
+    await tester.tap(find.text('Dark').first.hitTestable());
+    await tester.pumpAndSettle();
+
+    expect(harness.preferences.getString('app_theme_mode'), 'dark');
+
+    await tester.tap(find.text('Open sync tools').first.hitTestable());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Synchronize Data'), findsOneWidget);
+    expect(find.text('Synchronize daylySport data'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Run offline asset diagnostics'), findsOneWidget);
+  });
+
   testWidgets('offline asset diagnostics maps bundled team badges', (
     tester,
   ) async {
@@ -64,10 +96,15 @@ void main() {
 }
 
 class _TestHarness {
-  _TestHarness({required this.database, required this.tempRoot});
+  _TestHarness({
+    required this.database,
+    required this.tempRoot,
+    required this.preferences,
+  });
 
   final AppDatabase database;
   final Directory tempRoot;
+  final SharedPreferences preferences;
 
   static Future<_TestHarness> create(
     WidgetTester tester,
@@ -188,7 +225,11 @@ class _TestHarness {
     );
     await tester.pumpAndSettle();
 
-    return _TestHarness(database: database, tempRoot: tempRoot);
+    return _TestHarness(
+      database: database,
+      tempRoot: tempRoot,
+      preferences: preferences,
+    );
   }
 
   Future<void> dispose() async {

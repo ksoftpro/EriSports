@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:drift/native.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/core/log/app_logger.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
@@ -54,6 +54,8 @@ void main() {
       ],
     );
     addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       container.dispose();
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
@@ -77,6 +79,16 @@ void main() {
       persistSession: false,
     );
     expect(loginResult.success, isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: SecureContentScreen()),
+      ),
+    );
     await _pumpForUi(tester, frames: 20);
 
     expect(find.text('Secure Content Operations'), findsOneWidget);
@@ -130,7 +142,7 @@ class _AdminDashboardHarness {
     final preferences = await SharedPreferences.getInstance();
     final cacheStore = DaylySportCacheStore(sharedPreferences: preferences);
     final logger = AppLogger();
-    final database = AppDatabase();
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
     final locator = DaylySportLocator(sharedPreferences: preferences);
     final fileResolver = const EncryptedFileResolver();
     final fingerprintCache = FileFingerprintCache(cacheStore: cacheStore);
