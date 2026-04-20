@@ -14,6 +14,8 @@ import 'package:eri_sports/data/secure_content/encrypted_json_service.dart';
 import 'package:eri_sports/data/secure_content/secure_content_encryption_job_manager.dart';
 import 'package:eri_sports/data/secure_content/file_fingerprint_cache.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
+import 'package:eri_sports/features/admin/data/admin_activity_service.dart';
+import 'package:eri_sports/features/admin/data/admin_auth_service.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
@@ -32,6 +34,8 @@ class AppServices {
     required this.encryptedImageService,
     required this.secureContentCoordinator,
     required this.secureContentEncryptionJobManager,
+    required this.adminActivityService,
+    required this.adminAuthService,
     required this.leagueStandingsSource,
     required this.teamRawSource,
     required this.daylysportSyncCoordinator,
@@ -48,6 +52,8 @@ class AppServices {
   final EncryptedImageService encryptedImageService;
   final DaylysportSecureContentCoordinator secureContentCoordinator;
   final SecureContentEncryptionJobManager secureContentEncryptionJobManager;
+  final AdminActivityService adminActivityService;
+  final AdminAuthService adminAuthService;
   final LeagueStandingsSource leagueStandingsSource;
   final TeamRawSource teamRawSource;
   final DaylysportSyncCoordinator daylysportSyncCoordinator;
@@ -121,6 +127,11 @@ class AppServices {
     final secureContentEncryptionJobManager = SecureContentEncryptionJobManager(
       coordinator: secureContentCoordinator,
     );
+    final adminActivityService = AdminActivityService(cacheStore: cacheStore);
+    final adminAuthService = AdminAuthService(
+      cacheStore: cacheStore,
+      activityService: adminActivityService,
+    );
 
     return AppServices(
       database: database,
@@ -133,6 +144,8 @@ class AppServices {
       encryptedImageService: encryptedImageService,
       secureContentCoordinator: secureContentCoordinator,
       secureContentEncryptionJobManager: secureContentEncryptionJobManager,
+      adminActivityService: adminActivityService,
+      adminAuthService: adminAuthService,
       leagueStandingsSource: leagueStandingsSource,
       teamRawSource: teamRawSource,
       daylysportSyncCoordinator: daylysportSyncCoordinator,

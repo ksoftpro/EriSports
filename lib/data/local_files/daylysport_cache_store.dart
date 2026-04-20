@@ -93,6 +93,23 @@ class DaylySportCacheStore {
     }
   }
 
+  Map<String, dynamic>? readJsonObject(String scope, String key) {
+    final raw = _sharedPreferences.getString(_scopedKey('json_object::$key', scope));
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return null;
+      }
+      return decoded.map((entryKey, value) => MapEntry('$entryKey', value));
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> writeJsonObjectList(
     String scope,
     String key,
@@ -102,6 +119,18 @@ class DaylySportCacheStore {
       _scopedKey('json::$key', scope),
       jsonEncode(entries),
     );
+  }
+
+  Future<void> writeJsonObject(
+    String scope,
+    String key,
+    Map<String, dynamic>? value,
+  ) {
+    final scopedKey = _scopedKey('json_object::$key', scope);
+    if (value == null) {
+      return _sharedPreferences.remove(scopedKey);
+    }
+    return _sharedPreferences.setString(scopedKey, jsonEncode(value));
   }
 
   List<String> readPathList(String scope, String key) {

@@ -1,6 +1,8 @@
 import 'package:eri_sports/app/navigation/app_shell.dart';
 import 'package:eri_sports/app/config/app_product_variant.dart';
+import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/features/bookmarks/presentation/bookmarks_screen.dart';
+import 'package:eri_sports/features/admin/presentation/admin_login_screen.dart';
 import 'package:eri_sports/features/home/presentation/calendar_screen.dart';
 import 'package:eri_sports/features/home/presentation/home_screen.dart';
 import 'package:eri_sports/features/leagues/presentation/league_overview_screen.dart';
@@ -27,10 +29,30 @@ final appRouteObserverProvider = Provider<RouteObserver<ModalRoute<void>>>(
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final variant = ref.watch(appProductVariantProvider);
+  final adminAuthService = ref.read(appServicesProvider).adminAuthService;
 
   return GoRouter(
     initialLocation: variant.initialLocation,
     observers: [ref.watch(appRouteObserverProvider)],
+    refreshListenable:
+        variant == AppProductVariant.admin ? adminAuthService : null,
+    redirect: (context, state) {
+      if (variant != AppProductVariant.admin) {
+        return null;
+      }
+
+      final isLoginRoute = state.matchedLocation == '/admin-login';
+      if (adminAuthService.requiresSetup) {
+        return isLoginRoute ? null : '/admin-login';
+      }
+      if (!adminAuthService.isAuthenticated) {
+        return isLoginRoute ? null : '/admin-login';
+      }
+      if (adminAuthService.isAuthenticated && isLoginRoute) {
+        return '/secure-content';
+      }
+      return null;
+    },
     routes:
         variant == AppProductVariant.admin
             ? _buildAdminRoutes()
@@ -204,9 +226,18 @@ List<RouteBase> _buildAdminRoutes() {
   return [
     GoRoute(path: '/', redirect: (context, state) => '/secure-content'),
     GoRoute(
+      path: '/admin-login',
+      name: 'admin-login',
+      builder: (context, state) => const AdminLoginScreen(),
+    ),
+    GoRoute(
       path: '/secure-content',
       name: 'secure-content',
       builder: (context, state) => const SecureContentScreen(),
+    ),
+    GoRoute(
+      path: '/sync',
+      builder: (context, state) => const DaylysportSyncScreen(),
     ),
   ];
 }
