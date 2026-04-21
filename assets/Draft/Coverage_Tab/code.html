@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Secure Content Operations - Coverage</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-tint": "#2151da",
+                        "on-secondary": "#ffffff",
+                        "primary": "#0037b0",
+                        "primary-fixed-dim": "#b7c4ff",
+                        "secondary-container": "#dae2fd",
+                        "surface-container-low": "#f3f2fe",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "tertiary-container": "#a73400",
+                        "inverse-primary": "#b7c4ff",
+                        "on-tertiary-container": "#ffc9b7",
+                        "primary-fixed": "#dce1ff",
+                        "secondary-fixed": "#dae2fd",
+                        "tertiary-fixed-dim": "#ffb59c",
+                        "outline": "#747686",
+                        "inverse-surface": "#2e3039",
+                        "on-surface-variant": "#434655",
+                        "surface-container": "#ededf9",
+                        "on-secondary-container": "#5c647a",
+                        "tertiary-fixed": "#ffdbcf",
+                        "primary-container": "#1d4ed8",
+                        "surface-container-high": "#e8e7f3",
+                        "tertiary": "#7f2500",
+                        "on-tertiary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "on-background": "#1a1b23",
+                        "on-secondary-fixed": "#131b2e",
+                        "on-primary-container": "#cad3ff",
+                        "background": "#faf8ff",
+                        "inverse-on-surface": "#f0f0fb",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e2e1ed",
+                        "secondary": "#565e74",
+                        "on-primary-fixed": "#001551",
+                        "on-primary-fixed-variant": "#0039b5",
+                        "on-tertiary-fixed": "#390c00",
+                        "outline-variant": "#c4c5d7",
+                        "on-primary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-highest": "#e2e1ed",
+                        "surface-dim": "#d9d9e5",
+                        "on-surface": "#1a1b23",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-tertiary-fixed-variant": "#832700",
+                        "surface": "#faf8ff",
+                        "on-error": "#ffffff",
+                        "surface-bright": "#faf8ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xs": "4px",
+                        "gutter": "20px",
+                        "container_margin": "24px",
+                        "sm": "8px",
+                        "xl": "32px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "numeric-data": ["Inter"],
+                        "body-base": ["Inter"],
+                        "display-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "numeric-data": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "body-base": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "display-sm": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen">
+<!-- TopAppBar -->
+<header class="bg-white dark:bg-slate-950 flex justify-between items-center w-full px-6 py-3 max-w-full docked full-width top-0 border-b border-slate-200 dark:border-slate-800 shadow-sm z-50 fixed">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-blue-700 dark:text-blue-500" data-icon="security">security</span>
+<h1 class="text-xl font-bold tracking-tighter text-slate-900 dark:text-slate-50">Secure Content Operations</h1>
+</div>
+<div class="hidden md:flex items-center gap-6">
+<span class="font-inter text-sm font-semibold tracking-tight text-blue-700 dark:text-blue-500">Environment: Production</span>
+<div class="w-8 h-8 rounded-full bg-surface-container overflow-hidden border border-outline-variant">
+<img alt="User Profile" data-alt="close-up of a professional security administrator profile avatar icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAMklEDaCeKWnK8EfLyXWzuPjKoz4F-TxNPCa1QGeD8BJCT2fJSp4X_t6qADFaTfv2n0LMpjDhc-PByPig-duJnqukpT5jxH83L0FgWAqFDhsc00amlDE7QV6WNAFSrH34mnex_LsW1zU6OaJ_nkNszD3dX-TPNIHclF9Qkcs4JH2symfvQwAKRr8j7EviHe_lEGRW49GLfW-L-bQULuRDqF61B080Hdbs4DV_5m1n5DZDjQ4jBkMNnFC8N5UFzcoF7KkwJRnLOm6k"/>
+</div>
+</div>
+</header>
+<!-- NavigationDrawer (Desktop Only) -->
+<aside class="hidden lg:flex flex-col fixed left-0 top-0 h-full h-screen w-64 border-r bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 pt-20 z-40">
+<div class="px-6 mb-8">
+<span class="text-lg font-black text-blue-700 dark:text-blue-500">Content Security</span>
+</div>
+<nav class="flex-1 px-3 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 font-inter text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-all duration-200 ease-in-out rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Overview</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 font-inter text-sm font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-l-4 border-blue-700 dark:border-blue-500 transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="verified_user">verified_user</span>
+<span>Coverage</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 font-inter text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-all duration-200 ease-in-out rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="settings_input_component">settings_input_component</span>
+<span>Operations</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 font-inter text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-all duration-200 ease-in-out rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span>Activity</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="lg:ml-64 pt-20 pb-24 lg:pb-8 px-gutter">
+<div class="max-w-7xl mx-auto space-y-lg">
+<!-- Context Header & Search -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-md mt-lg">
+<div>
+<h2 class="text-display-sm font-display-sm text-on-surface">Content Coverage</h2>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Manage and monitor encryption status across production assets.</p>
+</div>
+<div class="relative max-w-md w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline" data-icon="search">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-body-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all" placeholder="Search inventory by filename, type, or status..." type="text"/>
+</div>
+</div>
+<!-- Dashboard Stats Bento (Minor) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<div class="bg-white p-lg rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+<div class="absolute left-0 top-0 h-full w-1 bg-primary"></div>
+<p class="text-label-caps font-label-caps text-on-surface-variant mb-xs">TOTAL ASSETS</p>
+<p class="text-display-sm font-display-sm text-primary">1,284</p>
+</div>
+<div class="bg-white p-lg rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+<div class="absolute left-0 top-0 h-full w-1 bg-green-500"></div>
+<p class="text-label-caps font-label-caps text-on-surface-variant mb-xs">SECURED</p>
+<p class="text-display-sm font-display-sm text-green-600">94.2%</p>
+</div>
+<div class="bg-white p-lg rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+<div class="absolute left-0 top-0 h-full w-1 bg-error"></div>
+<p class="text-label-caps font-label-caps text-on-surface-variant mb-xs">PLAIN (WARNING)</p>
+<p class="text-display-sm font-display-sm text-error">74</p>
+</div>
+</div>
+<!-- Inventory List -->
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-low border-b border-slate-200">
+<tr>
+<th class="px-lg py-md text-label-caps font-label-caps text-on-surface-variant">Asset Name</th>
+<th class="px-lg py-md text-label-caps font-label-caps text-on-surface-variant">Type</th>
+<th class="px-lg py-md text-label-caps font-label-caps text-on-surface-variant">Size</th>
+<th class="px-lg py-md text-label-caps font-label-caps text-on-surface-variant">Status</th>
+<th class="px-lg py-md text-label-caps font-label-caps text-on-surface-variant text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100">
+<!-- Item 1 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-lg py-lg">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-blue-600" data-icon="description">description</span>
+<span class="font-headline-md text-sm text-on-surface">config.json</span>
+</div>
+</td>
+<td class="px-lg py-lg text-body-sm text-on-surface-variant">JSON</td>
+<td class="px-lg py-lg text-body-sm font-numeric-data">45KB</td>
+<td class="px-lg py-lg">
+<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-bold border border-green-100">
+<span class="material-symbols-outlined text-[14px]" data-icon="lock" data-weight="fill" style="font-variation-settings: 'FILL' 1;">lock</span>
+                                        Encrypted
+                                    </span>
+</td>
+<td class="px-lg py-lg text-right">
+<div class="flex justify-end gap-2">
+<button class="px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/5 rounded-lg transition-colors">View details</button>
+</div>
+</td>
+</tr>
+<!-- Item 2 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-lg py-lg">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-amber-600" data-icon="warning">warning</span>
+<span class="font-headline-md text-sm text-on-surface">player_stats.json</span>
+</div>
+</td>
+<td class="px-lg py-lg text-body-sm text-on-surface-variant">JSON</td>
+<td class="px-lg py-lg text-body-sm font-numeric-data">1.2MB</td>
+<td class="px-lg py-lg">
+<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold border border-amber-200">
+<span class="material-symbols-outlined text-[14px]" data-icon="lock_open">lock_open</span>
+                                        Plain
+                                    </span>
+</td>
+<td class="px-lg py-lg text-right">
+<div class="flex justify-end gap-2">
+<button class="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">View details</button>
+<button class="px-3 py-1.5 text-xs font-bold text-white bg-primary hover:bg-primary/90 rounded-lg transition-all active:scale-95">Encrypt now</button>
+</div>
+</td>
+</tr>
+<!-- Item 3 -->
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-lg py-lg">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-blue-600" data-icon="movie">movie</span>
+<span class="font-headline-md text-sm text-on-surface">highlight_recap.mp4</span>
+</div>
+</td>
+<td class="px-lg py-lg text-body-sm text-on-surface-variant">Video</td>
+<td class="px-lg py-lg text-body-sm font-numeric-data">450MB</td>
+<td class="px-lg py-lg">
+<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-bold border border-green-100">
+<span class="material-symbols-outlined text-[14px]" data-icon="lock" data-weight="fill" style="font-variation-settings: 'FILL' 1;">lock</span>
+                                        Encrypted
+                                    </span>
+</td>
+<td class="px-lg py-lg text-right">
+<div class="flex justify-end gap-2">
+<button class="px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/5 rounded-lg transition-colors">View details</button>
+</div>
+</td>
+</tr>
+<!-- Decorative items for density -->
+<tr class="hover:bg-slate-50 transition-colors opacity-60">
+<td class="px-lg py-lg">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-blue-600" data-icon="image">image</span>
+<span class="font-headline-md text-sm text-on-surface">stadium_overlay_v2.png</span>
+</div>
+</td>
+<td class="px-lg py-lg text-body-sm text-on-surface-variant">Image</td>
+<td class="px-lg py-lg text-body-sm font-numeric-data">4.2MB</td>
+<td class="px-lg py-lg">
+<span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-bold border border-green-100">
+<span class="material-symbols-outlined text-[14px]" data-icon="lock" data-weight="fill" style="font-variation-settings: 'FILL' 1;">lock</span>
+                                        Encrypted
+                                    </span>
+</td>
+<td class="px-lg py-lg text-right">
+<button class="px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/5 rounded-lg transition-colors">View details</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="bg-surface-container-low px-lg py-md border-t border-slate-200 flex items-center justify-between">
+<p class="text-body-sm text-on-surface-variant">Showing 4 of 1,284 assets</p>
+<div class="flex gap-2">
+<button class="p-1 rounded border border-outline-variant hover:bg-white transition-colors disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-sm" data-icon="chevron_left">chevron_left</span>
+</button>
+<button class="p-1 rounded border border-outline-variant hover:bg-white transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Featured Operations Card -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-gutter mt-xl">
+<div class="relative rounded-xl overflow-hidden min-h-[200px] flex items-end p-lg group cursor-pointer">
+<div class="absolute inset-0 z-0">
+<img alt="Ops Background" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="abstract tech visualization of a digital data pipeline with blue glowing streams and binary code in a dark environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAOJhPJlEJQKMRVAJ5IW2BinQnGN9XfimCJC1rNFJkFaxBabZ3NZ6X0cos9cz_3l02s9n4Brq3ikG_j0TmslkNrGiN7lH1h87oRDJSV8gxcwjUe_wvPEfWmNFr9BIMufScnsCq4K8mbbj13oXNq0IZV3WLUR_FJPlf_XlEurGb_IYNyXCIAbAsJcm-E3MLXM0RaraJTDi6ynqiWJuzgl3ckHD-xz4dsRt8xz6rSH2QxzYuUijGpxvF3_JMk3a5UH6bZCsHr6-r2Z68"/>
+<div class="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-900/40 to-transparent"></div>
+</div>
+<div class="relative z-10">
+<h3 class="text-white font-headline-md text-lg">Batch Encryption Routine</h3>
+<p class="text-slate-200 text-body-sm mt-1">Schedule an automated sweep of all 'Plain' status assets in the next maintenance window.</p>
+<button class="mt-4 px-4 py-2 bg-white text-primary text-sm font-bold rounded-lg transition-transform active:scale-95">Configure Routine</button>
+</div>
+</div>
+<div class="bg-primary-container p-lg rounded-xl flex flex-col justify-between border border-primary/20">
+<div>
+<span class="material-symbols-outlined text-white text-3xl mb-md" data-icon="auto_awesome">auto_awesome</span>
+<h3 class="text-white font-headline-md text-lg">Coverage Optimization</h3>
+<p class="text-on-primary-container text-body-sm mt-1">AI-driven prioritization: Encryption queues are currently focused on high-traffic player statistics for the upcoming live match.</p>
+</div>
+<div class="flex items-center gap-2 mt-md">
+<div class="h-2 flex-1 bg-primary rounded-full overflow-hidden">
+<div class="h-full bg-white w-3/4"></div>
+</div>
+<span class="text-white text-xs font-bold">75% Complete</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="lg:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 py-3 pb-safe bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] rounded-t-xl">
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-800 transition-colors px-3 py-1" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="dashboard">dashboard</span>
+<span class="font-inter text-[10px] uppercase tracking-widest font-bold mt-1">Overview</span>
+</a>
+<a class="flex flex-col items-center justify-center text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded-lg px-3 py-1 transition-colors" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="verified_user">verified_user</span>
+<span class="font-inter text-[10px] uppercase tracking-widest font-bold mt-1">Coverage</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-800 transition-colors px-3 py-1" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="settings_input_component">settings_input_component</span>
+<span class="font-inter text-[10px] uppercase tracking-widest font-bold mt-1">Ops</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 active:bg-slate-100 dark:active:bg-slate-800 transition-colors px-3 py-1" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="history">history</span>
+<span class="font-inter text-[10px] uppercase tracking-widest font-bold mt-1">Activity</span>
+</a>
+</nav>
+</body></html>
