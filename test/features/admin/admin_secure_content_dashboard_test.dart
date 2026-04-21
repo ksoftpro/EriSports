@@ -93,10 +93,21 @@ void main() {
 
     expect(find.text('Secure Content Operations'), findsOneWidget);
     expect(find.byKey(adminDashboardOverviewKey), findsOneWidget);
-    expect(find.byKey(adminDashboardUserActivityKey), findsOneWidget);
-    expect(find.byKey(adminDashboardRecentActivityKey), findsOneWidget);
+    expect(find.byKey(adminDashboardUserActivityKey), findsNothing);
+    expect(find.byKey(adminDashboardRecentActivityKey), findsNothing);
+    expect(find.text('Status snapshot'), findsOneWidget);
+
+    await tester.tap(find.byKey(adminDashboardCoverageTabKey).hitTestable());
+    await _pumpForUi(tester, frames: 8);
+
     expect(find.text('Category coverage'), findsOneWidget);
     expect(find.text('Date and size trends'), findsOneWidget);
+
+    await tester.tap(find.byKey(adminDashboardActivityTabKey).hitTestable());
+    await _pumpForUi(tester, frames: 8);
+
+    expect(find.byKey(adminDashboardUserActivityKey), findsOneWidget);
+    expect(find.byKey(adminDashboardRecentActivityKey), findsOneWidget);
     expect(find.text('User activity'), findsWidgets);
     expect(find.textContaining('Lead Operations'), findsWidgets);
     expect(find.textContaining('Night Shift'), findsWidgets);

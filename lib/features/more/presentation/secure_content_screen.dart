@@ -22,6 +22,10 @@ const adminDashboardOverviewKey = Key('adminDashboardOverview');
 const adminDashboardUserActivityKey = Key('adminDashboardUserActivity');
 const adminDashboardRecentActivityKey = Key('adminDashboardRecentActivity');
 const adminDashboardMenuButtonKey = Key('adminDashboardMenuButton');
+const adminDashboardHomeTabKey = Key('adminDashboardHomeTab');
+const adminDashboardCoverageTabKey = Key('adminDashboardCoverageTab');
+const adminDashboardOperationsTabKey = Key('adminDashboardOperationsTab');
+const adminDashboardActivityTabKey = Key('adminDashboardActivityTab');
 const adminCreateUserDisplayNameFieldKey = Key('adminCreateUserDisplayNameField');
 const adminCreateUserUsernameFieldKey = Key('adminCreateUserUsernameField');
 const adminCreateUserPasswordFieldKey = Key('adminCreateUserPasswordField');
@@ -1040,19 +1044,301 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     return parts.join(' ');
   }
 
+  Widget _buildDashboardTab({
+    required List<Widget> Function(double maxWidth) childrenBuilder,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = math.min(constraints.maxWidth, 1480.0);
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: maxWidth,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+              children: childrenBuilder(maxWidth),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildLoadingChildren() {
+    if (_isRefreshing) {
+      return const <Widget>[_DashboardLoadingPanel()];
+    }
+    if (_errorMessage != null) {
+      return <Widget>[_DashboardErrorPanel(message: _errorMessage!)];
+    }
+    return const <Widget>[_DashboardLoadingPanel()];
+  }
+
+  Widget _buildHomeTab({
+    required AdminSessionRecord session,
+    required SecureContentInventory? inventory,
+    required _SecureContentDashboardSnapshot? snapshot,
+  }) {
+    return _buildDashboardTab(
+      childrenBuilder: (maxWidth) {
+        if (snapshot == null) {
+          return _buildLoadingChildren();
+        }
+
+        return <Widget>[
+          _DashboardHeroCard(
+            session: session,
+            inventory: inventory,
+            isRefreshing: _isRefreshing,
+            onRefresh: _refreshInventory,
+            onOpenSync: () => context.push('/sync'),
+            onLogout: _logout,
+          ),
+          const SizedBox(height: 18),
+          _OverviewMetricsGrid(
+            key: adminDashboardOverviewKey,
+            snapshot: snapshot,
+          ),
+          const SizedBox(height: 18),
+          _DashboardPanelGrid(
+            maxWidth: maxWidth,
+            children: [
+              _SectionCard(
+                title: 'Status snapshot',
+                subtitle:
+                    'Track protected file coverage, scan freshness, and overall secure content health at a glance.',
+                child: _HomeStatusPanel(snapshot: snapshot),
+              ),
+              _SectionCard(
+                title: 'Operational highlights',
+                subtitle:
+                    'Surface the current operator, last maintenance event, and the most important runtime signals.',
+                child: _OperationalHighlightsPanel(snapshot: snapshot),
+              ),
+              _SectionCard(
+                title: 'Recent critical alerts',
+                subtitle:
+                    'Highlight open warnings that need attention before the next import, scan, or audit review.',
+                child: _AlertsPanel(
+                  inventory: snapshot.inventory,
+                  errorMessage: _errorMessage,
+                  jobSnapshot: _jobSnapshot,
+                ),
+              ),
+            ],
+          ),
+        ];
+      },
+    );
+  }
+
+  Widget _buildCoverageTab(_SecureContentDashboardSnapshot? snapshot) {
+    return _buildDashboardTab(
+      childrenBuilder: (maxWidth) {
+        if (snapshot == null) {
+          return _buildLoadingChildren();
+        }
+
+        return <Widget>[
+          _DashboardPanelGrid(
+            maxWidth: maxWidth,
+            children: [
+              _SectionCard(
+                title: 'Category coverage',
+                subtitle:
+                    'Encrypted counts and storage footprint grouped by secure content type.',
+                child: _CategoryStatisticsPanel(snapshot: snapshot),
+              ),
+              _SectionCard(
+                title: 'Date and size trends',
+                subtitle:
+                    'Recent encrypted file volume grouped by file activity date and payload size.',
+                child: _DateAndSizePanel(snapshot: snapshot),
+              ),
+            ],
+          ),
+        ];
+      },
+    );
+  }
+
+  Widget _buildOperationsTab(SecureContentInventory? inventory) {
+    return _buildDashboardTab(
+      childrenBuilder: (maxWidth) {
+        return <Widget>[
+          const _OperationsBanner(),
+          const SizedBox(height: 18),
+          _DashboardPanelGrid(
+            maxWidth: maxWidth,
+            children: [
+              _SectionCard(
+                title: 'Encryption actions',
+                subtitle:
+                    'Select plain files or folders and import them into encrypted daylySport destinations.',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        FilledButton.icon(
+                          onPressed:
+                              _isPickingSources || _isEncrypting ? null : _pickFiles,
+                          icon: const Icon(Icons.upload_file_rounded),
+                          label: Text(
+                            _isPickingSources ? 'Opening picker...' : 'Browse files',
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed:
+                              _isPickingSources || _isEncrypting ? null : _pickFolder,
+                          icon: const Icon(Icons.drive_folder_upload_rounded),
+                          label: const Text('Browse folder'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed:
+                              _selectedSources.isEmpty || _isEncrypting
+                                  ? null
+                                  : _clearSelection,
+                          icon: const Icon(Icons.clear_all_rounded),
+                          label: const Text('Clear selection'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _EncryptionImportPanel(
+                      selectedSources: _selectedSources,
+                      selectedSourceRoot: _selectedSourceRoot,
+                      jobSnapshot: _jobSnapshot,
+                      destinationByKind: _buildDestinationByKind(),
+                      jsonDestinationController: _jsonDestinationController,
+                      imageDestinationController: _imageDestinationController,
+                      videoDestinationController: _videoDestinationController,
+                      overwriteExisting: _overwriteExisting,
+                      isEncrypting: _isEncrypting,
+                      onApplyPreset: (kind, value) {
+                        final controller = switch (kind) {
+                          SecureContentKind.json => _jsonDestinationController,
+                          SecureContentKind.image => _imageDestinationController,
+                          SecureContentKind.video => _videoDestinationController,
+                          SecureContentKind.other => _jsonDestinationController,
+                        };
+                        controller.text = value;
+                        controller.selection = TextSelection.fromPosition(
+                          TextPosition(offset: controller.text.length),
+                        );
+                        setState(() {});
+                      },
+                      onOverwriteChanged: (value) {
+                        setState(() {
+                          _overwriteExisting = value;
+                        });
+                      },
+                      onRemoveAllByKind: _removeSourcesByKind,
+                      onRemoveSource: _removeSelectedSource,
+                      onImport: _encryptSelection,
+                    ),
+                    if (_statusMessage != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _statusMessage!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: _statusIsError ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary,
+                            ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              _SectionCard(
+                title: 'Maintenance controls',
+                subtitle:
+                    'Prewarm secure caches, clear decrypted outputs, and verify scanner health.',
+                child: _MaintenancePanel(
+                  inventory: inventory,
+                  isWarmingCaches: _isWarmingCaches,
+                  isClearingCaches: _isClearingCaches,
+                  isEncrypting: _isEncrypting,
+                  onWarmCaches: _warmCaches,
+                  onClearCaches: _clearCaches,
+                ),
+              ),
+            ],
+          ),
+        ];
+      },
+    );
+  }
+
+  Widget _buildActivityTab({
+    required SecureContentInventory? inventory,
+    required _SecureContentDashboardSnapshot? snapshot,
+    required List<AdminActivityRecord> activities,
+  }) {
+    return _buildDashboardTab(
+      childrenBuilder: (maxWidth) {
+        final children = <Widget>[];
+        if (snapshot != null) {
+          children.add(
+            _DashboardPanelGrid(
+              maxWidth: maxWidth,
+              children: [
+                _SectionCard(
+                  key: adminDashboardUserActivityKey,
+                  title: 'User activity',
+                  subtitle:
+                      'Local admin activity, import volume, and recent sign-in behavior.',
+                  child: _UserActivityPanel(snapshot: snapshot),
+                ),
+                _SectionCard(
+                  key: adminDashboardRecentActivityKey,
+                  title: 'Recent activity',
+                  subtitle:
+                      'Audit history for authentication, inventory, maintenance, and encryption jobs.',
+                  child: _RecentActivityPanel(activities: activities),
+                ),
+                _SectionCard(
+                  title: 'Login records',
+                  subtitle:
+                      'Authentication-focused activity stream for recent sign-ins, failures, and session changes.',
+                  child: _LoginRecordsPanel(activities: activities),
+                ),
+                if (inventory != null) ...[
+                  _InventoryOverviewCard(inventory: inventory),
+                  _InventoryBreakdownCard(inventory: inventory),
+                  _InventorySamplesCard(inventory: inventory),
+                ],
+              ],
+            ),
+          );
+        } else if (_isRefreshing && inventory == null) {
+          children.add(const _DashboardLoadingPanel());
+        } else if (_errorMessage != null) {
+          children.add(_DashboardErrorPanel(message: _errorMessage!));
+        }
+
+        if (children.isEmpty) {
+          children.add(const _DashboardLoadingPanel());
+        }
+        return children;
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final authService = ref.watch(adminAuthServiceProvider);
     final activityService = ref.watch(adminActivityServiceProvider);
     final session = authService.currentSession;
     final inventory = _inventory;
+    final activities = activityService.records.toList(growable: false);
     final snapshot =
         session != null && inventory != null
             ? _SecureContentDashboardSnapshot(
               inventory: inventory,
               users: authService.users.toList(growable: false),
-              activities: activityService.records.toList(growable: false),
+              activities: activities,
               currentSession: session,
             )
             : null;
@@ -1061,264 +1347,89 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       return const Scaffold(body: SizedBox.shrink());
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Secure Content Operations'),
-        actions: [
-          IconButton(
-            onPressed: _isRefreshing ? null : _refreshInventory,
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Rescan offline content',
-          ),
-          PopupMenuButton<String>(
-            key: adminDashboardMenuButtonKey,
-            onSelected: (value) {
-              switch (value) {
-                case 'profile':
-                  _showProfileDialog(session);
-                  break;
-                case 'password':
-                  _showPasswordDialog();
-                  break;
-                case 'user':
-                  _showCreateUserDialog();
-                  break;
-                case 'logins':
-                  _clearLoginRecords();
-                  break;
-                case 'logout':
-                  _logout();
-                  break;
-              }
-            },
-            itemBuilder: (context) {
-              return const [
-                PopupMenuItem<String>(
-                  value: 'profile',
-                  child: Text('Account settings'),
-                ),
-                PopupMenuItem<String>(
-                  value: 'password',
-                  child: Text('Change password'),
-                ),
-                PopupMenuItem<String>(
-                  value: 'user',
-                  child: Text('Create admin user'),
-                ),
-                PopupMenuItem<String>(
-                  value: 'logins',
-                  child: Text('Clear login records'),
-                ),
-                PopupMenuDivider(),
-                PopupMenuItem<String>(
-                  value: 'logout',
-                  child: Text('Logout'),
-                ),
-              ];
-            },
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _refreshInventory,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                _DashboardHeroCard(
-                  session: session,
-                  inventory: inventory,
-                  isRefreshing: _isRefreshing,
-                  onRefresh: _refreshInventory,
-                  onOpenSync: () => context.push('/sync'),
-                  onLogout: _logout,
-                ),
-                const SizedBox(height: 18),
-                if (snapshot != null)
-                  _OverviewMetricsGrid(
-                    key: adminDashboardOverviewKey,
+    return DefaultTabController(
+      length: 4,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Secure Content Operations'),
+          actions: [
+            IconButton(
+              onPressed: _isRefreshing ? null : _refreshInventory,
+              icon: const Icon(Icons.refresh_rounded),
+              tooltip: 'Rescan offline content',
+            ),
+            PopupMenuButton<String>(
+              key: adminDashboardMenuButtonKey,
+              onSelected: (value) {
+                switch (value) {
+                  case 'profile':
+                    _showProfileDialog(session);
+                    break;
+                  case 'password':
+                    _showPasswordDialog();
+                    break;
+                  case 'user':
+                    _showCreateUserDialog();
+                    break;
+                  case 'logins':
+                    _clearLoginRecords();
+                    break;
+                  case 'logout':
+                    _logout();
+                    break;
+                }
+              },
+              itemBuilder: (context) {
+                return const [
+                  PopupMenuItem<String>(
+                    value: 'profile',
+                    child: Text('Account settings'),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'password',
+                    child: Text('Change password'),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'user',
+                    child: Text('Create admin user'),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'logins',
+                    child: Text('Clear login records'),
+                  ),
+                  PopupMenuDivider(),
+                  PopupMenuItem<String>(
+                    value: 'logout',
+                    child: Text('Logout'),
+                  ),
+                ];
+              },
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            const _DashboardWorkspaceHeader(),
+            const _DashboardTabBar(),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _buildHomeTab(
+                    session: session,
+                    inventory: inventory,
                     snapshot: snapshot,
-                  )
-                else if (_isRefreshing)
-                  const _DashboardLoadingPanel()
-                else if (_errorMessage != null)
-                  _DashboardErrorPanel(message: _errorMessage!)
-                else
-                  const _DashboardLoadingPanel(),
-                const SizedBox(height: 18),
-                if (snapshot != null)
-                  _DashboardPanelGrid(
-                    maxWidth: constraints.maxWidth,
-                    children: [
-                      _SectionCard(
-                        title: 'Category coverage',
-                        subtitle:
-                            'Encrypted counts and storage footprint grouped by secure content type.',
-                        child: _CategoryStatisticsPanel(snapshot: snapshot),
-                      ),
-                      _SectionCard(
-                        title: 'Date and size trends',
-                        subtitle:
-                            'Recent encrypted file volume grouped by file activity date and payload size.',
-                        child: _DateAndSizePanel(snapshot: snapshot),
-                      ),
-                      _SectionCard(
-                        key: adminDashboardUserActivityKey,
-                        title: 'User activity',
-                        subtitle:
-                            'Local admin activity, import volume, and recent sign-in behavior.',
-                        child: _UserActivityPanel(snapshot: snapshot),
-                      ),
-                    ],
                   ),
-                if (snapshot != null) const SizedBox(height: 18),
-                _DashboardPanelGrid(
-                  maxWidth: constraints.maxWidth,
-                  children: [
-                    _SectionCard(
-                      title: 'Encryption actions',
-                      subtitle:
-                          'Select plain files or folders and import them into encrypted daylySport destinations.',
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: [
-                              FilledButton.icon(
-                                onPressed:
-                                    _isPickingSources || _isEncrypting
-                                        ? null
-                                        : _pickFiles,
-                                icon: const Icon(Icons.upload_file_rounded),
-                                label: Text(
-                                  _isPickingSources
-                                      ? 'Opening picker...'
-                                      : 'Browse files',
-                                ),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed:
-                                    _isPickingSources || _isEncrypting
-                                        ? null
-                                        : _pickFolder,
-                                icon: const Icon(Icons.drive_folder_upload_rounded),
-                                label: const Text('Browse folder'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed:
-                                    _selectedSources.isEmpty || _isEncrypting
-                                        ? null
-                                        : _clearSelection,
-                                icon: const Icon(Icons.clear_all_rounded),
-                                label: const Text('Clear selection'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          _EncryptionImportPanel(
-                            selectedSources: _selectedSources,
-                            selectedSourceRoot: _selectedSourceRoot,
-                            jobSnapshot: _jobSnapshot,
-                            destinationByKind: _buildDestinationByKind(),
-                            jsonDestinationController: _jsonDestinationController,
-                            imageDestinationController: _imageDestinationController,
-                            videoDestinationController: _videoDestinationController,
-                            overwriteExisting: _overwriteExisting,
-                            isEncrypting: _isEncrypting,
-                            onApplyPreset: (kind, value) {
-                              final controller = switch (kind) {
-                                SecureContentKind.json => _jsonDestinationController,
-                                SecureContentKind.image => _imageDestinationController,
-                                SecureContentKind.video => _videoDestinationController,
-                                SecureContentKind.other => _jsonDestinationController,
-                              };
-                              controller.text = value;
-                              controller.selection = TextSelection.fromPosition(
-                                TextPosition(offset: controller.text.length),
-                              );
-                              setState(() {});
-                            },
-                            onOverwriteChanged: (value) {
-                              setState(() {
-                                _overwriteExisting = value;
-                              });
-                            },
-                            onRemoveAllByKind: _removeSourcesByKind,
-                            onRemoveSource: _removeSelectedSource,
-                            onImport: _encryptSelection,
-                          ),
-                          if (_statusMessage != null) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              _statusMessage!,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color:
-                                        _statusIsError
-                                            ? scheme.error
-                                            : scheme.primary,
-                                  ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    _SectionCard(
-                      title: 'Maintenance controls',
-                      subtitle:
-                          'Prewarm secure caches, clear decrypted outputs, and verify scanner health.',
-                      child: _MaintenancePanel(
-                        inventory: inventory,
-                        isWarmingCaches: _isWarmingCaches,
-                        isClearingCaches: _isClearingCaches,
-                        isEncrypting: _isEncrypting,
-                        onWarmCaches: _warmCaches,
-                        onClearCaches: _clearCaches,
-                      ),
-                    ),
-                    _SectionCard(
-                      title: 'User and security management',
-                      subtitle:
-                          'Manage the signed-in admin account, create additional admins, and review local access state.',
-                      child: _SecurityManagementPanel(
-                        session: session,
-                        users: authService.users.toList(growable: false),
-                        onEditAccount: () => _showProfileDialog(session),
-                        onChangePassword: _showPasswordDialog,
-                        onCreateAdmin: _showCreateUserDialog,
-                        onClearLoginRecords: _clearLoginRecords,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                _SectionCard(
-                  key: adminDashboardRecentActivityKey,
-                  title: 'Recent activity and login records',
-                  subtitle:
-                      'Audit history for authentication, inventory, maintenance, and encryption jobs.',
-                  child: _RecentActivityPanel(
-                    activities: activityService.records.toList(growable: false),
+                  _buildCoverageTab(snapshot),
+                  _buildOperationsTab(inventory),
+                  _buildActivityTab(
+                    inventory: inventory,
+                    snapshot: snapshot,
+                    activities: activities,
                   ),
-                ),
-                const SizedBox(height: 18),
-                if (_isRefreshing && inventory == null)
-                  const _DashboardLoadingPanel()
-                else if (_errorMessage != null)
-                  _DashboardErrorPanel(message: _errorMessage!)
-                else if (inventory != null) ...[
-                  _InventoryOverviewCard(inventory: inventory),
-                  const SizedBox(height: 14),
-                  _InventoryBreakdownCard(inventory: inventory),
-                  const SizedBox(height: 14),
-                  _InventorySamplesCard(inventory: inventory),
                 ],
-              ],
-            );
-          },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1473,6 +1584,17 @@ class _SecureContentDashboardSnapshot {
       ),
     );
     return topCategory.label;
+  }
+
+  AdminActivityRecord? get lastMaintenanceActivity {
+    for (final activity in activities) {
+      if (activity.type == AdminActivityType.inventoryRefresh ||
+          activity.type == AdminActivityType.warmCaches ||
+          activity.type == AdminActivityType.clearCaches) {
+        return activity;
+      }
+    }
+    return null;
   }
 
   static bool _isSameUtcDay(DateTime left, DateTime right) {
@@ -1852,6 +1974,437 @@ class _SectionCard extends StatelessWidget {
             child,
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DashboardWorkspaceHeader extends StatelessWidget {
+  const _DashboardWorkspaceHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surface,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1480),
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                runSpacing: 14,
+                spacing: 18,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 760),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Professional secure content dashboard for imports, monitoring, and audit review.',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Use the tabs below to move between executive health, coverage analytics, encryption operations, and full activity records without mixing workflows.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: const [
+                      _HeaderBadge(
+                        icon: Icons.dashboard_customize_rounded,
+                        label: 'Dashboard view',
+                      ),
+                      _HeaderBadge(
+                        icon: Icons.lock_outline_rounded,
+                        label: 'Encrypted operations',
+                      ),
+                      _HeaderBadge(
+                        icon: Icons.fact_check_outlined,
+                        label: 'Audit ready',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderBadge extends StatelessWidget {
+  const _HeaderBadge({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: scheme.primary),
+          const SizedBox(width: 8),
+          Text(label, style: Theme.of(context).textTheme.labelLarge),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardTabBar extends StatelessWidget {
+  const _DashboardTabBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surface,
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1480),
+            child: TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              dividerColor: Colors.transparent,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 18),
+              tabs: const [
+                Tab(key: adminDashboardHomeTabKey, text: 'Home'),
+                Tab(key: adminDashboardCoverageTabKey, text: 'Coverage & Trends'),
+                Tab(
+                  key: adminDashboardOperationsTabKey,
+                  text: 'Encryption & Maintenance',
+                ),
+                Tab(
+                  key: adminDashboardActivityTabKey,
+                  text: 'Activity & Records',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeStatusPanel extends StatelessWidget {
+  const _HomeStatusPanel({required this.snapshot});
+
+  final _SecureContentDashboardSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final inventory = snapshot.inventory;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _MetricTile(label: 'Total detected', value: '${inventory.supportedFiles}'),
+            _MetricTile(label: 'Encrypted', value: '${inventory.encryptedFiles}'),
+            _MetricTile(label: 'Plain remaining', value: '${inventory.plainFiles}'),
+            _MetricTile(
+              label: 'Protected storage',
+              value: _humanizeBytes(inventory.totalEncryptedBytes),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          inventory.plainFiles == 0
+              ? 'All supported files currently detected by the scanner are encrypted at rest.'
+              : '${inventory.plainFiles} supported files still remain in plain form and should be prioritized for the next protected import pass.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ],
+    );
+  }
+}
+
+class _OperationalHighlightsPanel extends StatelessWidget {
+  const _OperationalHighlightsPanel({required this.snapshot});
+
+  final _SecureContentDashboardSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = DateFormat('MMM d, HH:mm');
+    final lastMaintenance = snapshot.lastMaintenanceActivity;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _HighlightRow(
+          label: 'Current operator',
+          value: '${snapshot.currentSession.displayName} (@${snapshot.currentSession.username})',
+        ),
+        const SizedBox(height: 10),
+        _HighlightRow(
+          label: 'Last scan time',
+          value: formatter.format(snapshot.inventory.scannedAtUtc.toLocal()),
+        ),
+        const SizedBox(height: 10),
+        _HighlightRow(
+          label: 'Last maintenance action',
+          value: lastMaintenance == null
+              ? 'No maintenance activity recorded yet'
+              : '${lastMaintenance.summary} • ${formatter.format(lastMaintenance.occurredAtUtc.toLocal())}',
+        ),
+        const SizedBox(height: 10),
+        _HighlightRow(
+          label: 'Dominant encrypted category',
+          value: snapshot.dominantCategoryLabel,
+        ),
+      ],
+    );
+  }
+}
+
+class _HighlightRow extends StatelessWidget {
+  const _HighlightRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 150,
+          child: Text(label, style: Theme.of(context).textTheme.labelLarge),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
+        ),
+      ],
+    );
+  }
+}
+
+class _AlertsPanel extends StatelessWidget {
+  const _AlertsPanel({
+    required this.inventory,
+    required this.errorMessage,
+    required this.jobSnapshot,
+  });
+
+  final SecureContentInventory inventory;
+  final String? errorMessage;
+  final SecureContentEncryptionJobSnapshot jobSnapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final alerts = <_DashboardAlertItem>[
+      if (errorMessage != null)
+        _DashboardAlertItem(
+          title: 'Inventory scan error',
+          message: errorMessage!,
+          tone: _AlertTone.error,
+        ),
+      if (inventory.plainFiles > 0)
+        _DashboardAlertItem(
+          title: 'Plain files detected',
+          message:
+              '${inventory.plainFiles} supported files are still unencrypted and visible in the local inventory.',
+          tone: _AlertTone.warning,
+        ),
+      if (inventory.otherFiles > 0)
+        _DashboardAlertItem(
+          title: 'Unsupported files present',
+          message:
+              '${inventory.otherFiles} files were detected outside the supported JSON, image, and video set.',
+          tone: _AlertTone.info,
+        ),
+      if (jobSnapshot.failedFiles > 0)
+        _DashboardAlertItem(
+          title: 'Encryption batch failures',
+          message:
+              '${jobSnapshot.failedFiles} files failed in the most recent encryption batch and should be reviewed.',
+          tone: _AlertTone.error,
+        ),
+    ];
+
+    if (alerts.isEmpty) {
+      alerts.add(
+        const _DashboardAlertItem(
+          title: 'No active warnings',
+          message:
+              'Coverage and runtime indicators are stable. No critical alerts are currently surfaced by the local dashboard.',
+          tone: _AlertTone.success,
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (final alert in alerts) ...[
+          _AlertTile(alert: alert),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
+enum _AlertTone { success, info, warning, error }
+
+class _DashboardAlertItem {
+  const _DashboardAlertItem({
+    required this.title,
+    required this.message,
+    required this.tone,
+  });
+
+  final String title;
+  final String message;
+  final _AlertTone tone;
+}
+
+class _AlertTile extends StatelessWidget {
+  const _AlertTile({required this.alert});
+
+  final _DashboardAlertItem alert;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (background, foreground, icon) = switch (alert.tone) {
+      _AlertTone.success => (
+        scheme.secondaryContainer,
+        scheme.onSecondaryContainer,
+        Icons.verified_rounded,
+      ),
+      _AlertTone.info => (
+        scheme.surfaceContainerHighest,
+        scheme.onSurfaceVariant,
+        Icons.info_outline_rounded,
+      ),
+      _AlertTone.warning => (
+        scheme.tertiaryContainer,
+        scheme.onTertiaryContainer,
+        Icons.warning_amber_rounded,
+      ),
+      _AlertTone.error => (
+        scheme.errorContainer,
+        scheme.onErrorContainer,
+        Icons.error_outline_rounded,
+      ),
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: foreground),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  alert.title,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: foreground,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  alert.message,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: foreground,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OperationsBanner extends StatelessWidget {
+  const _OperationsBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            scheme.primary.withValues(alpha: 0.10),
+            scheme.surfaceContainerLow,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.admin_panel_settings_outlined, color: scheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Primary encryption workflows are separated from maintenance utilities.',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Use the import workspace for protected file onboarding, and keep cache or cleanup actions in the lower-emphasis maintenance panel. Sensitive operations should always be reviewed before execution.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2300,6 +2853,58 @@ class _RecentActivityPanel extends StatelessWidget {
       case AdminActivityType.loginRecordsCleared:
         return Icons.history_toggle_off_rounded;
     }
+  }
+}
+
+class _LoginRecordsPanel extends StatelessWidget {
+  const _LoginRecordsPanel({required this.activities});
+
+  final List<AdminActivityRecord> activities;
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = DateFormat('MMM d, HH:mm');
+    final loginActivities = activities
+        .where(
+          (activity) =>
+              activity.type == AdminActivityType.loginSuccess ||
+              activity.type == AdminActivityType.loginFailure ||
+              activity.type == AdminActivityType.logout ||
+              activity.type == AdminActivityType.loginRecordsCleared,
+        )
+        .take(10)
+        .toList(growable: false);
+
+    if (loginActivities.isEmpty) {
+      return Text(
+        'No login-focused records have been captured yet.',
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 18,
+        columns: const [
+          DataColumn(label: Text('Time')),
+          DataColumn(label: Text('User')),
+          DataColumn(label: Text('Event')),
+          DataColumn(label: Text('Category')),
+        ],
+        rows: [
+          for (final activity in loginActivities)
+            DataRow(
+              cells: [
+                DataCell(Text(formatter.format(activity.occurredAtUtc.toLocal()))),
+                DataCell(Text(activity.actorUsername ?? 'system')),
+                DataCell(Text(activity.summary)),
+                DataCell(Text(activity.category)),
+              ],
+            ),
+        ],
+      ),
+    );
   }
 }
 

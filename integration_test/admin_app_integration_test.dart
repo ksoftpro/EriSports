@@ -66,7 +66,13 @@ void main() {
 
     expect(find.text('Secure Content Operations'), findsOneWidget);
     expect(find.byKey(adminDashboardOverviewKey), findsOneWidget);
+
+  await tester.tap(find.byKey(adminDashboardCoverageTabKey).hitTestable());
+  await _pumpForUi(tester, frames: 8);
     expect(find.text('Category coverage'), findsOneWidget);
+
+  await tester.tap(find.byKey(adminDashboardHomeTabKey).hitTestable());
+  await _pumpForUi(tester, frames: 8);
 
     await tester.tap(find.byKey(adminDashboardMenuButtonKey).hitTestable());
     await _pumpForUi(tester, frames: 8);
@@ -119,6 +125,8 @@ void main() {
 
     expect(find.text('Password updated successfully.'), findsOneWidget);
 
+    await tester.tap(find.byKey(adminDashboardOperationsTabKey).hitTestable());
+    await _pumpForUi(tester, frames: 8);
     await tester.tap(find.text('Warm secure caches').first.hitTestable());
     await _pumpForUi(tester, frames: 18);
     expect(
@@ -154,6 +162,9 @@ void main() {
 
     expect(find.text('Secure Content Operations'), findsOneWidget);
     expect(find.textContaining('Signed in as Night Shift (nightshift).'), findsOneWidget);
+
+    await tester.tap(find.byKey(adminDashboardActivityTabKey).hitTestable());
+    await _pumpForUi(tester, frames: 8);
     expect(find.byKey(adminDashboardRecentActivityKey), findsOneWidget);
   });
 }
