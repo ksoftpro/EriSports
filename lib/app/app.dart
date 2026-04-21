@@ -7,6 +7,7 @@ import 'package:eri_sports/app/bootstrap/startup_controller.dart';
 import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/app/theme/app_theme.dart';
 import 'package:eri_sports/app/theme/theme_mode_controller.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -31,9 +32,11 @@ class _EriSportsAppState extends ConsumerState<EriSportsApp> {
       if (variant.runsStartupBootstrap) {
         ref.read(startupControllerProvider.notifier).ensureStarted();
       } else {
-        unawaited(
-          ref.read(appServicesProvider).secureContentCoordinator.warmUp(),
-        );
+        if (!kIsWeb) {
+          unawaited(
+            ref.read(appServicesProvider).secureContentCoordinator.warmUp(),
+          );
+        }
       }
       if (variant.supportsBackgroundMonitoring &&
           ref.read(daylysportAutoMonitoringEnabledProvider)) {

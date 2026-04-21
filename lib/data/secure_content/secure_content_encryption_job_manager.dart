@@ -831,7 +831,12 @@ class SecureContentEncryptionJobManager {
     if (requested != null) {
       return requested.clamp(1, 4);
     }
-    final available = max(1, Platform.numberOfProcessors - 1);
+    var available = 1;
+    try {
+      available = max(1, Platform.numberOfProcessors - 1);
+    } catch (_) {
+      available = 1;
+    }
     return min(2, available);
   }
 }

@@ -206,6 +206,8 @@ class StartupController extends Notifier<StartupState> {
         includePlayerAssets: true,
       ),
     );
-    unawaited(services.secureContentCoordinator.warmUp());
+      if (!kIsWeb) {
+        unawaited(services.secureContentCoordinator.warmUp());
+      }
   }
 }
