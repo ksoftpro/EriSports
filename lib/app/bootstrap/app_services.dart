@@ -16,6 +16,7 @@ import 'package:eri_sports/data/secure_content/file_fingerprint_cache.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/admin/data/admin_activity_service.dart';
 import 'package:eri_sports/features/admin/data/admin_auth_service.dart';
+import 'package:eri_sports/features/media/data/video_resume_service.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
@@ -30,6 +31,7 @@ class AppServices {
     required this.importCoordinator,
     required this.assetResolver,
     required this.encryptedMediaService,
+    required this.videoResumeService,
     required this.encryptedJsonService,
     required this.encryptedImageService,
     required this.secureContentCoordinator,
@@ -48,6 +50,7 @@ class AppServices {
   final ImportCoordinator importCoordinator;
   final LocalAssetResolver assetResolver;
   final EncryptedMediaService encryptedMediaService;
+  final VideoResumeService videoResumeService;
   final EncryptedJsonService encryptedJsonService;
   final EncryptedImageService encryptedImageService;
   final DaylysportSecureContentCoordinator secureContentCoordinator;
@@ -89,6 +92,7 @@ class AppServices {
     final encryptedMediaService = EncryptedMediaService(
       fingerprintCache: fingerprintCache,
     );
+    final videoResumeService = VideoResumeService(cacheStore: cacheStore);
     final importCoordinator = ImportCoordinator(
       database: database,
       daylySportLocator: daylySportLocator,
@@ -140,6 +144,7 @@ class AppServices {
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
       encryptedMediaService: encryptedMediaService,
+      videoResumeService: videoResumeService,
       encryptedJsonService: encryptedJsonService,
       encryptedImageService: encryptedImageService,
       secureContentCoordinator: secureContentCoordinator,
