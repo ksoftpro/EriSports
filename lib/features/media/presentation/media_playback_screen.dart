@@ -90,6 +90,9 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _lifecycleState = state;
+    if (state != AppLifecycleState.resumed) {
+      unawaited(_persistCurrentPosition());
+    }
     unawaited(_syncPlaybackWithVisibility());
   }
 
@@ -120,7 +123,7 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
       await controller.initialize();
       await controller.setLooping(true);
 
-        final savedPosition = _playbackPositionStore.readPosition(widget.item);
+      final savedPosition = _playbackPositionStore.readPosition(widget.item);
       if (savedPosition != null &&
           savedPosition > Duration.zero &&
           savedPosition < controller.value.duration) {
@@ -256,6 +259,9 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
 
   void _handleRouteVisibilityChanged(bool isVisible) {
     _routeVisible = isVisible;
+    if (!isVisible) {
+      unawaited(_persistCurrentPosition());
+    }
     unawaited(_syncPlaybackWithVisibility());
   }
 
@@ -285,14 +291,20 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
     }
   }
 
-  Future<void> _pauseAndDisposeController(
-    VideoPlayerController controller,
-  ) async {
+  Future<void> _pauseAndDisposeController(VideoPlayerController controller) async {
     if (controller.value.isInitialized && controller.value.isPlaying) {
       await controller.pause();
     }
     await _persistPlaybackPosition(controller);
     await controller.dispose();
+  }
+
+  Future<void> _persistCurrentPosition() async {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+    await _persistPlaybackPosition(controller);
   }
 
   Future<void> _persistPlaybackPosition(VideoPlayerController controller) async {
