@@ -36,6 +36,13 @@ const adminChangePasswordNewFieldKey = Key('adminChangePasswordNewField');
 const adminChangePasswordConfirmFieldKey = Key('adminChangePasswordConfirmField');
 const adminChangePasswordSubmitButtonKey = Key('adminChangePasswordSubmitButton');
 
+typedef SecureContentInventoryScanDelegate = Future<SecureContentInventory> Function(
+  String rootPath,
+);
+
+SecureContentInventoryScanDelegate secureContentInventoryScanDelegate =
+    scanSecureContentInventoryInIsolate;
+
 class SecureContentScreen extends ConsumerStatefulWidget {
   const SecureContentScreen({super.key});
 
@@ -72,6 +79,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
   bool _isClearingCaches = false;
   bool _isPickingSources = false;
   bool _isEncrypting = false;
+  bool _requestedInitialInventoryLoad = false;
   bool _overwriteExisting = true;
   String? _selectedSourceRoot;
   int _nextSelectionId = 0;
@@ -102,7 +110,6 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         _isEncrypting = snapshot.isRunning;
       });
     });
-    Future<void>.microtask(_refreshInventory);
   }
 
   @override
@@ -160,7 +167,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       final services = ref.read(appServicesProvider);
       final directory =
           await services.daylySportLocator.getOrCreateDaylySportDirectory();
-      final inventory = await scanSecureContentInventoryInIsolate(
+      final inventory = await secureContentInventoryScanDelegate(
         directory.path,
       );
 
@@ -1328,6 +1335,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final authService = ref.watch(adminAuthServiceProvider);
     final activityService = ref.watch(adminActivityServiceProvider);
     final session = authService.currentSession;
@@ -1343,6 +1351,11 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
             )
             : null;
 
+    if (session != null && !_requestedInitialInventoryLoad) {
+      _requestedInitialInventoryLoad = true;
+      Future<void>.microtask(() => _refreshInventory(recordActivity: false));
+    }
+
     if (session == null) {
       return const Scaffold(body: SizedBox.shrink());
     }
@@ -1350,7 +1363,12 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     return DefaultTabController(
       length: 4,
       child: Scaffold(
+        backgroundColor: Color.alphaBlend(
+          scheme.primary.withValues(alpha: 0.03),
+          scheme.surface,
+        ),
         appBar: AppBar(
+          scrolledUnderElevation: 0,
           title: const Text('Secure Content Operations'),
           actions: [
             IconButton(
@@ -1682,12 +1700,19 @@ class _DashboardHeroCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: <Color>[
-            scheme.primary.withValues(alpha: 0.12),
+            scheme.primary.withValues(alpha: 0.15),
             scheme.surfaceContainerHighest,
-            scheme.tertiary.withValues(alpha: 0.12),
+            scheme.tertiary.withValues(alpha: 0.16),
           ],
         ),
         border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withValues(alpha: 0.08),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -1783,8 +1808,9 @@ class _HeroChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.74),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.82),
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1904,14 +1930,51 @@ class _OverviewMetricCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.surface,
+            scheme.surfaceContainerLow,
+          ],
+        ),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withValues(alpha: 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(metric.icon, color: scheme.primary),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(metric.icon, color: scheme.primary),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'KPI',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Text(metric.label, style: Theme.of(context).textTheme.labelLarge),
           const SizedBox(height: 4),
@@ -1961,12 +2024,29 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      color: scheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(26),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.primary,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(height: 14),
             Text(title, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 6),
             Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
@@ -2000,6 +2080,13 @@ class _DashboardWorkspaceHeader extends StatelessWidget {
                 color: scheme.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: scheme.outlineVariant),
+                boxShadow: [
+                  BoxShadow(
+                    color: scheme.shadow.withValues(alpha: 0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
               child: Wrap(
                 alignment: WrapAlignment.spaceBetween,
@@ -2098,6 +2185,14 @@ class _DashboardTabBar extends StatelessWidget {
               isScrollable: true,
               tabAlignment: TabAlignment.start,
               dividerColor: Colors.transparent,
+              labelColor: scheme.onPrimaryContainer,
+              unselectedLabelColor: scheme.onSurfaceVariant,
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicator: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
               labelPadding: const EdgeInsets.symmetric(horizontal: 18),
               tabs: const [
                 Tab(key: adminDashboardHomeTabKey, text: 'Home'),
@@ -2333,6 +2428,7 @@ class _AlertTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: foreground.withValues(alpha: 0.16)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2382,6 +2478,13 @@ class _OperationsBanner extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withValues(alpha: 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2671,101 +2774,6 @@ class _MaintenancePanel extends StatelessWidget {
               : 'Last inventory scan completed ${formatter.format(inventoryData.scannedAtUtc.toLocal())}.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
-      ],
-    );
-  }
-}
-
-class _SecurityManagementPanel extends StatelessWidget {
-  const _SecurityManagementPanel({
-    required this.session,
-    required this.users,
-    required this.onEditAccount,
-    required this.onChangePassword,
-    required this.onCreateAdmin,
-    required this.onClearLoginRecords,
-  });
-
-  final AdminSessionRecord session;
-  final List<AdminUserRecord> users;
-  final VoidCallback onEditAccount;
-  final VoidCallback onChangePassword;
-  final VoidCallback onCreateAdmin;
-  final VoidCallback onClearLoginRecords;
-
-  @override
-  Widget build(BuildContext context) {
-    final formatter = DateFormat('MMM d, yyyy HH:mm');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${session.displayName} is currently authenticated.',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 6),
-              Text('@${session.username}'),
-              const SizedBox(height: 6),
-              Text(
-                'Session started ${formatter.format(session.authenticatedAtUtc.toLocal())}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            FilledButton.icon(
-              onPressed: onEditAccount,
-              icon: const Icon(Icons.person_outline_rounded),
-              label: const Text('Edit account'),
-            ),
-            OutlinedButton.icon(
-              onPressed: onChangePassword,
-              icon: const Icon(Icons.password_rounded),
-              label: const Text('Change password'),
-            ),
-            OutlinedButton.icon(
-              onPressed: onCreateAdmin,
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text('Create admin'),
-            ),
-            OutlinedButton.icon(
-              onPressed: onClearLoginRecords,
-              icon: const Icon(Icons.history_toggle_off_rounded),
-              label: const Text('Clear login records'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Text('Configured admins', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 10),
-        for (final user in users) ...[
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(user.displayName),
-            subtitle: Text('@${user.username}'),
-            trailing: Text(
-              user.lastLoginAtUtc == null
-                  ? 'Never signed in'
-                  : formatter.format(user.lastLoginAtUtc!.toLocal()),
-              textAlign: TextAlign.right,
-            ),
-          ),
-          const Divider(height: 1),
-        ],
       ],
     );
   }

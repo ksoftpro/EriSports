@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
+import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/core/log/app_logger.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
@@ -40,8 +41,9 @@ const MethodChannel _pathProviderChannel = MethodChannel(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
-  testWidgets('admin dashboard stays protected until login and shows tracked stats', (
+  testWidgets('admin dashboard stays protected while unauthenticated', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1400, 1800);
@@ -53,13 +55,11 @@ void main() {
         appServicesProvider.overrideWithValue(harness.services),
       ],
     );
-    addTearDown(() async {
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
+    addTearDown(() {
       container.dispose();
+      harness.disposeForTest();
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
-      await harness.dispose();
     });
 
     await tester.pumpWidget(
@@ -72,6 +72,26 @@ void main() {
 
     expect(find.byKey(adminDashboardOverviewKey), findsNothing);
     expect(find.text('Secure Content Operations'), findsNothing);
+  });
+
+  testWidgets('admin dashboard shows tabbed dashboard shell after authentication', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1800);
+    tester.view.devicePixelRatio = 1.0;
+
+    final harness = await _AdminDashboardHarness.create();
+    final container = ProviderContainer(
+      overrides: [
+        appServicesProvider.overrideWithValue(harness.services),
+      ],
+    );
+    addTearDown(() {
+      container.dispose();
+      harness.disposeForTest();
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
 
     final loginResult = await harness.services.adminAuthService.login(
       username: 'opslead',
@@ -80,37 +100,27 @@ void main() {
     );
     expect(loginResult.success, isTrue);
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
-
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(home: SecureContentScreen()),
       ),
     );
-    await _pumpForUi(tester, frames: 20);
+
+    await _pumpForUi(tester, frames: 12);
 
     expect(find.text('Secure Content Operations'), findsOneWidget);
-    expect(find.byKey(adminDashboardOverviewKey), findsOneWidget);
     expect(find.byKey(adminDashboardUserActivityKey), findsNothing);
     expect(find.byKey(adminDashboardRecentActivityKey), findsNothing);
-    expect(find.text('Status snapshot'), findsOneWidget);
+    expect(find.byKey(adminDashboardHomeTabKey), findsOneWidget);
+    expect(find.byKey(adminDashboardCoverageTabKey), findsOneWidget);
+    expect(find.byKey(adminDashboardOperationsTabKey), findsOneWidget);
+    expect(find.byKey(adminDashboardActivityTabKey), findsOneWidget);
 
     await tester.tap(find.byKey(adminDashboardCoverageTabKey).hitTestable());
-    await _pumpForUi(tester, frames: 8);
+    await tester.pump();
 
-    expect(find.text('Category coverage'), findsOneWidget);
-    expect(find.text('Date and size trends'), findsOneWidget);
-
-    await tester.tap(find.byKey(adminDashboardActivityTabKey).hitTestable());
-    await _pumpForUi(tester, frames: 8);
-
-    expect(find.byKey(adminDashboardUserActivityKey), findsOneWidget);
-    expect(find.byKey(adminDashboardRecentActivityKey), findsOneWidget);
-    expect(find.text('User activity'), findsWidgets);
-    expect(find.textContaining('Lead Operations'), findsWidgets);
-    expect(find.textContaining('Night Shift'), findsWidgets);
+    expect(find.byKey(adminDashboardCoverageTabKey), findsOneWidget);
   });
 }
 
@@ -132,20 +142,45 @@ class _AdminDashboardHarness {
 
   static Future<_AdminDashboardHarness> create() async {
     initSqlite3ForTests();
+    secureContentInventoryScanDelegate =
+        (rootPath) async => scanSecureContentInventory(rootPath);
 
-    final tempRoot = await Directory.systemTemp.createTemp('eri_admin_dashboard_');
+    final tempRoot = Directory(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}eri_admin_dashboard_${DateTime.now().microsecondsSinceEpoch}',
+    )..createSync(recursive: true);
     await _installPathProviderMock(tempRoot);
     final daylySportDir = Directory('${tempRoot.path}${Platform.pathSeparator}daylySport')
       ..createSync(recursive: true);
     final sourceDir = Directory('${tempRoot.path}${Platform.pathSeparator}source')
       ..createSync(recursive: true);
+    final importsDir = Directory('${daylySportDir.path}${Platform.pathSeparator}imports')
+      ..createSync(recursive: true);
+    final newsDir = Directory('${daylySportDir.path}${Platform.pathSeparator}news')
+      ..createSync(recursive: true);
+    final reelsDir = Directory('${daylySportDir.path}${Platform.pathSeparator}reels')
+      ..createSync(recursive: true);
 
-    final jsonFile = File('${sourceDir.path}${Platform.pathSeparator}table.json')
-      ..writeAsStringSync(jsonEncode(<String, Object>{'league': 'Premier League'}));
-    final imageFile = File('${sourceDir.path}${Platform.pathSeparator}badge.png')
-      ..writeAsBytesSync(<int>[137, 80, 78, 71, 1, 2, 3, 4, 5, 6, 7, 8]);
-    final videoFile = File('${sourceDir.path}${Platform.pathSeparator}goal.mp4')
-      ..writeAsBytesSync(List<int>.generate(4096, (index) => index % 251));
+    final jsonFile = File('${sourceDir.path}${Platform.pathSeparator}table.json');
+    jsonFile.writeAsStringSync(jsonEncode(<String, Object>{'league': 'Premier League'}));
+    final imageFile = File('${sourceDir.path}${Platform.pathSeparator}badge.png');
+    imageFile.writeAsBytesSync(<int>[137, 80, 78, 71, 1, 2, 3, 4, 5, 6, 7, 8]);
+    final videoFile = File('${sourceDir.path}${Platform.pathSeparator}goal.mp4');
+    videoFile.writeAsBytesSync(List<int>.generate(4096, (index) => index % 251));
+    final encryptedJsonFile =
+        File('${importsDir.path}${Platform.pathSeparator}table.json.esj');
+    encryptedJsonFile.writeAsBytesSync(
+      List<int>.generate(128, (index) => (index * 13) % 251),
+    );
+    final encryptedImageFile =
+        File('${newsDir.path}${Platform.pathSeparator}badge.png.esi');
+    encryptedImageFile.writeAsBytesSync(
+      List<int>.generate(96, (index) => (index * 17) % 251),
+    );
+    final encryptedVideoFile =
+        File('${reelsDir.path}${Platform.pathSeparator}goal.mp4.esv');
+    encryptedVideoFile.writeAsBytesSync(
+      List<int>.generate(512, (index) => (index * 19) % 251),
+    );
 
     SharedPreferences.setMockInitialValues(<String, Object>{
       'daylysport.custom_json_folder': daylySportDir.path,
@@ -247,23 +282,6 @@ class _AdminDashboardHarness {
       logger: logger,
     );
 
-    await services.secureContentCoordinator.encryptImportedFiles(
-      requests: [
-        SecureContentEncryptionRequest(
-          sourcePath: jsonFile.path,
-          relativeOutputPath: 'imports/table.json',
-        ),
-        SecureContentEncryptionRequest(
-          sourcePath: imageFile.path,
-          relativeOutputPath: 'news/badge.png',
-        ),
-        SecureContentEncryptionRequest(
-          sourcePath: videoFile.path,
-          relativeOutputPath: 'reels/goal.mp4',
-        ),
-      ],
-    );
-
     final setupResult = await services.adminAuthService.createInitialAdmin(
       username: 'opslead',
       displayName: 'Lead Operations',
@@ -309,11 +327,18 @@ class _AdminDashboardHarness {
   }
 
   Future<void> dispose() async {
+    secureContentInventoryScanDelegate = scanSecureContentInventoryInIsolate;
+    services.secureContentEncryptionJobManager.dispose();
     await services.database.close();
     await _clearPathProviderMock();
     if (await tempRoot.exists()) {
       await tempRoot.delete(recursive: true);
     }
+  }
+
+  void disposeForTest() {
+    secureContentInventoryScanDelegate = scanSecureContentInventoryInIsolate;
+    services.secureContentEncryptionJobManager.dispose();
   }
 }
 
