@@ -26,19 +26,28 @@ const adminDashboardHomeTabKey = Key('adminDashboardHomeTab');
 const adminDashboardCoverageTabKey = Key('adminDashboardCoverageTab');
 const adminDashboardOperationsTabKey = Key('adminDashboardOperationsTab');
 const adminDashboardActivityTabKey = Key('adminDashboardActivityTab');
-const adminCreateUserDisplayNameFieldKey = Key('adminCreateUserDisplayNameField');
+const adminCreateUserDisplayNameFieldKey = Key(
+  'adminCreateUserDisplayNameField',
+);
 const adminCreateUserUsernameFieldKey = Key('adminCreateUserUsernameField');
 const adminCreateUserPasswordFieldKey = Key('adminCreateUserPasswordField');
-const adminCreateUserConfirmPasswordFieldKey = Key('adminCreateUserConfirmPasswordField');
-const adminCreateUserSubmitButtonKey = Key('adminCreateUserSubmitButton');
-const adminChangePasswordCurrentFieldKey = Key('adminChangePasswordCurrentField');
-const adminChangePasswordNewFieldKey = Key('adminChangePasswordNewField');
-const adminChangePasswordConfirmFieldKey = Key('adminChangePasswordConfirmField');
-const adminChangePasswordSubmitButtonKey = Key('adminChangePasswordSubmitButton');
-
-typedef SecureContentInventoryScanDelegate = Future<SecureContentInventory> Function(
-  String rootPath,
+const adminCreateUserConfirmPasswordFieldKey = Key(
+  'adminCreateUserConfirmPasswordField',
 );
+const adminCreateUserSubmitButtonKey = Key('adminCreateUserSubmitButton');
+const adminChangePasswordCurrentFieldKey = Key(
+  'adminChangePasswordCurrentField',
+);
+const adminChangePasswordNewFieldKey = Key('adminChangePasswordNewField');
+const adminChangePasswordConfirmFieldKey = Key(
+  'adminChangePasswordConfirmField',
+);
+const adminChangePasswordSubmitButtonKey = Key(
+  'adminChangePasswordSubmitButton',
+);
+
+typedef SecureContentInventoryScanDelegate =
+    Future<SecureContentInventory> Function(String rootPath);
 
 SecureContentInventoryScanDelegate secureContentInventoryScanDelegate =
     scanSecureContentInventoryInIsolate;
@@ -82,6 +91,12 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
   bool _requestedInitialInventoryLoad = false;
   bool _overwriteExisting = true;
   String? _selectedSourceRoot;
+  String _coverageQuery = '';
+  String _coverageStatusFilter = 'all';
+  SecureContentKind? _coverageKindFilter;
+  int? _activityDaysFilter;
+  String? _activityActorFilter;
+  AdminActivityType? _activityTypeFilter;
   int _nextSelectionId = 0;
   late final SecureContentEncryptionJobManager _jobManager;
   StreamSubscription<SecureContentEncryptionJobSnapshot>? _jobSubscription;
@@ -98,7 +113,8 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
   @override
   void initState() {
     super.initState();
-    _jobManager = ref.read(appServicesProvider).secureContentEncryptionJobManager;
+    _jobManager =
+        ref.read(appServicesProvider).secureContentEncryptionJobManager;
     _jobSnapshot = _jobManager.snapshot;
     _isEncrypting = _jobSnapshot.isRunning;
     _jobSubscription = _jobManager.stream.listen((snapshot) {
@@ -137,20 +153,23 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     if (session == null) {
       return Future<void>.value();
     }
-    return ref.read(appServicesProvider).adminActivityService.record(
-      AdminActivityRecord(
-        id: adminGenerateId(prefix: 'activity'),
-        type: type,
-        occurredAtUtc: DateTime.now().toUtc(),
-        summary: summary,
-        category: category,
-        actorUserId: session.userId,
-        actorUsername: session.username,
-        itemCount: itemCount,
-        totalBytes: totalBytes,
-        metadata: metadata,
-      ),
-    );
+    return ref
+        .read(appServicesProvider)
+        .adminActivityService
+        .record(
+          AdminActivityRecord(
+            id: adminGenerateId(prefix: 'activity'),
+            type: type,
+            occurredAtUtc: DateTime.now().toUtc(),
+            summary: summary,
+            category: category,
+            actorUserId: session.userId,
+            actorUsername: session.username,
+            itemCount: itemCount,
+            totalBytes: totalBytes,
+            metadata: metadata,
+          ),
+        );
   }
 
   Future<void> _refreshInventory({bool recordActivity = true}) async {
@@ -247,6 +266,16 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       return;
     }
 
+    final confirmed = await _confirmDangerousAction(
+      title: 'Clear decrypted caches?',
+      message:
+          'This removes decrypted runtime cache files and may slow the next secure content open. Encrypted source files will not be changed.',
+      confirmLabel: 'Clear caches',
+    );
+    if (confirmed != true) {
+      return;
+    }
+
     setState(() {
       _isClearingCaches = true;
       _statusMessage = null;
@@ -254,7 +283,10 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     });
 
     try {
-        await ref.read(appServicesProvider).secureContentCoordinator.clearCaches();
+      await ref
+          .read(appServicesProvider)
+          .secureContentCoordinator
+          .clearCaches();
       if (!mounted) {
         return;
       }
@@ -379,7 +411,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         return;
       }
 
-      final filePaths = await collectEncryptableSourceFilesInIsolate(folderPath);
+      final filePaths = await collectEncryptableSourceFilesInIsolate(
+        folderPath,
+      );
       final selected = <_PendingSecureSource>[];
       for (final path in filePaths) {
         final relativePath = p.relative(path, from: folderPath);
@@ -435,7 +469,8 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       if (_selectedSources.isEmpty) {
         _selectedSourceRoot = null;
       }
-      _statusMessage = 'Removed ${p.basename(source.sourcePath)} from the import list.';
+      _statusMessage =
+          'Removed ${p.basename(source.sourcePath)} from the import list.';
       _statusIsError = false;
     });
   }
@@ -484,7 +519,8 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       if (_selectedSources.isEmpty) {
         _selectedSourceRoot = null;
       }
-      _statusMessage = 'Removed $removedCount ${_kindLabel(kind)} item${removedCount == 1 ? '' : 's'} from the import list.';
+      _statusMessage =
+          'Removed $removedCount ${_kindLabel(kind)} item${removedCount == 1 ? '' : 's'} from the import list.';
       _statusIsError = false;
     });
   }
@@ -524,7 +560,8 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
           return total;
         }
       });
-      final selectedKinds = _selectedSources.map((source) => source.kind).toSet();
+      final selectedKinds =
+          _selectedSources.map((source) => source.kind).toSet();
       final category =
           selectedKinds.length == 1
               ? _kindLabel(selectedKinds.first).toLowerCase()
@@ -541,13 +578,13 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
             ),
           )
           .toList(growable: false);
-      final result = await services.secureContentEncryptionJobManager.startBatch(
-        requests: requests,
-        overwrite: _overwriteExisting,
-      );
+      final result = await services.secureContentEncryptionJobManager
+          .startBatch(requests: requests, overwrite: _overwriteExisting);
 
       if (result.importedJson) {
-        await ref.read(daylysportSyncControllerProvider.notifier).runManualSync();
+        await ref
+            .read(daylysportSyncControllerProvider.notifier)
+            .runManualSync();
       }
       await _refreshInventory(recordActivity: false);
       await _recordDashboardActivity(
@@ -608,7 +645,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                     TextField(
                       key: adminCreateUserDisplayNameFieldKey,
                       controller: displayNameController,
-                      decoration: const InputDecoration(labelText: 'Display name'),
+                      decoration: const InputDecoration(
+                        labelText: 'Display name',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -716,8 +755,12 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
 
   Future<void> _showProfileDialog(AdminSessionRecord session) async {
     final authService = ref.read(adminAuthServiceProvider);
-    final currentUser = authService.users.firstWhere((user) => user.id == session.userId);
-    final usernameController = TextEditingController(text: currentUser.username);
+    final currentUser = authService.users.firstWhere(
+      (user) => user.id == session.userId,
+    );
+    final usernameController = TextEditingController(
+      text: currentUser.username,
+    );
     final displayNameController = TextEditingController(
       text: currentUser.displayName,
     );
@@ -736,7 +779,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                   children: [
                     TextField(
                       controller: displayNameController,
-                      decoration: const InputDecoration(labelText: 'Display name'),
+                      decoration: const InputDecoration(
+                        labelText: 'Display name',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -957,10 +1002,13 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     if (confirmed != true) {
       return;
     }
-    await ref.read(appServicesProvider).adminActivityService.clearLoginRecords(
-      actorUserId: session.userId,
-      actorUsername: session.username,
-    );
+    await ref
+        .read(appServicesProvider)
+        .adminActivityService
+        .clearLoginRecords(
+          actorUserId: session.userId,
+          actorUsername: session.username,
+        );
     _showStatus('Login records cleared.');
   }
 
@@ -979,8 +1027,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor:
-            isError ? Theme.of(context).colorScheme.error : null,
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
       ),
     );
   }
@@ -1005,7 +1052,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     final normalized = p.normalize(raw.trim().replaceAll('\\', '/'));
     final sanitized = normalized
         .split('/')
-        .where((segment) => segment.isNotEmpty && segment != '.' && segment != '..')
+        .where(
+          (segment) => segment.isNotEmpty && segment != '.' && segment != '..',
+        )
         .join('/');
     return sanitized;
   }
@@ -1025,19 +1074,12 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
   }
 
   String _kindLabel(SecureContentKind kind) {
-    switch (kind) {
-      case SecureContentKind.json:
-        return 'JSON';
-      case SecureContentKind.image:
-        return 'images';
-      case SecureContentKind.video:
-        return 'video';
-      case SecureContentKind.other:
-        return 'other';
-    }
+    return _contentKindLabel(kind);
   }
 
-  String _buildEncryptionStatusMessage(SecureContentEncryptionBatchResult result) {
+  String _buildEncryptionStatusMessage(
+    SecureContentEncryptionBatchResult result,
+  ) {
     final parts = <String>[
       'Encrypted ${result.encryptedCount} of ${result.requestedCount} selected files.',
       if (result.skippedCount > 0) 'Skipped ${result.skippedCount}.',
@@ -1049,6 +1091,120 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         'First failure: ${p.basename(result.failures.first.sourcePath)} - ${result.failures.first.message}',
     ];
     return parts.join(' ');
+  }
+
+  Future<bool?> _confirmDangerousAction({
+    required String title,
+    required String message,
+    required String confirmLabel,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _goToTab(int index) {
+    DefaultTabController.maybeOf(context)?.animateTo(index);
+  }
+
+  List<SecureContentInventoryItem> _filteredCoverageItems(
+    SecureContentInventory inventory,
+  ) {
+    final query = _coverageQuery.trim().toLowerCase();
+    final filtered = inventory.items
+        .where((item) {
+          if (_coverageKindFilter != null && item.kind != _coverageKindFilter) {
+            return false;
+          }
+          switch (_coverageStatusFilter) {
+            case 'encrypted':
+              if (!item.isEncrypted) {
+                return false;
+              }
+            case 'plain':
+              if (item.isEncrypted) {
+                return false;
+              }
+            case 'warning':
+              if (item.isEncrypted) {
+                return false;
+              }
+            case 'all':
+              break;
+            default:
+              break;
+          }
+          if (query.isEmpty) {
+            return true;
+          }
+          return item.relativePath.toLowerCase().contains(query) ||
+              item.kind.name.toLowerCase().contains(query) ||
+              (item.isEncrypted ? 'encrypted' : 'plain').contains(query);
+        })
+        .toList(growable: false);
+
+    filtered.sort((left, right) {
+      if (left.isEncrypted != right.isEncrypted) {
+        return left.isEncrypted ? 1 : -1;
+      }
+      final modifiedCompare = right.modifiedAtUtc.compareTo(left.modifiedAtUtc);
+      if (modifiedCompare != 0) {
+        return modifiedCompare;
+      }
+      return left.relativePath.toLowerCase().compareTo(
+        right.relativePath.toLowerCase(),
+      );
+    });
+    return filtered;
+  }
+
+  List<AdminActivityRecord> _filteredActivities(
+    List<AdminActivityRecord> activities,
+  ) {
+    final cutoff =
+        _activityDaysFilter == null
+            ? null
+            : DateTime.now().toUtc().subtract(
+              Duration(days: _activityDaysFilter!),
+            );
+    final filtered = activities
+        .where((activity) {
+          if (cutoff != null && activity.occurredAtUtc.isBefore(cutoff)) {
+            return false;
+          }
+          if (_activityActorFilter != null) {
+            final actor = activity.actorUsername ?? 'system';
+            if (actor != _activityActorFilter) {
+              return false;
+            }
+          }
+          if (_activityTypeFilter != null &&
+              activity.type != _activityTypeFilter) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
+    filtered.sort(
+      (left, right) => right.occurredAtUtc.compareTo(left.occurredAtUtc),
+    );
+    return filtered;
   }
 
   Widget _buildDashboardTab({
@@ -1097,39 +1253,58 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
             session: session,
             inventory: inventory,
             isRefreshing: _isRefreshing,
+            isWarmingCaches: _isWarmingCaches,
             onRefresh: _refreshInventory,
-            onOpenSync: () => context.push('/sync'),
+            onWarmCaches: _warmCaches,
+            onOpenCoverage: () => _goToTab(1),
+            onOpenOperations: () => _goToTab(2),
             onLogout: _logout,
           ),
           const SizedBox(height: 18),
-          _OverviewMetricsGrid(
-            key: adminDashboardOverviewKey,
-            snapshot: snapshot,
-          ),
+          _OverviewMetricsGrid(snapshot: snapshot),
           const SizedBox(height: 18),
           _DashboardPanelGrid(
             maxWidth: maxWidth,
             children: [
               _SectionCard(
-                title: 'Status snapshot',
+                key: adminDashboardOverviewKey,
+                title: 'Inventory health',
                 subtitle:
-                    'Track protected file coverage, scan freshness, and overall secure content health at a glance.',
-                child: _HomeStatusPanel(snapshot: snapshot),
+                    'Scan critical security status first: encryption coverage, plain-file exposure, and the latest scan outcome.',
+                child: _OverviewHealthPanel(
+                  snapshot: snapshot,
+                  jobSnapshot: _jobSnapshot,
+                ),
               ),
               _SectionCard(
-                title: 'Operational highlights',
+                title: 'Priority alerts',
                 subtitle:
-                    'Surface the current operator, last maintenance event, and the most important runtime signals.',
-                child: _OperationalHighlightsPanel(snapshot: snapshot),
-              ),
-              _SectionCard(
-                title: 'Recent critical alerts',
-                subtitle:
-                    'Highlight open warnings that need attention before the next import, scan, or audit review.',
+                    'Warnings and failures are surfaced here before lower-priority operational detail.',
                 child: _AlertsPanel(
                   inventory: snapshot.inventory,
                   errorMessage: _errorMessage,
                   jobSnapshot: _jobSnapshot,
+                ),
+              ),
+              _SectionCard(
+                title: 'Operational context',
+                subtitle:
+                    'Operator, maintenance, and workflow state are grouped into one concise desktop briefing.',
+                child: _OperationalHighlightsPanel(snapshot: snapshot),
+              ),
+              _SectionCard(
+                title: 'Quick actions',
+                subtitle:
+                    'Move directly into scan, cache prep, coverage review, or encryption workflows without losing context.',
+                child: _OverviewActionPanel(
+                  isRefreshing: _isRefreshing,
+                  isWarmingCaches: _isWarmingCaches,
+                  isEncrypting: _isEncrypting,
+                  onRefresh: _refreshInventory,
+                  onWarmCaches: _warmCaches,
+                  onOpenCoverage: () => _goToTab(1),
+                  onOpenOperations: () => _goToTab(2),
+                  onOpenSync: () => context.push('/sync'),
                 ),
               ),
             ],
@@ -1146,21 +1321,77 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
           return _buildLoadingChildren();
         }
 
+        final filteredItems = _filteredCoverageItems(snapshot.inventory);
+        final visibleItems = filteredItems.take(60).toList(growable: false);
+
         return <Widget>[
+          _CoverageToolbar(
+            query: _coverageQuery,
+            statusFilter: _coverageStatusFilter,
+            kindFilter: _coverageKindFilter,
+            onQueryChanged: (value) {
+              setState(() {
+                _coverageQuery = value;
+              });
+            },
+            onStatusFilterChanged: (value) {
+              setState(() {
+                _coverageStatusFilter = value;
+              });
+            },
+            onKindFilterChanged: (value) {
+              setState(() {
+                _coverageKindFilter = value;
+              });
+            },
+          ),
+          const SizedBox(height: 18),
+          _CoverageSummaryGrid(snapshot: snapshot),
+          const SizedBox(height: 18),
+          _SectionCard(
+            title: 'Inventory review',
+            subtitle:
+                'Searchable secure content inventory with clear plain-vs-encrypted status so remediation can be prioritized quickly.',
+            child: _CoverageInventoryTable(
+              items: visibleItems,
+              totalItemCount: filteredItems.length,
+              totalInventoryCount: snapshot.inventory.items.length,
+              onOpenOperations: () => _goToTab(2),
+            ),
+          ),
+          const SizedBox(height: 18),
           _DashboardPanelGrid(
             maxWidth: maxWidth,
             children: [
               _SectionCard(
-                title: 'Category coverage',
+                title: 'Coverage by type',
                 subtitle:
-                    'Encrypted counts and storage footprint grouped by secure content type.',
+                    'Desktop-ready breakdown of encrypted and plain exposure across JSON, image, and video assets.',
+                child: _InventoryBreakdownCard(inventory: snapshot.inventory),
+              ),
+              _SectionCard(
+                title: 'Encrypted share',
+                subtitle:
+                    'Relative share of encrypted items by content type to support fast visual scanning during audit review.',
                 child: _CategoryStatisticsPanel(snapshot: snapshot),
               ),
               _SectionCard(
-                title: 'Date and size trends',
+                title: 'Inventory overview',
                 subtitle:
-                    'Recent encrypted file volume grouped by file activity date and payload size.',
+                    'Coverage, root location, and scan freshness remain visible during desktop review.',
+                child: _InventoryOverviewCard(inventory: snapshot.inventory),
+              ),
+              _SectionCard(
+                title: 'Recent protected volume',
+                subtitle:
+                    'Recent encrypted file activity and payload distribution to support audit review and capacity planning.',
                 child: _DateAndSizePanel(snapshot: snapshot),
+              ),
+              _SectionCard(
+                title: 'Detected file samples',
+                subtitle:
+                    'Use representative encrypted and plain paths to verify naming, destination choice, and scan accuracy.',
+                child: _InventorySamplesCard(inventory: snapshot.inventory),
               ),
             ],
           ),
@@ -1173,13 +1404,34 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     return _buildDashboardTab(
       childrenBuilder: (maxWidth) {
         return <Widget>[
-          const _OperationsBanner(),
+          _OperationsBanner(
+            snapshot: _jobSnapshot,
+            selectedSourceCount: _selectedSources.length,
+          ),
           const SizedBox(height: 18),
           _DashboardPanelGrid(
             maxWidth: maxWidth,
             children: [
               _SectionCard(
-                title: 'Encryption actions',
+                title: 'Queue status',
+                subtitle:
+                    'Monitor the active batch, queued work, and the next operator action without leaving the Operations tab.',
+                child: _OperationsQueuePanel(
+                  snapshot: _jobSnapshot,
+                  selectedSourceCount: _selectedSources.length,
+                ),
+              ),
+              _SectionCard(
+                title: 'System health',
+                subtitle:
+                    'Track throughput, failure count, and secure storage posture during imports and maintenance windows.',
+                child: _OperationsHealthPanel(
+                  inventory: inventory,
+                  snapshot: _jobSnapshot,
+                ),
+              ),
+              _SectionCard(
+                title: 'Encryption workspace',
                 subtitle:
                     'Select plain files or folders and import them into encrypted daylySport destinations.',
                 child: Column(
@@ -1191,15 +1443,21 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                       children: [
                         FilledButton.icon(
                           onPressed:
-                              _isPickingSources || _isEncrypting ? null : _pickFiles,
+                              _isPickingSources || _isEncrypting
+                                  ? null
+                                  : _pickFiles,
                           icon: const Icon(Icons.upload_file_rounded),
                           label: Text(
-                            _isPickingSources ? 'Opening picker...' : 'Browse files',
+                            _isPickingSources
+                                ? 'Opening picker...'
+                                : 'Browse files',
                           ),
                         ),
                         OutlinedButton.icon(
                           onPressed:
-                              _isPickingSources || _isEncrypting ? null : _pickFolder,
+                              _isPickingSources || _isEncrypting
+                                  ? null
+                                  : _pickFolder,
                           icon: const Icon(Icons.drive_folder_upload_rounded),
                           label: const Text('Browse folder'),
                         ),
@@ -1227,8 +1485,10 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                       onApplyPreset: (kind, value) {
                         final controller = switch (kind) {
                           SecureContentKind.json => _jsonDestinationController,
-                          SecureContentKind.image => _imageDestinationController,
-                          SecureContentKind.video => _videoDestinationController,
+                          SecureContentKind.image =>
+                            _imageDestinationController,
+                          SecureContentKind.video =>
+                            _videoDestinationController,
                           SecureContentKind.other => _jsonDestinationController,
                         };
                         controller.text = value;
@@ -1251,8 +1511,11 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                       Text(
                         _statusMessage!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: _statusIsError ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary,
-                            ),
+                          color:
+                              _statusIsError
+                                  ? Theme.of(context).colorScheme.error
+                                  : Theme.of(context).colorScheme.primary,
+                        ),
                       ),
                     ],
                   ],
@@ -1273,6 +1536,17 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 18),
+          _SectionCard(
+            title: 'Destructive actions',
+            subtitle:
+                'These actions affect decrypted runtime data or audit history and always require confirmation.',
+            child: _OperationsDangerZone(
+              isBusy: _isClearingCaches || _isWarmingCaches || _isEncrypting,
+              onClearCaches: _clearCaches,
+              onClearLoginRecords: _clearLoginRecords,
+            ),
+          ),
         ];
       },
     );
@@ -1285,50 +1559,85 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
   }) {
     return _buildDashboardTab(
       childrenBuilder: (maxWidth) {
-        final children = <Widget>[];
-        if (snapshot != null) {
-          children.add(
-            _DashboardPanelGrid(
-              maxWidth: maxWidth,
-              children: [
-                _SectionCard(
-                  key: adminDashboardUserActivityKey,
-                  title: 'User activity',
-                  subtitle:
-                      'Local admin activity, import volume, and recent sign-in behavior.',
-                  child: _UserActivityPanel(snapshot: snapshot),
-                ),
-                _SectionCard(
-                  key: adminDashboardRecentActivityKey,
-                  title: 'Recent activity',
-                  subtitle:
-                      'Audit history for authentication, inventory, maintenance, and encryption jobs.',
-                  child: _RecentActivityPanel(activities: activities),
-                ),
-                _SectionCard(
-                  title: 'Login records',
-                  subtitle:
-                      'Authentication-focused activity stream for recent sign-ins, failures, and session changes.',
-                  child: _LoginRecordsPanel(activities: activities),
-                ),
-                if (inventory != null) ...[
-                  _InventoryOverviewCard(inventory: inventory),
-                  _InventoryBreakdownCard(inventory: inventory),
-                  _InventorySamplesCard(inventory: inventory),
-                ],
-              ],
-            ),
-          );
-        } else if (_isRefreshing && inventory == null) {
-          children.add(const _DashboardLoadingPanel());
-        } else if (_errorMessage != null) {
-          children.add(_DashboardErrorPanel(message: _errorMessage!));
+        if (snapshot == null) {
+          return _buildLoadingChildren();
         }
 
-        if (children.isEmpty) {
-          children.add(const _DashboardLoadingPanel());
-        }
-        return children;
+        final filteredActivities = _filteredActivities(activities);
+        final actorOptions = <String>{
+          for (final activity in activities) activity.actorUsername ?? 'system',
+        }.toList(growable: false)..sort(
+          (left, right) => left.toLowerCase().compareTo(right.toLowerCase()),
+        );
+
+        return <Widget>[
+          _ActivityFiltersPanel(
+            daysFilter: _activityDaysFilter,
+            actorFilter: _activityActorFilter,
+            typeFilter: _activityTypeFilter,
+            actorOptions: actorOptions,
+            onDaysFilterChanged: (value) {
+              setState(() {
+                _activityDaysFilter = value;
+              });
+            },
+            onActorFilterChanged: (value) {
+              setState(() {
+                _activityActorFilter = value;
+              });
+            },
+            onTypeFilterChanged: (value) {
+              setState(() {
+                _activityTypeFilter = value;
+              });
+            },
+          ),
+          const SizedBox(height: 18),
+          _ActivitySummaryGrid(activities: filteredActivities),
+          const SizedBox(height: 18),
+          _SectionCard(
+            key: adminDashboardRecentActivityKey,
+            title: 'Real-time logs',
+            subtitle:
+                'Filterable local audit records for authentication, inventory, maintenance, and encryption jobs.',
+            child: _ActivityTablePanel(activities: filteredActivities),
+          ),
+          const SizedBox(height: 18),
+          _DashboardPanelGrid(
+            maxWidth: maxWidth,
+            children: [
+              _SectionCard(
+                key: adminDashboardUserActivityKey,
+                title: 'User activity',
+                subtitle:
+                    'Per-operator activity volume, import footprint, and recent sign-in behavior.',
+                child: _UserActivityPanel(snapshot: snapshot),
+              ),
+              _SectionCard(
+                title: 'Login records',
+                subtitle:
+                    'Authentication-focused entries remain visible separately for faster security review.',
+                child: _LoginRecordsPanel(activities: filteredActivities),
+              ),
+              _SectionCard(
+                title: 'Audit readiness',
+                subtitle:
+                    'A quick compliance-oriented read on recent activity volume, failures, and encryption throughput.',
+                child: _AuditReadinessPanel(
+                  snapshot: snapshot,
+                  activities: filteredActivities,
+                  inventory: inventory,
+                ),
+              ),
+              _SectionCard(
+                title: 'Activity digest',
+                subtitle:
+                    'Narrative feed for operators who prefer a concise chronological list over the structured log table.',
+                child: _RecentActivityPanel(activities: filteredActivities),
+              ),
+            ],
+          ),
+        ];
       },
     );
   }
@@ -1416,10 +1725,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                     child: Text('Clear login records'),
                   ),
                   PopupMenuDivider(),
-                  PopupMenuItem<String>(
-                    value: 'logout',
-                    child: Text('Logout'),
-                  ),
+                  PopupMenuItem<String>(value: 'logout', child: Text('Logout')),
                 ];
               },
             ),
@@ -1427,7 +1733,10 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         ),
         body: Column(
           children: [
-            const _DashboardWorkspaceHeader(),
+            _DashboardWorkspaceHeader(
+              inventory: inventory,
+              jobSnapshot: _jobSnapshot,
+            ),
             const _DashboardTabBar(),
             Expanded(
               child: TabBarView(
@@ -1483,7 +1792,9 @@ class _SecureContentDashboardSnapshot {
 
   int get todayActivityCount {
     final today = DateTime.now().toUtc();
-    return activities.where((record) => _isSameUtcDay(record.occurredAtUtc, today)).length;
+    return activities
+        .where((record) => _isSameUtcDay(record.occurredAtUtc, today))
+        .length;
   }
 
   int get totalImportedItems {
@@ -1531,17 +1842,23 @@ class _SecureContentDashboardSnapshot {
   }
 
   List<_DateDashboardMetric> get dateMetrics {
-    return inventory.encryptedDateBuckets.map((bucket) {
-      final actionCount = activities
-          .where((record) => _isSameUtcDay(record.occurredAtUtc, bucket.dayUtc))
-          .length;
-      return _DateDashboardMetric(
-        dayUtc: bucket.dayUtc,
-        encryptedCount: bucket.encryptedFiles,
-        encryptedBytes: bucket.encryptedBytes,
-        actionCount: actionCount,
-      );
-    }).toList(growable: false);
+    return inventory.encryptedDateBuckets
+        .map((bucket) {
+          final actionCount =
+              activities
+                  .where(
+                    (record) =>
+                        _isSameUtcDay(record.occurredAtUtc, bucket.dayUtc),
+                  )
+                  .length;
+          return _DateDashboardMetric(
+            dayUtc: bucket.dayUtc,
+            encryptedCount: bucket.encryptedFiles,
+            encryptedBytes: bucket.encryptedBytes,
+            actionCount: actionCount,
+          );
+        })
+        .toList(growable: false);
   }
 
   List<_UserActivityMetric> get userMetrics {
@@ -1557,14 +1874,24 @@ class _SecureContentDashboardSnapshot {
         _UserActivityMetric(
           user: user,
           actionCount: userRecords.length,
-          importCount: imports.fold<int>(0, (sum, record) => sum + (record.itemCount ?? 0)),
-          importedBytes: imports.fold<int>(0, (sum, record) => sum + (record.totalBytes ?? 0)),
-          loginCount: userRecords
-              .where((record) => record.type == AdminActivityType.loginSuccess)
-              .length,
-          lastActiveAtUtc: userRecords.isEmpty
-              ? user.lastLoginAtUtc
-              : userRecords.first.occurredAtUtc,
+          importCount: imports.fold<int>(
+            0,
+            (sum, record) => sum + (record.itemCount ?? 0),
+          ),
+          importedBytes: imports.fold<int>(
+            0,
+            (sum, record) => sum + (record.totalBytes ?? 0),
+          ),
+          loginCount:
+              userRecords
+                  .where(
+                    (record) => record.type == AdminActivityType.loginSuccess,
+                  )
+                  .length,
+          lastActiveAtUtc:
+              userRecords.isEmpty
+                  ? user.lastLoginAtUtc
+                  : userRecords.first.occurredAtUtc,
           isCurrentUser: user.id == currentSession.userId,
         ),
       );
@@ -1593,13 +1920,14 @@ class _SecureContentDashboardSnapshot {
   String get dominantCategoryLabel {
     final topCategory = categoryMetrics.firstWhere(
       (metric) => metric.count > 0 || metric.bytes > 0,
-      orElse: () => _CategoryDashboardMetric(
-        kind: SecureContentKind.json,
-        label: 'JSON',
-        count: 0,
-        bytes: 0,
-        icon: Icons.data_object_rounded,
-      ),
+      orElse:
+          () => _CategoryDashboardMetric(
+            kind: SecureContentKind.json,
+            label: 'JSON',
+            count: 0,
+            bytes: 0,
+            icon: Icons.data_object_rounded,
+          ),
     );
     return topCategory.label;
   }
@@ -1616,7 +1944,9 @@ class _SecureContentDashboardSnapshot {
   }
 
   static bool _isSameUtcDay(DateTime left, DateTime right) {
-    return left.year == right.year && left.month == right.month && left.day == right.day;
+    return left.year == right.year &&
+        left.month == right.month &&
+        left.day == right.day;
   }
 }
 
@@ -1675,16 +2005,22 @@ class _DashboardHeroCard extends StatelessWidget {
     required this.session,
     required this.inventory,
     required this.isRefreshing,
+    required this.isWarmingCaches,
     required this.onRefresh,
-    required this.onOpenSync,
+    required this.onWarmCaches,
+    required this.onOpenCoverage,
+    required this.onOpenOperations,
     required this.onLogout,
   });
 
   final AdminSessionRecord session;
   final SecureContentInventory? inventory;
   final bool isRefreshing;
+  final bool isWarmingCaches;
   final Future<void> Function() onRefresh;
-  final VoidCallback onOpenSync;
+  final Future<void> Function() onWarmCaches;
+  final VoidCallback onOpenCoverage;
+  final VoidCallback onOpenOperations;
   final VoidCallback onLogout;
 
   @override
@@ -1730,12 +2066,12 @@ class _DashboardHeroCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Professional control surface for encrypted daylySport operations',
+                        'Secure content operations with scan-first visibility and remediation-ready actions',
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Signed in as ${session.displayName} (${session.username}). Use this dashboard to manage encrypted imports, runtime caches, local admin access, and the audit trail behind every secure content action.',
+                        'Signed in as ${session.displayName} (${session.username}). Review environment health, scan coverage gaps, prepare runtime caches, and move directly into encryption or audit workflows without losing context.',
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
                     ],
@@ -1748,12 +2084,17 @@ class _DashboardHeroCard extends StatelessWidget {
                     FilledButton.icon(
                       onPressed: isRefreshing ? null : onRefresh,
                       icon: const Icon(Icons.refresh_rounded),
-                      label: Text(isRefreshing ? 'Refreshing...' : 'Refresh inventory'),
+                      label: Text(
+                        isRefreshing ? 'Running scan...' : 'Run scan',
+                      ),
                     ),
                     OutlinedButton.icon(
-                      onPressed: onOpenSync,
-                      icon: const Icon(Icons.sync_rounded),
-                      label: const Text('Open sync tools'),
+                      onPressed:
+                          isRefreshing || isWarmingCaches ? null : onWarmCaches,
+                      icon: const Icon(Icons.bolt_rounded),
+                      label: Text(
+                        isWarmingCaches ? 'Warming cache...' : 'Warm cache',
+                      ),
                     ),
                     TextButton.icon(
                       onPressed: onLogout,
@@ -1779,7 +2120,9 @@ class _DashboardHeroCard extends StatelessWidget {
                   value:
                       inventoryData == null
                           ? 'Pending'
-                          : formatter.format(inventoryData.scannedAtUtc.toLocal()),
+                          : formatter.format(
+                            inventoryData.scannedAtUtc.toLocal(),
+                          ),
                 ),
                 _HeroChip(
                   label: 'Encrypted coverage',
@@ -1787,6 +2130,30 @@ class _DashboardHeroCard extends StatelessWidget {
                       inventoryData == null
                           ? 'Pending'
                           : '${inventoryData.encryptedCoveragePercent}%',
+                ),
+                _HeroChip(
+                  label: 'Plain files',
+                  value:
+                      inventoryData == null
+                          ? 'Pending'
+                          : '${inventoryData.plainFiles}',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: onOpenCoverage,
+                  icon: const Icon(Icons.verified_user_outlined),
+                  label: const Text('Review coverage'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onOpenOperations,
+                  icon: const Icon(Icons.settings_input_component_rounded),
+                  label: const Text('Open operations'),
                 ),
               ],
             ),
@@ -1825,7 +2192,7 @@ class _HeroChip extends StatelessWidget {
 }
 
 class _OverviewMetricsGrid extends StatelessWidget {
-  const _OverviewMetricsGrid({super.key, required this.snapshot});
+  const _OverviewMetricsGrid({required this.snapshot});
 
   final _SecureContentDashboardSnapshot snapshot;
 
@@ -1885,10 +2252,17 @@ class _OverviewMetricsGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final columns = width >= 1200 ? 4 : width >= 820 ? 2 : 1;
+        final columns =
+            width >= 1200
+                ? 4
+                : width >= 820
+                ? 2
+                : 1;
         const spacing = 14.0;
         final tileWidth =
-            columns == 1 ? width : (width - ((columns - 1) * spacing)) / columns;
+            columns == 1
+                ? width
+                : (width - ((columns - 1) * spacing)) / columns;
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
@@ -1933,10 +2307,7 @@ class _OverviewMetricCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            scheme.surface,
-            scheme.surfaceContainerLow,
-          ],
+          colors: [scheme.surface, scheme.surfaceContainerLow],
         ),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: scheme.outlineVariant),
@@ -1963,7 +2334,10 @@ class _OverviewMetricCard extends StatelessWidget {
               ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(999),
@@ -1980,7 +2354,10 @@ class _OverviewMetricCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(metric.value, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 6),
-          Text(metric.supportingText, style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            metric.supportingText,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
       ),
     );
@@ -1995,16 +2372,22 @@ class _DashboardPanelGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final columns = maxWidth >= 1360 ? 3 : maxWidth >= 900 ? 2 : 1;
+    final columns =
+        maxWidth >= 1360
+            ? 3
+            : maxWidth >= 900
+            ? 2
+            : 1;
     const spacing = 16.0;
     final itemWidth =
-        columns == 1 ? maxWidth : (maxWidth - ((columns - 1) * spacing)) / columns;
+        columns == 1
+            ? maxWidth
+            : (maxWidth - ((columns - 1) * spacing)) / columns;
     return Wrap(
       spacing: spacing,
       runSpacing: spacing,
       children: [
-        for (final child in children)
-          SizedBox(width: itemWidth, child: child),
+        for (final child in children) SizedBox(width: itemWidth, child: child),
       ],
     );
   }
@@ -2060,11 +2443,19 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _DashboardWorkspaceHeader extends StatelessWidget {
-  const _DashboardWorkspaceHeader();
+  const _DashboardWorkspaceHeader({
+    required this.inventory,
+    required this.jobSnapshot,
+  });
+
+  final SecureContentInventory? inventory;
+  final SecureContentEncryptionJobSnapshot jobSnapshot;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final formatter = DateFormat('MMM d, HH:mm');
+    final inventoryData = inventory;
     return Material(
       color: scheme.surface,
       child: Container(
@@ -2099,12 +2490,12 @@ class _DashboardWorkspaceHeader extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Professional secure content dashboard for imports, monitoring, and audit review.',
+                          'Enterprise console for secure content coverage, operations, and audit visibility.',
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Use the tabs below to move between executive health, coverage analytics, encryption operations, and full activity records without mixing workflows.',
+                          'Desktop-first navigation keeps Overview, Coverage, Operations, and Activity distinct so urgent security signals remain easy to scan while critical admin actions stay intact.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ],
@@ -2113,18 +2504,27 @@ class _DashboardWorkspaceHeader extends StatelessWidget {
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
-                    children: const [
-                      _HeaderBadge(
-                        icon: Icons.dashboard_customize_rounded,
-                        label: 'Dashboard view',
+                    children: [
+                      const _HeaderBadge(
+                        icon: Icons.security_rounded,
+                        label: 'Production environment',
                       ),
                       _HeaderBadge(
-                        icon: Icons.lock_outline_rounded,
-                        label: 'Encrypted operations',
+                        icon: Icons.schedule_rounded,
+                        label:
+                            inventoryData == null
+                                ? 'Last scan pending'
+                                : 'Last scan ${formatter.format(inventoryData.scannedAtUtc.toLocal())}',
                       ),
                       _HeaderBadge(
-                        icon: Icons.fact_check_outlined,
-                        label: 'Audit ready',
+                        icon:
+                            jobSnapshot.isRunning
+                                ? Icons.sync_rounded
+                                : Icons.verified_rounded,
+                        label:
+                            jobSnapshot.isRunning
+                                ? 'Batch active ${jobSnapshot.settledFiles}/${jobSnapshot.totalFiles}'
+                                : 'No active batch',
                       ),
                     ],
                   ),
@@ -2195,16 +2595,10 @@ class _DashboardTabBar extends StatelessWidget {
               ),
               labelPadding: const EdgeInsets.symmetric(horizontal: 18),
               tabs: const [
-                Tab(key: adminDashboardHomeTabKey, text: 'Home'),
-                Tab(key: adminDashboardCoverageTabKey, text: 'Coverage & Trends'),
-                Tab(
-                  key: adminDashboardOperationsTabKey,
-                  text: 'Encryption & Maintenance',
-                ),
-                Tab(
-                  key: adminDashboardActivityTabKey,
-                  text: 'Activity & Records',
-                ),
+                Tab(key: adminDashboardHomeTabKey, text: 'Overview'),
+                Tab(key: adminDashboardCoverageTabKey, text: 'Coverage'),
+                Tab(key: adminDashboardOperationsTabKey, text: 'Operations'),
+                Tab(key: adminDashboardActivityTabKey, text: 'Activity'),
               ],
             ),
           ),
@@ -2214,10 +2608,14 @@ class _DashboardTabBar extends StatelessWidget {
   }
 }
 
-class _HomeStatusPanel extends StatelessWidget {
-  const _HomeStatusPanel({required this.snapshot});
+class _OverviewHealthPanel extends StatelessWidget {
+  const _OverviewHealthPanel({
+    required this.snapshot,
+    required this.jobSnapshot,
+  });
 
   final _SecureContentDashboardSnapshot snapshot;
+  final SecureContentEncryptionJobSnapshot jobSnapshot;
 
   @override
   Widget build(BuildContext context) {
@@ -2225,27 +2623,489 @@ class _HomeStatusPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '${inventory.encryptedCoveragePercent}%',
+              style: Theme.of(context).textTheme.displaySmall,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                inventory.plainFiles == 0
+                    ? 'All supported assets currently detected in the secure content root are encrypted at rest.'
+                    : '${inventory.plainFiles} supported file${inventory.plainFiles == 1 ? '' : 's'} remain plain and should be remediated from Operations.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
         Wrap(
           spacing: 10,
           runSpacing: 10,
           children: [
-            _MetricTile(label: 'Total detected', value: '${inventory.supportedFiles}'),
-            _MetricTile(label: 'Encrypted', value: '${inventory.encryptedFiles}'),
-            _MetricTile(label: 'Plain remaining', value: '${inventory.plainFiles}'),
+            _MetricTile(
+              label: 'Total detected',
+              value: '${inventory.supportedFiles}',
+            ),
+            _MetricTile(
+              label: 'Encrypted',
+              value: '${inventory.encryptedFiles}',
+            ),
+            _MetricTile(
+              label: 'Plain remaining',
+              value: '${inventory.plainFiles}',
+            ),
             _MetricTile(
               label: 'Protected storage',
               value: _humanizeBytes(inventory.totalEncryptedBytes),
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        _InventoryHealthRow(
+          label: 'JSON objects',
+          encryptedCount: inventory.encryptedJsonFiles,
+          plainCount: inventory.plainJsonFiles,
+          progressValue: _progressValue(
+            inventory.encryptedJsonFiles,
+            inventory.encryptedJsonFiles + inventory.plainJsonFiles,
+          ),
+          icon: Icons.data_object_rounded,
+        ),
         const SizedBox(height: 12),
-        Text(
-          inventory.plainFiles == 0
-              ? 'All supported files currently detected by the scanner are encrypted at rest.'
-              : '${inventory.plainFiles} supported files still remain in plain form and should be prioritized for the next protected import pass.',
-          style: Theme.of(context).textTheme.bodyMedium,
+        _InventoryHealthRow(
+          label: 'Images',
+          encryptedCount: inventory.encryptedImageFiles,
+          plainCount: inventory.plainImageFiles,
+          progressValue: _progressValue(
+            inventory.encryptedImageFiles,
+            inventory.encryptedImageFiles + inventory.plainImageFiles,
+          ),
+          icon: Icons.image_outlined,
+        ),
+        const SizedBox(height: 12),
+        _InventoryHealthRow(
+          label: 'Video',
+          encryptedCount: inventory.encryptedVideoFiles,
+          plainCount: inventory.plainVideoFiles,
+          progressValue: _progressValue(
+            inventory.encryptedVideoFiles,
+            inventory.encryptedVideoFiles + inventory.plainVideoFiles,
+          ),
+          icon: Icons.video_library_outlined,
+        ),
+        const SizedBox(height: 14),
+        _StatusPill(
+          label:
+              jobSnapshot.isRunning
+                  ? 'Active batch ${jobSnapshot.settledFiles}/${jobSnapshot.totalFiles}'
+                  : 'Inventory stable',
+          tone:
+              jobSnapshot.failedFiles > 0
+                  ? _AlertTone.error
+                  : inventory.plainFiles > 0
+                  ? _AlertTone.warning
+                  : _AlertTone.success,
         ),
       ],
+    );
+  }
+
+  static double _progressValue(int encryptedCount, int totalCount) {
+    if (totalCount <= 0) {
+      return 0;
+    }
+    return encryptedCount / totalCount;
+  }
+}
+
+class _InventoryHealthRow extends StatelessWidget {
+  const _InventoryHealthRow({
+    required this.label,
+    required this.encryptedCount,
+    required this.plainCount,
+    required this.progressValue,
+    required this.icon,
+  });
+
+  final String label;
+  final int encryptedCount;
+  final int plainCount;
+  final double progressValue;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(label, style: Theme.of(context).textTheme.titleSmall),
+            ),
+            Text(
+              '$encryptedCount encrypted / $plainCount plain',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        LinearProgressIndicator(value: progressValue, minHeight: 8),
+      ],
+    );
+  }
+}
+
+class _OverviewActionPanel extends StatelessWidget {
+  const _OverviewActionPanel({
+    required this.isRefreshing,
+    required this.isWarmingCaches,
+    required this.isEncrypting,
+    required this.onRefresh,
+    required this.onWarmCaches,
+    required this.onOpenCoverage,
+    required this.onOpenOperations,
+    required this.onOpenSync,
+  });
+
+  final bool isRefreshing;
+  final bool isWarmingCaches;
+  final bool isEncrypting;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function() onWarmCaches;
+  final VoidCallback onOpenCoverage;
+  final VoidCallback onOpenOperations;
+  final VoidCallback onOpenSync;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        FilledButton.icon(
+          onPressed: isRefreshing ? null : onRefresh,
+          icon: const Icon(Icons.refresh_rounded),
+          label: Text(isRefreshing ? 'Running scan...' : 'Run scan'),
+        ),
+        OutlinedButton.icon(
+          onPressed: isWarmingCaches || isEncrypting ? null : onWarmCaches,
+          icon: const Icon(Icons.bolt_rounded),
+          label: Text(isWarmingCaches ? 'Warming cache...' : 'Warm cache'),
+        ),
+        OutlinedButton.icon(
+          onPressed: onOpenCoverage,
+          icon: const Icon(Icons.verified_user_outlined),
+          label: const Text('Open coverage'),
+        ),
+        OutlinedButton.icon(
+          onPressed: onOpenOperations,
+          icon: const Icon(Icons.settings_input_component_rounded),
+          label: const Text('Open operations'),
+        ),
+        TextButton.icon(
+          onPressed: onOpenSync,
+          icon: const Icon(Icons.sync_rounded),
+          label: const Text('Open sync tools'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CoverageToolbar extends StatelessWidget {
+  const _CoverageToolbar({
+    required this.query,
+    required this.statusFilter,
+    required this.kindFilter,
+    required this.onQueryChanged,
+    required this.onStatusFilterChanged,
+    required this.onKindFilterChanged,
+  });
+
+  final String query;
+  final String statusFilter;
+  final SecureContentKind? kindFilter;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<String> onStatusFilterChanged;
+  final ValueChanged<SecureContentKind?> onKindFilterChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      title: 'Content coverage',
+      subtitle:
+          'Search and filter the local inventory by asset name, content type, and encryption status before opening Operations.',
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          SizedBox(
+            width: 340,
+            child: TextFormField(
+              initialValue: query,
+              onChanged: onQueryChanged,
+              decoration: const InputDecoration(
+                labelText: 'Search inventory',
+                hintText: 'Filename, type, or status',
+                prefixIcon: Icon(Icons.search_rounded),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 200,
+            child: DropdownButtonFormField<String>(
+              value: statusFilter,
+              decoration: const InputDecoration(labelText: 'Status'),
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('All status')),
+                DropdownMenuItem(value: 'encrypted', child: Text('Encrypted')),
+                DropdownMenuItem(value: 'plain', child: Text('Plain')),
+                DropdownMenuItem(
+                  value: 'warning',
+                  child: Text('Needs attention'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  onStatusFilterChanged(value);
+                }
+              },
+            ),
+          ),
+          SizedBox(
+            width: 200,
+            child: DropdownButtonFormField<SecureContentKind?>(
+              value: kindFilter,
+              decoration: const InputDecoration(labelText: 'Type'),
+              items: const [
+                DropdownMenuItem<SecureContentKind?>(
+                  value: null,
+                  child: Text('All types'),
+                ),
+                DropdownMenuItem<SecureContentKind?>(
+                  value: SecureContentKind.json,
+                  child: Text('JSON'),
+                ),
+                DropdownMenuItem<SecureContentKind?>(
+                  value: SecureContentKind.image,
+                  child: Text('Image'),
+                ),
+                DropdownMenuItem<SecureContentKind?>(
+                  value: SecureContentKind.video,
+                  child: Text('Video'),
+                ),
+              ],
+              onChanged: onKindFilterChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CoverageSummaryGrid extends StatelessWidget {
+  const _CoverageSummaryGrid({required this.snapshot});
+
+  final _SecureContentDashboardSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final inventory = snapshot.inventory;
+    final cards = <_OverviewMetricData>[
+      _OverviewMetricData(
+        label: 'Total assets',
+        value: '${inventory.supportedFiles}',
+        supportingText: 'Supported secure content assets detected',
+        icon: Icons.folder_copy_outlined,
+      ),
+      _OverviewMetricData(
+        label: 'Secured',
+        value: '${inventory.encryptedCoveragePercent}%',
+        supportingText: 'Coverage across supported JSON, image, and video',
+        icon: Icons.lock_outline_rounded,
+      ),
+      _OverviewMetricData(
+        label: 'Plain warning',
+        value: '${inventory.plainFiles}',
+        supportingText: 'Assets still readable without encryption at rest',
+        icon: Icons.warning_amber_rounded,
+      ),
+      _OverviewMetricData(
+        label: 'Protected bytes',
+        value: _humanizeBytes(inventory.totalEncryptedBytes),
+        supportingText: 'Encrypted footprint currently available offline',
+        icon: Icons.storage_rounded,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final columns =
+            width >= 1200
+                ? 4
+                : width >= 820
+                ? 2
+                : 1;
+        const spacing = 14.0;
+        final tileWidth =
+            columns == 1
+                ? width
+                : (width - ((columns - 1) * spacing)) / columns;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (final card in cards)
+              SizedBox(
+                width: tileWidth,
+                child: _OverviewMetricCard(metric: card),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CoverageInventoryTable extends StatelessWidget {
+  const _CoverageInventoryTable({
+    required this.items,
+    required this.totalItemCount,
+    required this.totalInventoryCount,
+    required this.onOpenOperations,
+  });
+
+  final List<SecureContentInventoryItem> items;
+  final int totalItemCount;
+  final int totalInventoryCount;
+  final VoidCallback onOpenOperations;
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = DateFormat('MMM d, HH:mm');
+    if (items.isEmpty) {
+      return Text(
+        totalInventoryCount == 0
+            ? 'No supported JSON, image, or video files were detected in the secure content root.'
+            : 'No inventory rows match the current filters.',
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Showing ${items.length} of $totalItemCount matching assets.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            columnSpacing: 18,
+            columns: const [
+              DataColumn(label: Text('Asset')),
+              DataColumn(label: Text('Type')),
+              DataColumn(label: Text('Size')),
+              DataColumn(label: Text('Modified')),
+              DataColumn(label: Text('Status')),
+              DataColumn(label: Text('Actions')),
+            ],
+            rows: [
+              for (final item in items)
+                DataRow(
+                  cells: [
+                    DataCell(
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 300),
+                        child: Text(
+                          item.relativePath,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    DataCell(Text(_contentKindLabel(item.kind))),
+                    DataCell(Text(_humanizeBytes(item.sizeBytes))),
+                    DataCell(
+                      Text(formatter.format(item.modifiedAtUtc.toLocal())),
+                    ),
+                    DataCell(
+                      _StatusPill(
+                        label: item.isEncrypted ? 'Encrypted' : 'Plain',
+                        tone:
+                            item.isEncrypted
+                                ? _AlertTone.success
+                                : _AlertTone.warning,
+                      ),
+                    ),
+                    DataCell(
+                      item.isEncrypted
+                          ? Text(
+                            'Protected',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          )
+                          : TextButton.icon(
+                            onPressed: onOpenOperations,
+                            icon: const Icon(Icons.lock_rounded),
+                            label: const Text('Open Operations'),
+                          ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.label, required this.tone});
+
+  final String label;
+  final _AlertTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (background, foreground) = switch (tone) {
+      _AlertTone.success => (
+        scheme.secondaryContainer,
+        scheme.onSecondaryContainer,
+      ),
+      _AlertTone.info => (
+        scheme.surfaceContainerHighest,
+        scheme.onSurfaceVariant,
+      ),
+      _AlertTone.warning => (
+        scheme.tertiaryContainer,
+        scheme.onTertiaryContainer,
+      ),
+      _AlertTone.error => (scheme.errorContainer, scheme.onErrorContainer),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(
+          context,
+        ).textTheme.labelMedium?.copyWith(color: foreground),
+      ),
     );
   }
 }
@@ -2264,7 +3124,8 @@ class _OperationalHighlightsPanel extends StatelessWidget {
       children: [
         _HighlightRow(
           label: 'Current operator',
-          value: '${snapshot.currentSession.displayName} (@${snapshot.currentSession.username})',
+          value:
+              '${snapshot.currentSession.displayName} (@${snapshot.currentSession.username})',
         ),
         const SizedBox(height: 10),
         _HighlightRow(
@@ -2274,9 +3135,10 @@ class _OperationalHighlightsPanel extends StatelessWidget {
         const SizedBox(height: 10),
         _HighlightRow(
           label: 'Last maintenance action',
-          value: lastMaintenance == null
-              ? 'No maintenance activity recorded yet'
-              : '${lastMaintenance.summary} • ${formatter.format(lastMaintenance.occurredAtUtc.toLocal())}',
+          value:
+              lastMaintenance == null
+                  ? 'No maintenance activity recorded yet'
+                  : '${lastMaintenance.summary} • ${formatter.format(lastMaintenance.occurredAtUtc.toLocal())}',
         ),
         const SizedBox(height: 10),
         _HighlightRow(
@@ -2441,16 +3303,16 @@ class _AlertTile extends StatelessWidget {
               children: [
                 Text(
                   alert.title,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: foreground,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(color: foreground),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   alert.message,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: foreground,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: foreground),
                 ),
               ],
             ),
@@ -2462,11 +3324,30 @@ class _AlertTile extends StatelessWidget {
 }
 
 class _OperationsBanner extends StatelessWidget {
-  const _OperationsBanner();
+  const _OperationsBanner({
+    required this.snapshot,
+    required this.selectedSourceCount,
+  });
+
+  final SecureContentEncryptionJobSnapshot snapshot;
+  final int selectedSourceCount;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final title =
+        snapshot.isRunning
+            ? 'Encrypting secure content batch'
+            : selectedSourceCount > 0
+            ? 'Pending secure content import'
+            : 'Operations console is ready';
+    final description =
+        snapshot.isRunning
+            ? (snapshot.statusText ??
+                'A protected import batch is currently encrypting selected content.')
+            : selectedSourceCount > 0
+            ? '$selectedSourceCount selected file${selectedSourceCount == 1 ? '' : 's'} are ready to review and encrypt.'
+            : 'Use this tab to prepare sources, monitor active jobs, and run maintenance without mixing workflows.';
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -2489,20 +3370,36 @@ class _OperationsBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.admin_panel_settings_outlined, color: scheme.primary),
+          Icon(
+            snapshot.isRunning
+                ? Icons.data_usage_rounded
+                : Icons.admin_panel_settings_outlined,
+            color: scheme.primary,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Primary encryption workflows are separated from maintenance utilities.',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                Text(title, style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 6),
                 Text(
-                  'Use the import workspace for protected file onboarding, and keep cache or cleanup actions in the lower-emphasis maintenance panel. Sensitive operations should always be reviewed before execution.',
+                  description,
                   style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                LinearProgressIndicator(
+                  value: snapshot.percentComplete,
+                  minHeight: 8,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  snapshot.isRunning
+                      ? '${snapshot.settledFiles} of ${snapshot.totalFiles} files settled • ${_humanizeBytes(snapshot.processedBytes)} processed'
+                      : selectedSourceCount > 0
+                      ? 'Review the queue below, then start an encrypted import.'
+                      : 'No active encryption job is running.',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
@@ -2510,6 +3407,526 @@ class _OperationsBanner extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _OperationsQueuePanel extends StatelessWidget {
+  const _OperationsQueuePanel({
+    required this.snapshot,
+    required this.selectedSourceCount,
+  });
+
+  final SecureContentEncryptionJobSnapshot snapshot;
+  final int selectedSourceCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _StatChip(label: 'Active', value: '${snapshot.activeFiles}'),
+            _StatChip(label: 'Queued', value: '${snapshot.queuedFiles}'),
+            _StatChip(label: 'Completed', value: '${snapshot.completedFiles}'),
+            _StatChip(label: 'Failed', value: '${snapshot.failedFiles}'),
+            _StatChip(label: 'Selected', value: '$selectedSourceCount'),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (snapshot.items.isEmpty)
+          Text(
+            selectedSourceCount == 0
+                ? 'No active job and no pending selection. Browse files or a folder to build a batch.'
+                : 'Selected sources are ready for review in the encryption workspace below.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          )
+        else
+          Column(
+            children: [
+              for (final item in snapshot.items.take(5)) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        p.basename(item.sourcePath),
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 120,
+                      child: Text(
+                        _SelectedSourcesReviewTable._statusLabel(item.stage),
+                        textAlign: TextAlign.right,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+              ],
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+class _OperationsHealthPanel extends StatelessWidget {
+  const _OperationsHealthPanel({
+    required this.inventory,
+    required this.snapshot,
+  });
+
+  final SecureContentInventory? inventory;
+  final SecureContentEncryptionJobSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final inventoryData = inventory;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _StatChip(
+              label: 'Batch progress',
+              value: '${(snapshot.percentComplete * 100).round()}%',
+            ),
+            _StatChip(
+              label: 'Processed',
+              value: _humanizeBytes(snapshot.processedBytes),
+            ),
+            _StatChip(label: 'Queued files', value: '${snapshot.queuedFiles}'),
+            _StatChip(label: 'Failures', value: '${snapshot.failedFiles}'),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (inventoryData != null) ...[
+          Text(
+            'Encrypted coverage remains at ${inventoryData.encryptedCoveragePercent}% across ${inventoryData.supportedFiles} supported assets.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(
+            value: inventoryData.encryptedCoveragePercent / 100,
+            minHeight: 8,
+          ),
+        ] else
+          Text(
+            'Inventory data is still loading.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+      ],
+    );
+  }
+}
+
+class _OperationsDangerZone extends StatelessWidget {
+  const _OperationsDangerZone({
+    required this.isBusy,
+    required this.onClearCaches,
+    required this.onClearLoginRecords,
+  });
+
+  final bool isBusy;
+  final Future<void> Function() onClearCaches;
+  final Future<void> Function() onClearLoginRecords;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'These controls remove decrypted runtime artifacts or local audit history and should be used deliberately.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            FilledButton.icon(
+              onPressed: isBusy ? null : onClearCaches,
+              icon: const Icon(Icons.cleaning_services_rounded),
+              label: const Text('Clear decrypted caches'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Theme.of(context).colorScheme.onError,
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: isBusy ? null : onClearLoginRecords,
+              icon: const Icon(Icons.history_toggle_off_rounded),
+              label: const Text('Clear login records'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ActivityFiltersPanel extends StatelessWidget {
+  const _ActivityFiltersPanel({
+    required this.daysFilter,
+    required this.actorFilter,
+    required this.typeFilter,
+    required this.actorOptions,
+    required this.onDaysFilterChanged,
+    required this.onActorFilterChanged,
+    required this.onTypeFilterChanged,
+  });
+
+  final int? daysFilter;
+  final String? actorFilter;
+  final AdminActivityType? typeFilter;
+  final List<String> actorOptions;
+  final ValueChanged<int?> onDaysFilterChanged;
+  final ValueChanged<String?> onActorFilterChanged;
+  final ValueChanged<AdminActivityType?> onTypeFilterChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      title: 'Activity filters',
+      subtitle:
+          'Refine the audit view by time range, operator, and action type before reviewing recent logs.',
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          SizedBox(
+            width: 220,
+            child: DropdownButtonFormField<int?>(
+              value: daysFilter,
+              decoration: const InputDecoration(labelText: 'Date range'),
+              items: const [
+                DropdownMenuItem<int?>(value: null, child: Text('All time')),
+                DropdownMenuItem<int?>(value: 1, child: Text('Last 24 hours')),
+                DropdownMenuItem<int?>(value: 7, child: Text('Last 7 days')),
+                DropdownMenuItem<int?>(value: 30, child: Text('Last 30 days')),
+              ],
+              onChanged: onDaysFilterChanged,
+            ),
+          ),
+          SizedBox(
+            width: 220,
+            child: DropdownButtonFormField<String?>(
+              value: actorFilter,
+              decoration: const InputDecoration(labelText: 'User'),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('All users'),
+                ),
+                for (final actor in actorOptions)
+                  DropdownMenuItem<String?>(value: actor, child: Text(actor)),
+              ],
+              onChanged: onActorFilterChanged,
+            ),
+          ),
+          SizedBox(
+            width: 240,
+            child: DropdownButtonFormField<AdminActivityType?>(
+              value: typeFilter,
+              decoration: const InputDecoration(labelText: 'Action type'),
+              items: [
+                const DropdownMenuItem<AdminActivityType?>(
+                  value: null,
+                  child: Text('All actions'),
+                ),
+                for (final type in AdminActivityType.values)
+                  DropdownMenuItem<AdminActivityType?>(
+                    value: type,
+                    child: Text(_activityTypeLabel(type)),
+                  ),
+              ],
+              onChanged: onTypeFilterChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivitySummaryGrid extends StatelessWidget {
+  const _ActivitySummaryGrid({required this.activities});
+
+  final List<AdminActivityRecord> activities;
+
+  @override
+  Widget build(BuildContext context) {
+    final failureCount =
+        activities
+            .where(
+              (activity) => activity.type == AdminActivityType.loginFailure,
+            )
+            .length;
+    final encryptionCount =
+        activities
+            .where(
+              (activity) => activity.type == AdminActivityType.encryptionBatch,
+            )
+            .length;
+    final maintenanceCount =
+        activities
+            .where(
+              (activity) =>
+                  activity.type == AdminActivityType.inventoryRefresh ||
+                  activity.type == AdminActivityType.warmCaches ||
+                  activity.type == AdminActivityType.clearCaches,
+            )
+            .length;
+    final cards = <_OverviewMetricData>[
+      _OverviewMetricData(
+        label: 'Visible events',
+        value: '${activities.length}',
+        supportingText: 'Current rows after filter application',
+        icon: Icons.history_rounded,
+      ),
+      _OverviewMetricData(
+        label: 'Auth failures',
+        value: '$failureCount',
+        supportingText: 'Failed sign-in attempts in the current window',
+        icon: Icons.warning_amber_rounded,
+      ),
+      _OverviewMetricData(
+        label: 'Encryption jobs',
+        value: '$encryptionCount',
+        supportingText: 'Tracked secure content import batches',
+        icon: Icons.lock_rounded,
+      ),
+      _OverviewMetricData(
+        label: 'Maintenance',
+        value: '$maintenanceCount',
+        supportingText: 'Scans, warm-ups, and cache clears recorded',
+        icon: Icons.build_circle_outlined,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final columns =
+            width >= 1200
+                ? 4
+                : width >= 820
+                ? 2
+                : 1;
+        const spacing = 14.0;
+        final tileWidth =
+            columns == 1
+                ? width
+                : (width - ((columns - 1) * spacing)) / columns;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (final card in cards)
+              SizedBox(
+                width: tileWidth,
+                child: _OverviewMetricCard(metric: card),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ActivityTablePanel extends StatelessWidget {
+  const _ActivityTablePanel({required this.activities});
+
+  final List<AdminActivityRecord> activities;
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = DateFormat('MMM d, HH:mm');
+    if (activities.isEmpty) {
+      return Text(
+        'No audit events match the current filters.',
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 18,
+        columns: const [
+          DataColumn(label: Text('Timestamp')),
+          DataColumn(label: Text('Subject')),
+          DataColumn(label: Text('Action')),
+          DataColumn(label: Text('Status')),
+        ],
+        rows: [
+          for (final activity in activities.take(20))
+            DataRow(
+              cells: [
+                DataCell(
+                  Text(formatter.format(activity.occurredAtUtc.toLocal())),
+                ),
+                DataCell(Text(activity.actorUsername ?? 'system')),
+                DataCell(
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 360),
+                    child: Text(
+                      activity.summary,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  _StatusPill(
+                    label: _activityStatusLabel(activity),
+                    tone: _activityTone(activity),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuditReadinessPanel extends StatelessWidget {
+  const _AuditReadinessPanel({
+    required this.snapshot,
+    required this.activities,
+    required this.inventory,
+  });
+
+  final _SecureContentDashboardSnapshot snapshot;
+  final List<AdminActivityRecord> activities;
+  final SecureContentInventory? inventory;
+
+  @override
+  Widget build(BuildContext context) {
+    final failureCount =
+        activities
+            .where(
+              (activity) => activity.type == AdminActivityType.loginFailure,
+            )
+            .length;
+    final inventoryData = inventory;
+    final readinessLabel =
+        failureCount == 0 && (inventoryData?.plainFiles ?? 0) == 0
+            ? 'Audit posture is stable.'
+            : 'Audit posture needs review.';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(readinessLabel, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _StatChip(label: 'Visible events', value: '${activities.length}'),
+            _StatChip(label: 'Auth failures', value: '$failureCount'),
+            _StatChip(
+              label: 'Coverage',
+              value:
+                  inventoryData == null
+                      ? 'Pending'
+                      : '${inventoryData.encryptedCoveragePercent}%',
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Tracked admins: ${snapshot.users.length}. Imported payload so far: ${_humanizeBytes(snapshot.totalImportedBytes)} across ${snapshot.totalImportedItems} items.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ],
+    );
+  }
+}
+
+String _contentKindLabel(SecureContentKind kind) {
+  switch (kind) {
+    case SecureContentKind.json:
+      return 'JSON';
+    case SecureContentKind.image:
+      return 'Image';
+    case SecureContentKind.video:
+      return 'Video';
+    case SecureContentKind.other:
+      return 'Other';
+  }
+}
+
+String _activityTypeLabel(AdminActivityType type) {
+  switch (type) {
+    case AdminActivityType.loginSuccess:
+      return 'Login success';
+    case AdminActivityType.loginFailure:
+      return 'Login failure';
+    case AdminActivityType.logout:
+      return 'Logout';
+    case AdminActivityType.userCreated:
+      return 'User created';
+    case AdminActivityType.passwordChanged:
+      return 'Password changed';
+    case AdminActivityType.profileUpdated:
+      return 'Profile updated';
+    case AdminActivityType.inventoryRefresh:
+      return 'Inventory refresh';
+    case AdminActivityType.warmCaches:
+      return 'Warm caches';
+    case AdminActivityType.clearCaches:
+      return 'Clear caches';
+    case AdminActivityType.encryptionBatch:
+      return 'Encryption batch';
+    case AdminActivityType.loginRecordsCleared:
+      return 'Login records cleared';
+  }
+}
+
+String _activityStatusLabel(AdminActivityRecord activity) {
+  switch (activity.type) {
+    case AdminActivityType.loginFailure:
+      return 'Warning';
+    case AdminActivityType.encryptionBatch:
+      return 'Encrypted';
+    case AdminActivityType.inventoryRefresh:
+    case AdminActivityType.warmCaches:
+    case AdminActivityType.clearCaches:
+    case AdminActivityType.loginSuccess:
+    case AdminActivityType.logout:
+    case AdminActivityType.userCreated:
+    case AdminActivityType.passwordChanged:
+    case AdminActivityType.profileUpdated:
+    case AdminActivityType.loginRecordsCleared:
+      return 'Success';
+  }
+}
+
+_AlertTone _activityTone(AdminActivityRecord activity) {
+  switch (activity.type) {
+    case AdminActivityType.loginFailure:
+      return _AlertTone.warning;
+    case AdminActivityType.encryptionBatch:
+    case AdminActivityType.inventoryRefresh:
+    case AdminActivityType.warmCaches:
+    case AdminActivityType.clearCaches:
+    case AdminActivityType.loginSuccess:
+    case AdminActivityType.logout:
+    case AdminActivityType.userCreated:
+    case AdminActivityType.passwordChanged:
+    case AdminActivityType.profileUpdated:
+    case AdminActivityType.loginRecordsCleared:
+      return _AlertTone.success;
   }
 }
 
@@ -2526,13 +3943,20 @@ class _CategoryStatisticsPanel extends StatelessWidget {
         for (final metric in snapshot.categoryMetrics) ...[
           Row(
             children: [
-              Icon(metric.icon, size: 20, color: Theme.of(context).colorScheme.primary),
+              Icon(
+                metric.icon,
+                size: 20,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(metric.label, style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      metric.label,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       '${metric.count} encrypted items • ${_humanizeBytes(metric.bytes)}',
@@ -2567,7 +3991,10 @@ class _DateAndSizePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final metrics = snapshot.dateMetrics.take(6).toList(growable: false);
-    final maxCount = metrics.fold<int>(1, (maxValue, item) => math.max(maxValue, item.encryptedCount));
+    final maxCount = metrics.fold<int>(
+      1,
+      (maxValue, item) => math.max(maxValue, item.encryptedCount),
+    );
     final formatter = DateFormat('MMM d');
 
     return Column(
@@ -2579,7 +4006,10 @@ class _DateAndSizePanel extends StatelessWidget {
           children: [
             _StatChip(
               label: 'Largest day',
-              value: metrics.isEmpty ? 'No data' : '${metrics.first.encryptedCount} items',
+              value:
+                  metrics.isEmpty
+                      ? 'No data'
+                      : '${metrics.first.encryptedCount} items',
             ),
             _StatChip(
               label: 'Encrypted size',
@@ -2587,11 +4017,14 @@ class _DateAndSizePanel extends StatelessWidget {
             ),
             _StatChip(
               label: 'Avg item size',
-              value: snapshot.totalEncryptedFiles == 0
-                  ? '0 B'
-                  : _humanizeBytes(
-                    (snapshot.totalEncryptedBytes / snapshot.totalEncryptedFiles).round(),
-                  ),
+              value:
+                  snapshot.totalEncryptedFiles == 0
+                      ? '0 B'
+                      : _humanizeBytes(
+                        (snapshot.totalEncryptedBytes /
+                                snapshot.totalEncryptedFiles)
+                            .round(),
+                      ),
             ),
           ],
         ),
@@ -2667,7 +4100,10 @@ class _UserActivityPanel extends StatelessWidget {
                     ),
                     if (entry.isCurrentUser)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.primaryContainer,
                           borderRadius: BorderRadius.circular(999),
@@ -2742,16 +4178,24 @@ class _MaintenancePanel extends StatelessWidget {
           children: [
             FilledButton.icon(
               onPressed:
-                  isWarmingCaches || isClearingCaches || isEncrypting ? null : onWarmCaches,
+                  isWarmingCaches || isClearingCaches || isEncrypting
+                      ? null
+                      : onWarmCaches,
               icon: const Icon(Icons.bolt_rounded),
-              label: Text(isWarmingCaches ? 'Warming caches...' : 'Warm secure caches'),
+              label: Text(
+                isWarmingCaches ? 'Warming caches...' : 'Warm secure caches',
+              ),
             ),
             OutlinedButton.icon(
               onPressed:
-                  isWarmingCaches || isClearingCaches || isEncrypting ? null : onClearCaches,
+                  isWarmingCaches || isClearingCaches || isEncrypting
+                      ? null
+                      : onClearCaches,
               icon: const Icon(Icons.cleaning_services_rounded),
               label: Text(
-                isClearingCaches ? 'Clearing caches...' : 'Clear decrypted caches',
+                isClearingCaches
+                    ? 'Clearing caches...'
+                    : 'Clear decrypted caches',
               ),
             ),
           ],
@@ -2762,9 +4206,18 @@ class _MaintenancePanel extends StatelessWidget {
             spacing: 10,
             runSpacing: 10,
             children: [
-              _StatChip(label: 'Supported files', value: '${inventoryData.supportedFiles}'),
-              _StatChip(label: 'Plain files', value: '${inventoryData.plainFiles}'),
-              _StatChip(label: 'Encrypted files', value: '${inventoryData.encryptedFiles}'),
+              _StatChip(
+                label: 'Supported files',
+                value: '${inventoryData.supportedFiles}',
+              ),
+              _StatChip(
+                label: 'Plain files',
+                value: '${inventoryData.plainFiles}',
+              ),
+              _StatChip(
+                label: 'Encrypted files',
+                value: '${inventoryData.encryptedFiles}',
+              ),
             ],
           ),
         const SizedBox(height: 12),
@@ -2811,13 +4264,17 @@ class _RecentActivityPanel extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(activity.summary, style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      activity.summary,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       '${formatter.format(activity.occurredAtUtc.toLocal())} • ${activity.actorUsername ?? 'system'} • ${activity.category}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    if ((activity.itemCount ?? 0) > 0 || (activity.totalBytes ?? 0) > 0)
+                    if ((activity.itemCount ?? 0) > 0 ||
+                        (activity.totalBytes ?? 0) > 0)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
@@ -2904,7 +4361,9 @@ class _LoginRecordsPanel extends StatelessWidget {
           for (final activity in loginActivities)
             DataRow(
               cells: [
-                DataCell(Text(formatter.format(activity.occurredAtUtc.toLocal()))),
+                DataCell(
+                  Text(formatter.format(activity.occurredAtUtc.toLocal())),
+                ),
                 DataCell(Text(activity.actorUsername ?? 'system')),
                 DataCell(Text(activity.summary)),
                 DataCell(Text(activity.category)),
@@ -3009,15 +4468,18 @@ class _EncryptionImportPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final jsonCount = selectedSources
-        .where((item) => item.kind == SecureContentKind.json)
-        .length;
-    final imageCount = selectedSources
-        .where((item) => item.kind == SecureContentKind.image)
-        .length;
-    final videoCount = selectedSources
-        .where((item) => item.kind == SecureContentKind.video)
-        .length;
+    final jsonCount =
+        selectedSources
+            .where((item) => item.kind == SecureContentKind.json)
+            .length;
+    final imageCount =
+        selectedSources
+            .where((item) => item.kind == SecureContentKind.image)
+            .length;
+    final videoCount =
+        selectedSources
+            .where((item) => item.kind == SecureContentKind.video)
+            .length;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -3153,10 +4615,13 @@ class _EncryptionImportPanel extends StatelessWidget {
             ),
           const SizedBox(height: 14),
           FilledButton.icon(
-            onPressed: selectedSources.isEmpty || isEncrypting ? null : onImport,
+            onPressed:
+                selectedSources.isEmpty || isEncrypting ? null : onImport,
             icon: const Icon(Icons.lock_rounded),
             label: Text(
-              isEncrypting ? 'Encrypting and importing...' : 'Encrypt into daylySport',
+              isEncrypting
+                  ? 'Encrypting and importing...'
+                  : 'Encrypt into daylySport',
             ),
           ),
         ],
@@ -3189,10 +4654,7 @@ class _DestinationPresetEditor extends StatelessWidget {
       children: [
         TextField(
           controller: controller,
-          decoration: InputDecoration(
-            labelText: label,
-            hintText: hintText,
-          ),
+          decoration: InputDecoration(labelText: label, hintText: hintText),
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -3250,82 +4712,85 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
               DataColumn(label: Text('Progress')),
               DataColumn(label: Text('Remove')),
             ],
-            rows: selectedSources.map((source) {
-              final itemState = progressByRequestId[source.requestId];
-              final destinationRoot = destinationByKind[source.kind] ?? '';
-              final outputPath = destinationRoot.isEmpty
-                  ? source.relativeOutputPath
-                  : p.join(destinationRoot, source.relativeOutputPath);
-              return DataRow(
-                cells: [
-                  DataCell(
-                    Row(
-                      children: [
-                        Icon(
-                          _iconForKind(source.kind),
-                          size: 18,
-                          color: Theme.of(context).colorScheme.primary,
+            rows: selectedSources
+                .map((source) {
+                  final itemState = progressByRequestId[source.requestId];
+                  final destinationRoot = destinationByKind[source.kind] ?? '';
+                  final outputPath =
+                      destinationRoot.isEmpty
+                          ? source.relativeOutputPath
+                          : p.join(destinationRoot, source.relativeOutputPath);
+                  return DataRow(
+                    cells: [
+                      DataCell(
+                        Row(
+                          children: [
+                            Icon(
+                              _iconForKind(source.kind),
+                              size: 18,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(_kindText(source.kind)),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(_kindText(source.kind)),
-                      ],
-                    ),
-                  ),
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 220),
-                      child: Text(
-                        source.relativeOutputPath,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ),
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 280),
-                      child: Text(
-                        itemState?.destinationPath ??
-                            _encryptedPreviewPath(outputPath, source.kind),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 160),
-                      child: Text(_statusLabel(itemState?.stage)),
-                    ),
-                  ),
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 180),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          LinearProgressIndicator(
-                            value: itemState?.percentComplete,
-                            minHeight: 8,
+                      DataCell(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 220),
+                          child: Text(
+                            source.relativeOutputPath,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _progressLabel(itemState),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                  DataCell(
-                    IconButton(
-                      tooltip: 'Remove file',
-                      onPressed: () => onRemoveSource(source),
-                      icon: const Icon(Icons.delete_outline_rounded),
-                    ),
-                  ),
-                ],
-              );
-            }).toList(growable: false),
+                      DataCell(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 280),
+                          child: Text(
+                            itemState?.destinationPath ??
+                                _encryptedPreviewPath(outputPath, source.kind),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 160),
+                          child: Text(_statusLabel(itemState?.stage)),
+                        ),
+                      ),
+                      DataCell(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 180),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              LinearProgressIndicator(
+                                value: itemState?.percentComplete,
+                                minHeight: 8,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _progressLabel(itemState),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        IconButton(
+                          tooltip: 'Remove file',
+                          onPressed: () => onRemoveSource(source),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        ),
+                      ),
+                    ],
+                  );
+                })
+                .toList(growable: false),
           ),
         ),
       ],
@@ -3358,7 +4823,10 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
     }
   }
 
-  static String _encryptedPreviewPath(String logicalPath, SecureContentKind kind) {
+  static String _encryptedPreviewPath(
+    String logicalPath,
+    SecureContentKind kind,
+  ) {
     switch (kind) {
       case SecureContentKind.json:
         return '$logicalPath$kEncryptedJsonExtension';
@@ -3397,9 +4865,10 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
       return '0%';
     }
     final percent = (itemState.percentComplete * 100).round();
-    final bytesLabel = itemState.totalBytes > 0
-        ? ' • ${_humanizeBytes(itemState.processedBytes)} / ${_humanizeBytes(itemState.totalBytes)}'
-        : '';
+    final bytesLabel =
+        itemState.totalBytes > 0
+            ? ' • ${_humanizeBytes(itemState.processedBytes)} / ${_humanizeBytes(itemState.totalBytes)}'
+            : '';
     return '$percent%$bytesLabel';
   }
 }
@@ -3423,7 +4892,9 @@ class _EncryptionProgressSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            snapshot.isRunning ? 'Encryption in progress' : 'Last encryption batch',
+            snapshot.isRunning
+                ? 'Encryption in progress'
+                : 'Last encryption batch',
             style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 10),
@@ -3437,7 +4908,10 @@ class _EncryptionProgressSection extends StatelessWidget {
             runSpacing: 10,
             children: [
               _StatChip(label: 'Total', value: '${snapshot.totalFiles}'),
-              _StatChip(label: 'Completed', value: '${snapshot.completedFiles}'),
+              _StatChip(
+                label: 'Completed',
+                value: '${snapshot.completedFiles}',
+              ),
               _StatChip(label: 'Queued', value: '${snapshot.queuedFiles}'),
               _StatChip(label: 'Failed', value: '${snapshot.failedFiles}'),
               _StatChip(label: 'Skipped', value: '${snapshot.skippedFiles}'),
@@ -3483,7 +4957,10 @@ List<String> collectEncryptableSourceFiles(String rootPath) {
   }
 
   final results = <String>[];
-  for (final entity in directory.listSync(recursive: true, followLinks: false)) {
+  for (final entity in directory.listSync(
+    recursive: true,
+    followLinks: false,
+  )) {
     if (entity is! File) {
       continue;
     }
@@ -3502,6 +4979,22 @@ Future<SecureContentInventory> scanSecureContentInventoryInIsolate(
   String rootPath,
 ) {
   return Isolate.run(() => scanSecureContentInventory(rootPath));
+}
+
+class SecureContentInventoryItem {
+  const SecureContentInventoryItem({
+    required this.relativePath,
+    required this.kind,
+    required this.isEncrypted,
+    required this.sizeBytes,
+    required this.modifiedAtUtc,
+  });
+
+  final String relativePath;
+  final SecureContentKind kind;
+  final bool isEncrypted;
+  final int sizeBytes;
+  final DateTime modifiedAtUtc;
 }
 
 class SecureContentInventory {
@@ -3525,6 +5018,7 @@ class SecureContentInventory {
     required this.encryptedDateBuckets,
     required this.sampleEncryptedPaths,
     required this.samplePlainPaths,
+    required this.items,
   });
 
   final String rootPath;
@@ -3546,6 +5040,7 @@ class SecureContentInventory {
   final List<SecureContentDateBucket> encryptedDateBuckets;
   final List<String> sampleEncryptedPaths;
   final List<String> samplePlainPaths;
+  final List<SecureContentInventoryItem> items;
 
   int get supportedFiles =>
       plainJsonFiles +
@@ -3558,10 +5053,10 @@ class SecureContentInventory {
   int get encryptedFiles =>
       encryptedJsonFiles + encryptedImageFiles + encryptedVideoFiles;
 
-    int get totalEncryptedBytes =>
+  int get totalEncryptedBytes =>
       encryptedJsonBytes + encryptedImageBytes + encryptedVideoBytes;
 
-    int get totalPlainBytes => plainJsonBytes + plainImageBytes + plainVideoBytes;
+  int get totalPlainBytes => plainJsonBytes + plainImageBytes + plainVideoBytes;
 
   int get plainFiles => plainJsonFiles + plainImageFiles + plainVideoFiles;
 
@@ -3604,6 +5099,7 @@ SecureContentInventory scanSecureContentInventory(String rootPath) {
   var encryptedVideoBytes = 0;
   final sampleEncryptedPaths = <String>[];
   final samplePlainPaths = <String>[];
+  final items = <SecureContentInventoryItem>[];
   final encryptedDateAccumulator = <DateTime, _EncryptedDateAccumulator>{};
 
   if (rootDirectory.existsSync()) {
@@ -3656,8 +5152,13 @@ SecureContentInventory scanSecureContentInventory(String rootPath) {
           otherFiles += 1;
       }
 
-      if (descriptor.isEncrypted && descriptor.kind != SecureContentKind.other) {
-        final dayUtc = DateTime.utc(modifiedAt.year, modifiedAt.month, modifiedAt.day);
+      if (descriptor.isEncrypted &&
+          descriptor.kind != SecureContentKind.other) {
+        final dayUtc = DateTime.utc(
+          modifiedAt.year,
+          modifiedAt.month,
+          modifiedAt.day,
+        );
         final accumulator = encryptedDateAccumulator.putIfAbsent(
           dayUtc,
           () => _EncryptedDateAccumulator(dayUtc: dayUtc),
@@ -3670,6 +5171,17 @@ SecureContentInventory scanSecureContentInventory(String rootPath) {
         entity.path,
         fromDirectory: rootPath,
       );
+      if (descriptor.kind != SecureContentKind.other) {
+        items.add(
+          SecureContentInventoryItem(
+            relativePath: relativePath,
+            kind: descriptor.kind,
+            isEncrypted: descriptor.isEncrypted,
+            sizeBytes: fileSizeBytes,
+            modifiedAtUtc: modifiedAt,
+          ),
+        );
+      }
       if (descriptor.isEncrypted && sampleEncryptedPaths.length < 6) {
         sampleEncryptedPaths.add(relativePath);
       } else if (!descriptor.isEncrypted &&
@@ -3709,6 +5221,21 @@ SecureContentInventory scanSecureContentInventory(String rootPath) {
       ..sort((left, right) => right.dayUtc.compareTo(left.dayUtc)),
     sampleEncryptedPaths: sampleEncryptedPaths,
     samplePlainPaths: samplePlainPaths,
+    items:
+        items..sort((left, right) {
+          if (left.isEncrypted != right.isEncrypted) {
+            return left.isEncrypted ? 1 : -1;
+          }
+          final modifiedCompare = right.modifiedAtUtc.compareTo(
+            left.modifiedAtUtc,
+          );
+          if (modifiedCompare != 0) {
+            return modifiedCompare;
+          }
+          return left.relativePath.toLowerCase().compareTo(
+            right.relativePath.toLowerCase(),
+          );
+        }),
   );
 }
 

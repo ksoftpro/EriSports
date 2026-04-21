@@ -23,150 +23,178 @@ const MethodChannel _pathProviderChannel = MethodChannel(
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('admin app supports setup, user management, password rotation, and protected login', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1400, 1900);
-    tester.view.devicePixelRatio = 1.0;
+  testWidgets(
+    'admin app supports setup, user management, password rotation, and protected login',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 1900);
+      tester.view.devicePixelRatio = 1.0;
 
-    final harness = await _AdminIntegrationHarness.create();
-    addTearDown(() async {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-      await harness.dispose();
-    });
+      final harness = await _AdminIntegrationHarness.create();
+      addTearDown(() async {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+        await harness.dispose();
+      });
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          sharedPreferencesProvider.overrideWithValue(harness.preferences),
-          appServicesProvider.overrideWithValue(harness.services),
-          appProductVariantProvider.overrideWithValue(AppProductVariant.admin),
-        ],
-        child: const EriSportsApp(),
-      ),
-    );
-    await _pumpForUi(tester, frames: 18);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(harness.preferences),
+            appServicesProvider.overrideWithValue(harness.services),
+            appProductVariantProvider.overrideWithValue(
+              AppProductVariant.admin,
+            ),
+          ],
+          child: const EriSportsApp(),
+        ),
+      );
+      await _pumpForUi(tester, frames: 18);
 
-    expect(find.text('Initialize Admin Access'), findsOneWidget);
-    expect(find.byKey(adminLoginDisplayNameFieldKey), findsOneWidget);
+      expect(find.text('Initialize Admin Access'), findsOneWidget);
+      expect(find.byKey(adminLoginDisplayNameFieldKey), findsOneWidget);
 
-    await tester.enterText(
-      find.byKey(adminLoginDisplayNameFieldKey),
-      'Lead Operations',
-    );
-    await tester.enterText(find.byKey(adminLoginUsernameFieldKey), 'opslead');
-    await tester.enterText(find.byKey(adminLoginPasswordFieldKey), 'Secure123');
-    await tester.enterText(
-      find.byKey(adminLoginConfirmPasswordFieldKey),
-      'Secure123',
-    );
-    await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
-    await _pumpForUi(tester, frames: 28);
+      await tester.enterText(
+        find.byKey(adminLoginDisplayNameFieldKey),
+        'Lead Operations',
+      );
+      await tester.enterText(find.byKey(adminLoginUsernameFieldKey), 'opslead');
+      await tester.enterText(
+        find.byKey(adminLoginPasswordFieldKey),
+        'Secure123',
+      );
+      await tester.enterText(
+        find.byKey(adminLoginConfirmPasswordFieldKey),
+        'Secure123',
+      );
+      await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
+      await _pumpForUi(tester, frames: 28);
 
-    expect(find.text('Secure Content Operations'), findsOneWidget);
-    expect(find.byKey(adminDashboardOverviewKey), findsOneWidget);
+      expect(find.text('Secure Content Operations'), findsOneWidget);
+      expect(find.byKey(adminDashboardOverviewKey), findsOneWidget);
+      expect(find.text('Overview'), findsOneWidget);
 
-  await tester.tap(find.byKey(adminDashboardCoverageTabKey).hitTestable());
-  await _pumpForUi(tester, frames: 8);
-    expect(find.text('Category coverage'), findsOneWidget);
+      await tester.tap(find.byKey(adminDashboardCoverageTabKey).hitTestable());
+      await _pumpForUi(tester, frames: 8);
 
-  await tester.tap(find.byKey(adminDashboardHomeTabKey).hitTestable());
-  await _pumpForUi(tester, frames: 8);
+      await tester.tap(find.byKey(adminDashboardHomeTabKey).hitTestable());
+      await _pumpForUi(tester, frames: 8);
 
-    await tester.tap(find.byKey(adminDashboardMenuButtonKey).hitTestable());
-    await _pumpForUi(tester, frames: 8);
-    await tester.tap(find.text('Create admin user').last.hitTestable());
-    await _pumpForUi(tester, frames: 8);
+      await tester.tap(find.byKey(adminDashboardMenuButtonKey).hitTestable());
+      await _pumpForUi(tester, frames: 8);
+      await tester.tap(find.text('Create admin user').last.hitTestable());
+      await _pumpForUi(tester, frames: 8);
 
-    await tester.enterText(
-      find.byKey(adminCreateUserDisplayNameFieldKey),
-      'Night Shift',
-    );
-    await tester.enterText(
-      find.byKey(adminCreateUserUsernameFieldKey),
-      'nightshift',
-    );
-    await tester.enterText(
-      find.byKey(adminCreateUserPasswordFieldKey),
-      'Night123',
-    );
-    await tester.enterText(
-      find.byKey(adminCreateUserConfirmPasswordFieldKey),
-      'Night123',
-    );
-    await tester.tap(find.byKey(adminCreateUserSubmitButtonKey).hitTestable());
-    await _pumpForUi(tester, frames: 18);
+      await tester.enterText(
+        find.byKey(adminCreateUserDisplayNameFieldKey),
+        'Night Shift',
+      );
+      await tester.enterText(
+        find.byKey(adminCreateUserUsernameFieldKey),
+        'nightshift',
+      );
+      await tester.enterText(
+        find.byKey(adminCreateUserPasswordFieldKey),
+        'Night123',
+      );
+      await tester.enterText(
+        find.byKey(adminCreateUserConfirmPasswordFieldKey),
+        'Night123',
+      );
+      await tester.tap(
+        find.byKey(adminCreateUserSubmitButtonKey).hitTestable(),
+      );
+      await _pumpForUi(tester, frames: 18);
 
-    expect(find.textContaining('Admin user created.'), findsOneWidget);
-    expect(find.textContaining('Night Shift'), findsWidgets);
+      expect(find.textContaining('Admin user created.'), findsOneWidget);
+      expect(find.textContaining('Night Shift'), findsWidgets);
 
-    await tester.tap(find.byKey(adminDashboardMenuButtonKey).hitTestable());
-    await _pumpForUi(tester, frames: 8);
-    await tester.tap(find.text('Change password').last.hitTestable());
-    await _pumpForUi(tester, frames: 8);
+      await tester.tap(find.byKey(adminDashboardMenuButtonKey).hitTestable());
+      await _pumpForUi(tester, frames: 8);
+      await tester.tap(find.text('Change password').last.hitTestable());
+      await _pumpForUi(tester, frames: 8);
 
-    await tester.enterText(
-      find.byKey(adminChangePasswordCurrentFieldKey),
-      'Secure123',
-    );
-    await tester.enterText(
-      find.byKey(adminChangePasswordNewFieldKey),
-      'Secure456',
-    );
-    await tester.enterText(
-      find.byKey(adminChangePasswordConfirmFieldKey),
-      'Secure456',
-    );
-    await tester.tap(
-      find.byKey(adminChangePasswordSubmitButtonKey).hitTestable(),
-    );
-    await _pumpForUi(tester, frames: 18);
+      await tester.enterText(
+        find.byKey(adminChangePasswordCurrentFieldKey),
+        'Secure123',
+      );
+      await tester.enterText(
+        find.byKey(adminChangePasswordNewFieldKey),
+        'Secure456',
+      );
+      await tester.enterText(
+        find.byKey(adminChangePasswordConfirmFieldKey),
+        'Secure456',
+      );
+      await tester.tap(
+        find.byKey(adminChangePasswordSubmitButtonKey).hitTestable(),
+      );
+      await _pumpForUi(tester, frames: 18);
 
-    expect(find.text('Password updated successfully.'), findsOneWidget);
+      expect(find.text('Password updated successfully.'), findsOneWidget);
 
-    await tester.tap(find.byKey(adminDashboardOperationsTabKey).hitTestable());
-    await _pumpForUi(tester, frames: 8);
-    await tester.tap(find.text('Warm secure caches').first.hitTestable());
-    await _pumpForUi(tester, frames: 18);
-    expect(
-      find.text('Secure runtime caches are ready for JSON, images, and video.'),
-      findsOneWidget,
-    );
+      await tester.tap(
+        find.byKey(adminDashboardOperationsTabKey).hitTestable(),
+      );
+      await _pumpForUi(tester, frames: 8);
+      await tester.tap(find.text('Warm secure caches').first.hitTestable());
+      await _pumpForUi(tester, frames: 18);
+      expect(
+        find.text(
+          'Secure runtime caches are ready for JSON, images, and video.',
+        ),
+        findsOneWidget,
+      );
 
-    await tester.tap(find.text('Logout').first.hitTestable());
-    await _pumpForUi(tester, frames: 18);
+      await tester.tap(find.text('Logout').first.hitTestable());
+      await _pumpForUi(tester, frames: 18);
 
-    expect(find.text('Admin Secure Content Console'), findsOneWidget);
-    await tester.enterText(find.byKey(adminLoginUsernameFieldKey), 'opslead');
-    await tester.enterText(find.byKey(adminLoginPasswordFieldKey), 'Secure123');
-    await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
-    await _pumpForUi(tester, frames: 18);
+      expect(find.text('Admin Secure Content Console'), findsOneWidget);
+      await tester.enterText(find.byKey(adminLoginUsernameFieldKey), 'opslead');
+      await tester.enterText(
+        find.byKey(adminLoginPasswordFieldKey),
+        'Secure123',
+      );
+      await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
+      await _pumpForUi(tester, frames: 18);
 
-    expect(find.text('Invalid username or password.'), findsOneWidget);
+      expect(find.text('Invalid username or password.'), findsOneWidget);
 
-    await tester.enterText(find.byKey(adminLoginPasswordFieldKey), 'Secure456');
-    await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
-    await _pumpForUi(tester, frames: 18);
+      await tester.enterText(
+        find.byKey(adminLoginPasswordFieldKey),
+        'Secure456',
+      );
+      await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
+      await _pumpForUi(tester, frames: 18);
 
-    expect(find.text('Secure Content Operations'), findsOneWidget);
-    expect(find.textContaining('Lead Operations'), findsWidgets);
+      expect(find.text('Secure Content Operations'), findsOneWidget);
+      expect(find.textContaining('Lead Operations'), findsWidgets);
 
-    await tester.tap(find.text('Logout').first.hitTestable());
-    await _pumpForUi(tester, frames: 18);
+      await tester.tap(find.text('Logout').first.hitTestable());
+      await _pumpForUi(tester, frames: 18);
 
-    await tester.enterText(find.byKey(adminLoginUsernameFieldKey), 'nightshift');
-    await tester.enterText(find.byKey(adminLoginPasswordFieldKey), 'Night123');
-    await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
-    await _pumpForUi(tester, frames: 18);
+      await tester.enterText(
+        find.byKey(adminLoginUsernameFieldKey),
+        'nightshift',
+      );
+      await tester.enterText(
+        find.byKey(adminLoginPasswordFieldKey),
+        'Night123',
+      );
+      await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
+      await _pumpForUi(tester, frames: 18);
 
-    expect(find.text('Secure Content Operations'), findsOneWidget);
-    expect(find.textContaining('Signed in as Night Shift (nightshift).'), findsOneWidget);
+      expect(find.text('Secure Content Operations'), findsOneWidget);
+      expect(
+        find.textContaining('Signed in as Night Shift (nightshift).'),
+        findsOneWidget,
+      );
 
-    await tester.tap(find.byKey(adminDashboardActivityTabKey).hitTestable());
-    await _pumpForUi(tester, frames: 8);
-    expect(find.byKey(adminDashboardRecentActivityKey), findsOneWidget);
-  });
+      await tester.tap(find.byKey(adminDashboardActivityTabKey).hitTestable());
+      await _pumpForUi(tester, frames: 8);
+      expect(find.byKey(adminDashboardRecentActivityKey), findsOneWidget);
+      expect(find.text('Real-time logs'), findsOneWidget);
+    },
+  );
 }
 
 Future<void> _pumpForUi(WidgetTester tester, {int frames = 10}) async {
@@ -202,13 +230,14 @@ class _AdminIntegrationHarness {
 
     final jsonFile = File(
       '${sourceDir.path}${Platform.pathSeparator}table.json',
-    )..writeAsStringSync(jsonEncode(<String, Object>{'league': 'Premier League'}));
+    )..writeAsStringSync(
+      jsonEncode(<String, Object>{'league': 'Premier League'}),
+    );
     final imageFile = File(
       '${sourceDir.path}${Platform.pathSeparator}badge.png',
     )..writeAsBytesSync(<int>[137, 80, 78, 71, 1, 2, 3, 4, 5, 6, 7, 8]);
-    final videoFile = File(
-      '${sourceDir.path}${Platform.pathSeparator}goal.mp4',
-    )..writeAsBytesSync(List<int>.generate(4096, (index) => index % 251));
+    final videoFile = File('${sourceDir.path}${Platform.pathSeparator}goal.mp4')
+      ..writeAsBytesSync(List<int>.generate(4096, (index) => index % 251));
 
     SharedPreferences.setMockInitialValues(<String, Object>{
       'daylysport.custom_json_folder': daylySportDir.path,

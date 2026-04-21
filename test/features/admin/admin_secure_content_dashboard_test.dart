@@ -52,9 +52,7 @@ void main() {
 
     final harness = await _AdminDashboardHarness.create();
     final container = ProviderContainer(
-      overrides: [
-        appServicesProvider.overrideWithValue(harness.services),
-      ],
+      overrides: [appServicesProvider.overrideWithValue(harness.services)],
     );
     addTearDown(() {
       container.dispose();
@@ -75,54 +73,57 @@ void main() {
     expect(find.text('Secure Content Operations'), findsNothing);
   });
 
-  testWidgets('admin dashboard shows tabbed dashboard shell after authentication', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1400, 1800);
-    tester.view.devicePixelRatio = 1.0;
+  testWidgets(
+    'admin dashboard shows tabbed dashboard shell after authentication',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 1800);
+      tester.view.devicePixelRatio = 1.0;
 
-    final harness = await _AdminDashboardHarness.create();
-    final container = ProviderContainer(
-      overrides: [
-        appServicesProvider.overrideWithValue(harness.services),
-      ],
-    );
-    addTearDown(() {
-      container.dispose();
-      harness.disposeForTest();
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
+      final harness = await _AdminDashboardHarness.create();
+      final container = ProviderContainer(
+        overrides: [appServicesProvider.overrideWithValue(harness.services)],
+      );
+      addTearDown(() {
+        container.dispose();
+        harness.disposeForTest();
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-    final loginResult = await harness.services.adminAuthService.login(
-      username: 'opslead',
-      password: 'Secure123',
-      persistSession: false,
-    );
-    expect(loginResult.success, isTrue);
+      final loginResult = await harness.services.adminAuthService.login(
+        username: 'opslead',
+        password: 'Secure123',
+        persistSession: false,
+      );
+      expect(loginResult.success, isTrue);
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(home: SecureContentScreen()),
-      ),
-    );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: SecureContentScreen()),
+        ),
+      );
 
-    await _pumpForUi(tester, frames: 12);
+      await _pumpForUi(tester, frames: 12);
 
-    expect(find.text('Secure Content Operations'), findsOneWidget);
-    expect(find.byKey(adminDashboardUserActivityKey), findsNothing);
-    expect(find.byKey(adminDashboardRecentActivityKey), findsNothing);
-    expect(find.byKey(adminDashboardHomeTabKey), findsOneWidget);
-    expect(find.byKey(adminDashboardCoverageTabKey), findsOneWidget);
-    expect(find.byKey(adminDashboardOperationsTabKey), findsOneWidget);
-    expect(find.byKey(adminDashboardActivityTabKey), findsOneWidget);
+      expect(find.text('Secure Content Operations'), findsOneWidget);
+      expect(find.byKey(adminDashboardUserActivityKey), findsNothing);
+      expect(find.byKey(adminDashboardRecentActivityKey), findsNothing);
+      expect(find.byKey(adminDashboardHomeTabKey), findsOneWidget);
+      expect(find.byKey(adminDashboardCoverageTabKey), findsOneWidget);
+      expect(find.byKey(adminDashboardOperationsTabKey), findsOneWidget);
+      expect(find.byKey(adminDashboardActivityTabKey), findsOneWidget);
+      expect(find.text('Overview'), findsOneWidget);
+      expect(find.text('Coverage'), findsOneWidget);
+      expect(find.text('Operations'), findsOneWidget);
+      expect(find.text('Activity'), findsOneWidget);
 
-    await tester.tap(find.byKey(adminDashboardCoverageTabKey).hitTestable());
-    await tester.pump();
+      await tester.tap(find.byKey(adminDashboardCoverageTabKey).hitTestable());
+      await _pumpForUi(tester, frames: 8);
 
-    expect(find.byKey(adminDashboardCoverageTabKey), findsOneWidget);
-  });
+      expect(find.byKey(adminDashboardCoverageTabKey), findsOneWidget);
+    },
+  );
 }
 
 Future<void> _pumpForUi(WidgetTester tester, {int frames = 8}) async {
@@ -133,10 +134,7 @@ Future<void> _pumpForUi(WidgetTester tester, {int frames = 8}) async {
 }
 
 class _AdminDashboardHarness {
-  _AdminDashboardHarness({
-    required this.tempRoot,
-    required this.services,
-  });
+  _AdminDashboardHarness({required this.tempRoot, required this.services});
 
   final Directory tempRoot;
   final AppServices services;
@@ -150,35 +148,53 @@ class _AdminDashboardHarness {
       '${Directory.systemTemp.path}${Platform.pathSeparator}eri_admin_dashboard_${DateTime.now().microsecondsSinceEpoch}',
     )..createSync(recursive: true);
     await _installPathProviderMock(tempRoot);
-    final daylySportDir = Directory('${tempRoot.path}${Platform.pathSeparator}daylySport')
-      ..createSync(recursive: true);
-    final sourceDir = Directory('${tempRoot.path}${Platform.pathSeparator}source')
-      ..createSync(recursive: true);
-    final importsDir = Directory('${daylySportDir.path}${Platform.pathSeparator}imports')
-      ..createSync(recursive: true);
-    final newsDir = Directory('${daylySportDir.path}${Platform.pathSeparator}news')
-      ..createSync(recursive: true);
-    final reelsDir = Directory('${daylySportDir.path}${Platform.pathSeparator}reels')
-      ..createSync(recursive: true);
+    final daylySportDir = Directory(
+      '${tempRoot.path}${Platform.pathSeparator}daylySport',
+    )..createSync(recursive: true);
+    final sourceDir = Directory(
+      '${tempRoot.path}${Platform.pathSeparator}source',
+    )..createSync(recursive: true);
+    final importsDir = Directory(
+      '${daylySportDir.path}${Platform.pathSeparator}imports',
+    )..createSync(recursive: true);
+    final newsDir = Directory(
+      '${daylySportDir.path}${Platform.pathSeparator}news',
+    )..createSync(recursive: true);
+    final reelsDir = Directory(
+      '${daylySportDir.path}${Platform.pathSeparator}reels',
+    )..createSync(recursive: true);
 
-    final jsonFile = File('${sourceDir.path}${Platform.pathSeparator}table.json');
-    jsonFile.writeAsStringSync(jsonEncode(<String, Object>{'league': 'Premier League'}));
-    final imageFile = File('${sourceDir.path}${Platform.pathSeparator}badge.png');
+    final jsonFile = File(
+      '${sourceDir.path}${Platform.pathSeparator}table.json',
+    );
+    jsonFile.writeAsStringSync(
+      jsonEncode(<String, Object>{'league': 'Premier League'}),
+    );
+    final imageFile = File(
+      '${sourceDir.path}${Platform.pathSeparator}badge.png',
+    );
     imageFile.writeAsBytesSync(<int>[137, 80, 78, 71, 1, 2, 3, 4, 5, 6, 7, 8]);
-    final videoFile = File('${sourceDir.path}${Platform.pathSeparator}goal.mp4');
-    videoFile.writeAsBytesSync(List<int>.generate(4096, (index) => index % 251));
-    final encryptedJsonFile =
-        File('${importsDir.path}${Platform.pathSeparator}table.json.esj');
+    final videoFile = File(
+      '${sourceDir.path}${Platform.pathSeparator}goal.mp4',
+    );
+    videoFile.writeAsBytesSync(
+      List<int>.generate(4096, (index) => index % 251),
+    );
+    final encryptedJsonFile = File(
+      '${importsDir.path}${Platform.pathSeparator}table.json.esj',
+    );
     encryptedJsonFile.writeAsBytesSync(
       List<int>.generate(128, (index) => (index * 13) % 251),
     );
-    final encryptedImageFile =
-        File('${newsDir.path}${Platform.pathSeparator}badge.png.esi');
+    final encryptedImageFile = File(
+      '${newsDir.path}${Platform.pathSeparator}badge.png.esi',
+    );
     encryptedImageFile.writeAsBytesSync(
       List<int>.generate(96, (index) => (index * 17) % 251),
     );
-    final encryptedVideoFile =
-        File('${reelsDir.path}${Platform.pathSeparator}goal.mp4.esv');
+    final encryptedVideoFile = File(
+      '${reelsDir.path}${Platform.pathSeparator}goal.mp4.esv',
+    );
     encryptedVideoFile.writeAsBytesSync(
       List<int>.generate(512, (index) => (index * 19) % 251),
     );
@@ -323,10 +339,7 @@ class _AdminDashboardHarness {
 
     await services.adminAuthService.logout();
 
-    return _AdminDashboardHarness(
-      tempRoot: tempRoot,
-      services: services,
-    );
+    return _AdminDashboardHarness(tempRoot: tempRoot, services: services);
   }
 
   Future<void> dispose() async {
