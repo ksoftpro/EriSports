@@ -24,7 +24,6 @@ import 'package:eri_sports/features/admin/data/admin_activity_service.dart';
 import 'package:eri_sports/features/admin/data/admin_auth_service.dart';
 import 'package:eri_sports/features/admin/data/admin_models.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
-import 'package:eri_sports/features/media/data/video_resume_service.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/more/presentation/secure_content_screen.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
@@ -280,7 +279,6 @@ class _AdminDashboardHarness {
       cacheStore: cacheStore,
       activityService: adminActivityService,
     );
-    final videoResumeService = VideoResumeService(cacheStore: cacheStore);
     final services = AppServices(
       database: database,
       cacheStore: cacheStore,
@@ -288,7 +286,6 @@ class _AdminDashboardHarness {
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
       encryptedMediaService: encryptedMediaService,
-      videoResumeService: videoResumeService,
       encryptedJsonService: encryptedJsonService,
       encryptedImageService: encryptedImageService,
       secureContentCoordinator: secureContentCoordinator,

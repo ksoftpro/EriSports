@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
 import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
-import 'package:eri_sports/features/media/data/video_resume_service.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,17 +31,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   AppLifecycleState _lifecycleState =
       WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
   ModalRoute<dynamic>? _route;
-
-  String get _videoResumeKey {
-    final normalizedRelativePath =
-        widget.item.relativePath.trim().replaceAll('\\', '/').toLowerCase();
-    if (normalizedRelativePath.isNotEmpty) {
-      return '${widget.item.section.name}::$normalizedRelativePath';
-    }
-    final normalizedPath =
-        widget.item.file.path.trim().replaceAll('\\', '/').toLowerCase();
-    return '${widget.item.section.name}::$normalizedPath';
-  }
 
   @override
   void initState() {
@@ -83,17 +71,10 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
     if (_route is PageRoute<dynamic>) {
       ref.read(appRouteObserverProvider).unsubscribe(this);
     }
-    final resumeService = ref.read(appServicesProvider).videoResumeService;
     final controller = _controller;
     _controller = null;
     if (controller != null) {
-      unawaited(
-        _pauseAndDisposeController(
-          controller,
-          resumeService: resumeService,
-          persistPosition: true,
-        ),
-      );
+      unawaited(_pauseAndDisposeController(controller));
     }
     super.dispose();
   }
@@ -101,9 +82,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _lifecycleState = state;
-    if (state != AppLifecycleState.resumed) {
-      unawaited(_persistCurrentPosition());
-    }
     unawaited(_syncPlaybackWithVisibility());
   }
 
@@ -135,14 +113,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
       await controller.initialize();
       await controller.setLooping(true);
 
-      final resumePosition = await services.videoResumeService.readPosition(
-        videoKey: _videoResumeKey,
-        totalDuration: controller.value.duration,
-      );
-      if (resumePosition != null) {
-        await controller.seekTo(resumePosition);
-      }
-
       if (!mounted) {
         await controller.dispose();
         return;
@@ -156,12 +126,7 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
         _isPreparing = false;
       });
       if (previousController != null) {
-        unawaited(
-          _pauseAndDisposeController(
-            previousController,
-            resumeService: services.videoResumeService,
-          ),
-        );
+        unawaited(_pauseAndDisposeController(previousController));
       }
 
       _shouldResumePlayback = true;
@@ -277,9 +242,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
 
   void _handleRouteVisibilityChanged(bool isVisible) {
     _routeVisible = isVisible;
-    if (!isVisible) {
-      unawaited(_persistCurrentPosition());
-    }
     unawaited(_syncPlaybackWithVisibility());
   }
 
@@ -299,7 +261,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
       }
     } else if (controller.value.isPlaying) {
       await controller.pause();
-      await _persistCurrentPosition(controller: controller);
     }
 
     if (mounted) {
@@ -308,40 +269,11 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   }
 
   Future<void> _pauseAndDisposeController(
-    VideoPlayerController controller, {
-    required VideoResumeService resumeService,
-    bool persistPosition = false,
-  }) async {
+    VideoPlayerController controller,
+  ) async {
     if (controller.value.isInitialized && controller.value.isPlaying) {
       await controller.pause();
     }
-    if (persistPosition) {
-      await _persistCurrentPosition(
-        controller: controller,
-        resumeService: resumeService,
-      );
-    }
     await controller.dispose();
-  }
-
-  Future<void> _persistCurrentPosition({
-    VideoPlayerController? controller,
-    VideoResumeService? resumeService,
-  }) async {
-    if (!widget.item.isVideo) {
-      return;
-    }
-
-    final activeController = controller ?? _controller;
-    if (activeController == null || !activeController.value.isInitialized) {
-      return;
-    }
-
-    await (resumeService ?? ref.read(appServicesProvider).videoResumeService)
-        .savePosition(
-          videoKey: _videoResumeKey,
-          position: activeController.value.position,
-          totalDuration: activeController.value.duration,
-        );
   }
 }
