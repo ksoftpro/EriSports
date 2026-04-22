@@ -175,6 +175,36 @@ void main() {
     );
 
     test(
+      'media service preserves original webm container extension on decrypt',
+      () async {
+        final plainFile = File(
+          '${tempDir.path}${Platform.pathSeparator}av1_sample.webm',
+        );
+        await plainFile.writeAsBytes(
+          List<int>.generate(1536, (index) => (index * 13) % 251),
+        );
+        final encryptedFile = File('${plainFile.path}.esv');
+
+        encryptMediaFileSync(
+          sourcePath: plainFile.path,
+          destinationPath: encryptedFile.path,
+          masterKey: masterKey,
+        );
+
+        final service = EncryptedMediaService(
+          fingerprintCache: fingerprintCache,
+          mediaKeyBase64: keyBase64,
+          cacheRootProvider: () async => cacheRoot,
+        );
+
+        final resolved = await service.resolvePlayableFile(encryptedFile);
+
+        expect(resolved.file.path.toLowerCase().endsWith('.webm'), isTrue);
+        expect(await resolved.file.readAsBytes(), await plainFile.readAsBytes());
+      },
+    );
+
+    test(
       'cache manager serializes first-time materialization when limited',
       () async {
         final sourceOne = File(
