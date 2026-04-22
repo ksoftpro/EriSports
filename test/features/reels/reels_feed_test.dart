@@ -1004,6 +1004,73 @@ void main() {
 
     expect(fakePlatform.seekCalls, contains(const Duration(seconds: 27)));
   });
+
+  testWidgets('fits the active reel video within the player bounds', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_reels_screen_fit_bounds_',
+    );
+    final originalPlatform = VideoPlayerPlatform.instance;
+    final fakePlatform = _FakeVideoPlayerPlatform(
+      initializedSize: const Size(1920, 1080),
+    );
+    VideoPlayerPlatform.instance = fakePlatform;
+
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final services = await AppServices.create(sharedPreferences: preferences);
+    final snapshot = _buildPlainVideoSnapshot(tempDir);
+
+    addTearDown(() async {
+      VideoPlayerPlatform.instance = originalPlatform;
+      await services.database.close();
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appServicesProvider.overrideWithValue(services),
+          appRouteObserverProvider.overrideWithValue(
+            RouteObserver<ModalRoute<void>>(),
+          ),
+          currentShellBranchIndexProvider.overrideWith((ref) => 3),
+          appLifecycleStateProvider.overrideWith(
+            (ref) => AppLifecycleState.resumed,
+          ),
+          daylySportMediaSnapshotProvider.overrideWith(
+            () => _TestDaylySportMediaSnapshotNotifier(snapshot),
+          ),
+        ],
+        child: const MaterialApp(
+          home: ReelsScreen(enableEncryptedPrewarm: false),
+        ),
+      ),
+    );
+    await tester.pump();
+    await _pumpUntil(tester, () => fakePlatform.playCalls.isNotEmpty);
+    await _pumpUntil(
+      tester,
+      () => find.byType(AspectRatio).evaluate().isNotEmpty,
+    );
+
+    final videoAspectRatio = tester.widget<AspectRatio>(find.byType(AspectRatio));
+    expect(videoAspectRatio.aspectRatio, closeTo(1920 / 1080, 0.001));
+
+    final videoSize = tester.getSize(find.byType(AspectRatio));
+    final expectedHeight = videoSize.width / (1920 / 1080);
+    expect(videoSize.width, greaterThan(0));
+    expect(videoSize.width, lessThanOrEqualTo(430));
+    expect(videoSize.height, closeTo(expectedHeight, 0.5));
+    expect(videoSize.height, lessThan(900));
+  });
 }
 
 Future<void> _pumpUntil(
@@ -1126,6 +1193,8 @@ DaylySportMediaSnapshot _buildPlainVideoSnapshot(Directory tempDir) {
 }
 
 class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
+  _FakeVideoPlayerPlatform({this.initializedSize = const Size(1080, 1920)});
+
   int _nextPlayerId = 1;
   final Map<int, StreamController<VideoEvent>> _eventControllers =
       <int, StreamController<VideoEvent>>{};
@@ -1133,6 +1202,7 @@ class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
   final List<int> playCalls = <int>[];
   final List<int> pauseCalls = <int>[];
   final List<Duration> seekCalls = <Duration>[];
+  final Size initializedSize;
 
   @override
   Future<void> init() async {}
@@ -1152,7 +1222,7 @@ class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
             VideoEvent(
               eventType: VideoEventType.initialized,
               duration: const Duration(minutes: 2),
-              size: const Size(1080, 1920),
+              size: initializedSize,
             ),
           );
           controller.add(

@@ -1191,6 +1191,10 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     final controller = _controller;
     final isReady = controller != null && controller.value.isInitialized;
     final isPlaying = isReady && controller.value.isPlaying;
+    final aspectRatio =
+        isReady && controller.value.aspectRatio > 0
+            ? controller.value.aspectRatio
+            : (16 / 9);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1199,15 +1203,7 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
         fit: StackFit.expand,
         children: [
           if (isReady)
-            FittedBox(
-              fit: BoxFit.cover,
-              clipBehavior: Clip.hardEdge,
-              child: SizedBox(
-                width: controller.value.size.width,
-                height: controller.value.size.height,
-                child: VideoPlayer(controller),
-              ),
-            )
+            const ColoredBox(color: Colors.black, child: SizedBox.expand())
           else
             const DecoratedBox(
               decoration: BoxDecoration(
@@ -1218,6 +1214,13 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
                 ),
               ),
               child: SizedBox.expand(),
+            ),
+          if (isReady)
+            Center(
+              child: AspectRatio(
+                aspectRatio: aspectRatio,
+                child: VideoPlayer(controller),
+              ),
             ),
           if (_isPreparing)
             const Center(child: CircularProgressIndicator())
