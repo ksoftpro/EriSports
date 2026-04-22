@@ -826,12 +826,12 @@ void main() {
     await pumpScreen();
     await tester.pumpAndSettle();
 
-    expect(find.text('item_1.mp4.esv:active'), findsOneWidget);
+    expect(find.text('item_1.mp4:active'), findsOneWidget);
 
     await tester.fling(find.byType(PageView), const Offset(0, -700), 1200);
     await tester.pumpAndSettle();
 
-    expect(find.text('item_0.mp4.esv:active'), findsOneWidget);
+    expect(find.text('item_0.mp4:active'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -839,7 +839,7 @@ void main() {
     await pumpScreen();
     await tester.pumpAndSettle();
 
-    expect(find.text('item_0.mp4.esv:active'), findsOneWidget);
+    expect(find.text('item_0.mp4:active'), findsOneWidget);
   });
 
   testWidgets('keeps manual rail scroll position across rebuilds', (tester) async {

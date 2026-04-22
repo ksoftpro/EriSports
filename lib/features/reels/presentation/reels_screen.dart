@@ -1141,6 +1141,7 @@ class _InlineReelVideo extends ConsumerStatefulWidget {
 }
 
 class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
+  late final AppServices _services = ref.read(appServicesProvider);
   VideoPlayerController? _controller;
   bool _isPreparing = false;
   String? _errorMessage;
@@ -1264,14 +1265,13 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
               .markMediaItemSeen(widget.item),
         );
       }
-      final services = ref.read(appServicesProvider);
-      final playable = await services.encryptedMediaService.resolvePlayableFile(
+      final playable = await _services.encryptedMediaService.resolvePlayableFile(
         widget.item.file,
       );
       final controller = VideoPlayerController.file(File(playable.file.path));
       await controller.initialize();
       await controller.setLooping(true);
-      final resumePosition = await services.videoResumeService.readPosition(
+      final resumePosition = await _services.videoResumeService.readPosition(
         videoKey: reelPlaybackItemKey(widget.item),
         totalDuration: controller.value.duration,
       );
@@ -1364,7 +1364,7 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
       return Future<void>.value();
     }
 
-    return ref.read(appServicesProvider).videoResumeService.savePosition(
+    return _services.videoResumeService.savePosition(
       videoKey: reelPlaybackItemKey(item),
       position: controller.value.position,
       totalDuration: controller.value.duration,
