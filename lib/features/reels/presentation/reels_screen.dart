@@ -8,6 +8,7 @@ import 'package:eri_sports/app/navigation/app_shell.dart';
 import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
+import 'package:eri_sports/features/reels/presentation/reels_playback_session_store.dart';
 import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
 import 'package:eri_sports/shared/widgets/offline_video_thumbnail.dart';
 import 'package:eri_sports/shared/widgets/new_content_badge.dart';
@@ -36,6 +37,9 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   static const Duration _railAnimationDuration = Duration(milliseconds: 220);
   double _overlayItemExtent = 172.0;
   DateTime? _lastPrewarmScanAt;
+  late final ReelsPlaybackSessionStore _playbackSessionStore = ref.read(
+    reelsPlaybackSessionStoreProvider,
+  );
   late final PageController _reelsPageController = PageController();
   final ScrollController _reelsRailController = ScrollController();
   ModalRoute<dynamic>? _route;
@@ -45,6 +49,9 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   bool _selectionMode = false;
   bool _isDeleting = false;
   int _currentActiveIndex = 0;
+  String? _currentActiveReelKey;
+  bool _didRestorePersistedSelection = false;
+  AppLifecycleState? _lastLifecycleState;
   final Set<String> _selectedMediaIds = <String>{};
   DateTime? _lastSortedSnapshotAt;
   List<DaylySportMediaItem> _sortedReelItems = const <DaylySportMediaItem>[];
@@ -75,6 +82,10 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
     } else {
       _routeVisible = true;
     }
+
+    if (_routeVisible) {
+      _scheduleViewportSync(animatedRail: false);
+    }
   }
 
   @override
@@ -104,6 +115,13 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
     final seenItemIds = ref.watch(offlineSeenItemIdsProvider);
     final shellIndex = ref.watch(currentShellBranchIndexProvider);
     final lifecycleState = ref.watch(appLifecycleStateProvider);
+    final previousLifecycleState = _lastLifecycleState;
+    _lastLifecycleState = lifecycleState;
+    if (previousLifecycleState != null &&
+      previousLifecycleState != lifecycleState &&
+      lifecycleState == AppLifecycleState.resumed) {
+      _scheduleViewportSync(animatedRail: false);
+    }
     final snapshot = mediaAsync.valueOrNull;
     final sortedItems =
         snapshot == null
@@ -205,9 +223,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
               _scheduleEncryptedPrewarm(snapshot, items);
             }
 
-            if (items.isNotEmpty && _currentActiveIndex >= items.length) {
-              _currentActiveIndex = items.length - 1;
-            }
+            _resolveActiveReelSelection(items);
 
             if (items.isEmpty) {
               return _EmptyReelsState(
@@ -226,8 +242,6 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
               );
             }
 
-            _syncReelPage(items.length);
-
             return ReelsPlaybackStage(
               items: items,
               activeIndex: _currentActiveIndex,
@@ -240,8 +254,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
                 _overlayItemExtent = itemExtent;
               },
               onActiveIndexChanged: (index) {
-                _currentActiveIndex = index;
-                _scrollReelRail(index);
+                _handleActiveIndexChanged(items, index);
               },
               onSelectReel: _jumpToReel,
               feedItemBuilder: widget.feedItemBuilder,
@@ -260,25 +273,81 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
     setState(() {
       _routeVisible = value;
     });
+    if (value) {
+      _scheduleViewportSync(animatedRail: false);
+    }
   }
 
-  void _syncReelPage(int itemCount) {
-    if (itemCount <= 0) {
+  void _resolveActiveReelSelection(List<DaylySportMediaItem> items) {
+    if (!_didRestorePersistedSelection) {
+      _didRestorePersistedSelection = true;
+      _currentActiveReelKey = _playbackSessionStore.readActiveReelKey();
+    }
+
+    if (items.isEmpty) {
+      _currentActiveIndex = 0;
       return;
     }
-    final maxIndex = itemCount - 1;
-    if (_currentActiveIndex > maxIndex) {
-      _currentActiveIndex = maxIndex;
+
+    final maxIndex = items.length - 1;
+    var resolvedIndex = _currentActiveIndex.clamp(0, maxIndex);
+    final persistedKey = _currentActiveReelKey;
+    if (persistedKey != null) {
+      final matchedIndex = items.indexWhere(
+        (item) => reelPlaybackItemKey(item) == persistedKey,
+      );
+      if (matchedIndex != -1) {
+        resolvedIndex = matchedIndex;
+      }
     }
+
+    final resolvedKey = reelPlaybackItemKey(items[resolvedIndex]);
+    final selectionChanged =
+        resolvedIndex != _currentActiveIndex ||
+        resolvedKey != _currentActiveReelKey;
+    _currentActiveIndex = resolvedIndex;
+    if (_currentActiveReelKey != resolvedKey) {
+      _currentActiveReelKey = resolvedKey;
+      unawaited(_playbackSessionStore.writeActiveReelKey(resolvedKey));
+    }
+    if (selectionChanged) {
+      _scheduleViewportSync(animatedRail: false);
+    }
+  }
+
+  void _handleActiveIndexChanged(List<DaylySportMediaItem> items, int index) {
+    if (!mounted || index < 0 || index >= items.length) {
+      return;
+    }
+    final nextKey = reelPlaybackItemKey(items[index]);
+    if (_currentActiveIndex == index && _currentActiveReelKey == nextKey) {
+      return;
+    }
+
+    setState(() {
+      _currentActiveIndex = index;
+      _currentActiveReelKey = nextKey;
+    });
+    unawaited(_playbackSessionStore.writeActiveReelKey(nextKey));
+    _scrollReelRail(index);
+  }
+
+  void _scheduleViewportSync({required bool animatedRail}) {
+    final targetIndex = _currentActiveIndex;
+    final railVisible = _isRailVisible;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_reelsPageController.hasClients) {
+      if (!mounted) {
         return;
       }
-      final currentPage = _reelsPageController.page?.round() ?? 0;
-      if (currentPage != _currentActiveIndex) {
-        _reelsPageController.jumpToPage(_currentActiveIndex);
+      if (_reelsPageController.hasClients) {
+        final currentPage = _reelsPageController.page?.round() ?? 0;
+        if (currentPage != targetIndex) {
+          _reelsPageController.jumpToPage(targetIndex);
+        }
       }
-      _scrollReelRail(_currentActiveIndex);
+      if (railVisible) {
+        _scrollReelRail(targetIndex, animated: animatedRail);
+      }
     });
   }
 
@@ -298,14 +367,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
       _isRailVisible = !_isRailVisible;
     });
     if (_isRailVisible) {
-      unawaited(
-        Future<void>.delayed(_railAnimationDuration, () {
-          if (!mounted) {
-            return;
-          }
-          _scrollReelRail(_currentActiveIndex, animated: false);
-        }),
-      );
+      _scheduleViewportSync(animatedRail: false);
     }
   }
 
@@ -1096,7 +1158,7 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.item.file.path != widget.item.file.path) {
-      _disposeController();
+      _disposeController(item: oldWidget.item, persistPosition: true);
       _errorMessage = null;
       if (widget.isActive) {
         _ensurePrepared();
@@ -1113,13 +1175,13 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
       _ensurePrepared();
       unawaited(_playIfReady());
     } else if (oldWidget.isActive && !widget.isActive) {
-      unawaited(_pauseIfReady());
+      unawaited(_pauseAndPersistIfReady(item: oldWidget.item));
     }
   }
 
   @override
   void dispose() {
-    _disposeController();
+    _disposeController(item: widget.item, persistPosition: true);
     super.dispose();
   }
 
@@ -1209,6 +1271,13 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
       final controller = VideoPlayerController.file(File(playable.file.path));
       await controller.initialize();
       await controller.setLooping(true);
+      final resumePosition = await services.videoResumeService.readPosition(
+        videoKey: reelPlaybackItemKey(widget.item),
+        totalDuration: controller.value.duration,
+      );
+      if (resumePosition != null) {
+        await controller.seekTo(resumePosition);
+      }
       if (widget.isActive) {
         await controller.play();
       }
@@ -1224,7 +1293,7 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
         _isPreparing = false;
       });
       if (previousController != null) {
-        unawaited(previousController.dispose());
+        unawaited(_pausePersistAndDispose(previousController, widget.item));
       }
 
       if (!widget.isActive) {
@@ -1251,6 +1320,7 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     }
     if (controller.value.isPlaying) {
       await controller.pause();
+      await _saveCurrentPosition(controller, widget.item);
     } else {
       await controller.play();
     }
@@ -1272,24 +1342,58 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     }
   }
 
-  Future<void> _pauseIfReady() async {
+  Future<void> _pauseAndPersistIfReady({required DaylySportMediaItem item}) async {
     final controller = _controller;
-    if (controller == null ||
-        !controller.value.isInitialized ||
-        !controller.value.isPlaying) {
+    if (controller == null || !controller.value.isInitialized) {
       return;
     }
-    await controller.pause();
+    if (controller.value.isPlaying) {
+      await controller.pause();
+    }
+    await _saveCurrentPosition(controller, item);
     if (mounted) {
       setState(() {});
     }
   }
 
-  void _disposeController() {
+  Future<void> _saveCurrentPosition(
+    VideoPlayerController controller,
+    DaylySportMediaItem item,
+  ) {
+    if (!item.isVideo || !controller.value.isInitialized) {
+      return Future<void>.value();
+    }
+
+    return ref.read(appServicesProvider).videoResumeService.savePosition(
+      videoKey: reelPlaybackItemKey(item),
+      position: controller.value.position,
+      totalDuration: controller.value.duration,
+    );
+  }
+
+  Future<void> _pausePersistAndDispose(
+    VideoPlayerController controller,
+    DaylySportMediaItem item,
+  ) async {
+    if (controller.value.isInitialized && controller.value.isPlaying) {
+      await controller.pause();
+    }
+    await _saveCurrentPosition(controller, item);
+    await controller.dispose();
+  }
+
+  void _disposeController({
+    required DaylySportMediaItem item,
+    required bool persistPosition,
+  }) {
     final controller = _controller;
     _controller = null;
     if (controller != null) {
-      unawaited(controller.dispose());
+      if (persistPosition) {
+        unawaited(_pausePersistAndDispose(controller, item));
+      } else {
+        unawaited(controller.dispose());
+      }
     }
   }
 }

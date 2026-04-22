@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/app/app.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
@@ -12,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -757,6 +759,266 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getSize(shellFinder).width, greaterThan(0));
   });
+
+  testWidgets('restores the last active reel when reopening the screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_reels_screen_restore_active_'
+    );
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final services = await AppServices.create(sharedPreferences: preferences);
+    final snapshot = _buildSnapshot(tempDir, itemCount: 2);
+
+    addTearDown(() async {
+      await services.database.close();
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    Future<void> pumpScreen() {
+      return tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appServicesProvider.overrideWithValue(services),
+            appRouteObserverProvider.overrideWithValue(
+              RouteObserver<ModalRoute<void>>(),
+            ),
+            currentShellBranchIndexProvider.overrideWith((ref) => 3),
+            appLifecycleStateProvider.overrideWith(
+              (ref) => AppLifecycleState.resumed,
+            ),
+            daylySportMediaSnapshotProvider.overrideWith(
+              () => _TestDaylySportMediaSnapshotNotifier(snapshot),
+            ),
+          ],
+          child: MaterialApp(
+            home: ReelsScreen(
+              enableEncryptedPrewarm: false,
+              feedItemBuilder: (context, item, isActive) {
+                return ColoredBox(
+                  color: isActive ? Colors.black : Colors.blueGrey,
+                  child: Center(
+                    child: Text(
+                      '${item.fileName}:${isActive ? 'active' : 'inactive'}',
+                      textDirection: TextDirection.ltr,
+                    ),
+                  ),
+                );
+              },
+              overlayThumbnailBuilder: (context, item, isActive) {
+                return ColoredBox(
+                  color: isActive ? Colors.orange : Colors.grey,
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pumpScreen();
+    await tester.pumpAndSettle();
+
+    expect(find.text('item_1.mp4.esv:active'), findsOneWidget);
+
+    await tester.fling(find.byType(PageView), const Offset(0, -700), 1200);
+    await tester.pumpAndSettle();
+
+    expect(find.text('item_0.mp4.esv:active'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+
+    await pumpScreen();
+    await tester.pumpAndSettle();
+
+    expect(find.text('item_0.mp4.esv:active'), findsOneWidget);
+  });
+
+  testWidgets('keeps manual rail scroll position across rebuilds', (tester) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_reels_screen_scroll_rebuild_'
+    );
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final services = await AppServices.create(sharedPreferences: preferences);
+    final snapshot = _buildSnapshot(tempDir, itemCount: 12);
+
+    addTearDown(() async {
+      await services.database.close();
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    Future<void> pumpScreen() {
+      return tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appServicesProvider.overrideWithValue(services),
+            appRouteObserverProvider.overrideWithValue(
+              RouteObserver<ModalRoute<void>>(),
+            ),
+            currentShellBranchIndexProvider.overrideWith((ref) => 3),
+            appLifecycleStateProvider.overrideWith(
+              (ref) => AppLifecycleState.resumed,
+            ),
+            daylySportMediaSnapshotProvider.overrideWith(
+              () => _TestDaylySportMediaSnapshotNotifier(snapshot),
+            ),
+          ],
+          child: MaterialApp(
+            home: ReelsScreen(
+              enableEncryptedPrewarm: false,
+              feedItemBuilder: (context, item, isActive) {
+                return ColoredBox(
+                  color: isActive ? Colors.black : Colors.blueGrey,
+                );
+              },
+              overlayThumbnailBuilder: (context, item, isActive) {
+                return ColoredBox(
+                  color: isActive ? Colors.orange : Colors.grey,
+                  child: Center(
+                    child: Text(item.fileName, textDirection: TextDirection.ltr),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pumpScreen();
+    await tester.pumpAndSettle();
+
+    final overlayScrollable = find.descendant(
+      of: find.byKey(const ValueKey<String>('reels-overlay-scroll-view')),
+      matching: find.byType(Scrollable),
+    );
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('reels-overlay-item-11')),
+      220,
+      scrollable: overlayScrollable,
+    );
+    await tester.pumpAndSettle();
+
+    final scrollableState = tester.state<ScrollableState>(overlayScrollable);
+    final offsetBeforeRebuild = scrollableState.position.pixels;
+    expect(offsetBeforeRebuild, greaterThan(0));
+
+    await pumpScreen();
+    await tester.pumpAndSettle();
+
+    final offsetAfterRebuild =
+        tester.state<ScrollableState>(overlayScrollable).position.pixels;
+    expect(offsetAfterRebuild, greaterThan(0));
+    expect(offsetAfterRebuild, closeTo(offsetBeforeRebuild, 1));
+  });
+
+  testWidgets('restores saved playback position for the active reel', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_reels_screen_resume_position_'
+    );
+    final originalPlatform = VideoPlayerPlatform.instance;
+    final fakePlatform = _FakeVideoPlayerPlatform();
+    VideoPlayerPlatform.instance = fakePlatform;
+
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final services = await AppServices.create(sharedPreferences: preferences);
+    final snapshot = _buildPlainVideoSnapshot(tempDir);
+
+    addTearDown(() async {
+      VideoPlayerPlatform.instance = originalPlatform;
+      await services.database.close();
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    Future<void> pumpScreen() {
+      return tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appServicesProvider.overrideWithValue(services),
+            appRouteObserverProvider.overrideWithValue(
+              RouteObserver<ModalRoute<void>>(),
+            ),
+            currentShellBranchIndexProvider.overrideWith((ref) => 3),
+            appLifecycleStateProvider.overrideWith(
+              (ref) => AppLifecycleState.resumed,
+            ),
+            daylySportMediaSnapshotProvider.overrideWith(
+              () => _TestDaylySportMediaSnapshotNotifier(snapshot),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ReelsScreen(enableEncryptedPrewarm: false),
+          ),
+        ),
+      );
+    }
+
+    await pumpScreen();
+    await tester.pump();
+    await _pumpUntil(tester, () => fakePlatform.playCalls.isNotEmpty);
+
+    fakePlatform.setLatestPosition(const Duration(seconds: 27));
+    await tester.pump(const Duration(milliseconds: 600));
+
+    await tester.tapAt(const Offset(80, 140));
+    await _pumpUntil(tester, () => fakePlatform.pauseCalls.isNotEmpty);
+    expect(fakePlatform.pauseCalls, isNotEmpty);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    fakePlatform.seekCalls.clear();
+
+    await pumpScreen();
+    await tester.pump();
+    await _pumpUntil(
+      tester,
+      () => fakePlatform.seekCalls.contains(const Duration(seconds: 27)),
+    );
+
+    expect(fakePlatform.seekCalls, contains(const Duration(seconds: 27)));
+  });
+}
+
+Future<void> _pumpUntil(
+  WidgetTester tester,
+  bool Function() predicate, {
+  Duration step = const Duration(milliseconds: 50),
+  int maxTicks = 60,
+}) async {
+  for (var tick = 0; tick < maxTicks; tick++) {
+    if (predicate()) {
+      return;
+    }
+    await tester.pump(step);
+  }
+  expect(predicate(), isTrue);
 }
 
 class _TestDaylySportMediaSnapshotNotifier
@@ -817,6 +1079,171 @@ DaylySportMediaSnapshot _buildSnapshot(Directory tempDir, {required int itemCoun
       ),
     },
   );
+}
+
+DaylySportMediaSnapshot _buildPlainVideoSnapshot(Directory tempDir) {
+  final file = File('${tempDir.path}${Platform.pathSeparator}resume.mp4')
+    ..writeAsBytesSync(const <int>[1, 2, 3, 4]);
+  final item = DaylySportMediaItem(
+    file: file,
+    relativePath: 'reels/resume.mp4',
+    section: DaylySportMediaSection.reels,
+    type: DaylySportMediaType.video,
+    lastModified: DateTime.utc(2026, 4, 20, 10),
+    sizeBytes: 4,
+  );
+
+  return DaylySportMediaSnapshot(
+    rootDirectory: tempDir,
+    scannedAt: DateTime.utc(2026, 4, 20, 10),
+    sections: {
+      DaylySportMediaSection.reels: DaylySportMediaSectionSnapshot(
+        section: DaylySportMediaSection.reels,
+        items: [item],
+        existingDirectories: <String>[tempDir.path],
+        scannedDirectories: <String>[tempDir.path],
+      ),
+      DaylySportMediaSection.highlights: const DaylySportMediaSectionSnapshot(
+        section: DaylySportMediaSection.highlights,
+        items: <DaylySportMediaItem>[],
+        existingDirectories: <String>[],
+        scannedDirectories: <String>[],
+      ),
+      DaylySportMediaSection.news: const DaylySportMediaSectionSnapshot(
+        section: DaylySportMediaSection.news,
+        items: <DaylySportMediaItem>[],
+        existingDirectories: <String>[],
+        scannedDirectories: <String>[],
+      ),
+      DaylySportMediaSection.updates: const DaylySportMediaSectionSnapshot(
+        section: DaylySportMediaSection.updates,
+        items: <DaylySportMediaItem>[],
+        existingDirectories: <String>[],
+        scannedDirectories: <String>[],
+      ),
+    },
+  );
+}
+
+class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
+  int _nextPlayerId = 1;
+  final Map<int, StreamController<VideoEvent>> _eventControllers =
+      <int, StreamController<VideoEvent>>{};
+  final Map<int, Duration> _positions = <int, Duration>{};
+  final List<int> playCalls = <int>[];
+  final List<int> pauseCalls = <int>[];
+  final List<Duration> seekCalls = <Duration>[];
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  Future<int?> create(DataSource dataSource) async {
+    final playerId = _nextPlayerId++;
+    _positions[playerId] = Duration.zero;
+    late final StreamController<VideoEvent> controller;
+    controller = StreamController<VideoEvent>.broadcast(
+      onListen: () {
+        scheduleMicrotask(() {
+          if (controller.isClosed) {
+            return;
+          }
+          controller.add(
+            VideoEvent(
+              eventType: VideoEventType.initialized,
+              duration: const Duration(minutes: 2),
+              size: const Size(1080, 1920),
+            ),
+          );
+          controller.add(
+            VideoEvent(
+              eventType: VideoEventType.isPlayingStateUpdate,
+              isPlaying: false,
+            ),
+          );
+        });
+      },
+    );
+    _eventControllers[playerId] = controller;
+    return playerId;
+  }
+
+  @override
+  Stream<VideoEvent> videoEventsFor(int playerId) {
+    return _eventControllers[playerId]!.stream;
+  }
+
+  @override
+  Future<void> dispose(int playerId) async {
+    await _eventControllers.remove(playerId)?.close();
+    _positions.remove(playerId);
+  }
+
+  @override
+  Future<void> setLooping(int playerId, bool looping) async {}
+
+  @override
+  Future<void> play(int playerId) async {
+    playCalls.add(playerId);
+    _eventControllers[playerId]?.add(
+      VideoEvent(
+        eventType: VideoEventType.isPlayingStateUpdate,
+        isPlaying: true,
+      ),
+    );
+  }
+
+  @override
+  Future<void> pause(int playerId) async {
+    pauseCalls.add(playerId);
+    _eventControllers[playerId]?.add(
+      VideoEvent(
+        eventType: VideoEventType.isPlayingStateUpdate,
+        isPlaying: false,
+      ),
+    );
+  }
+
+  @override
+  Future<void> setVolume(int playerId, double volume) async {}
+
+  @override
+  Future<void> seekTo(int playerId, Duration position) async {
+    seekCalls.add(position);
+    _positions[playerId] = position;
+  }
+
+  @override
+  Future<void> setPlaybackSpeed(int playerId, double speed) async {}
+
+  @override
+  Future<Duration> getPosition(int playerId) async {
+    return _positions[playerId] ?? Duration.zero;
+  }
+
+  void setLatestPosition(Duration position) {
+    if (_positions.isEmpty) {
+      return;
+    }
+    final latestPlayerId = _positions.keys.reduce((left, right) {
+      return left > right ? left : right;
+    });
+    _positions[latestPlayerId] = position;
+  }
+
+  @override
+  Widget buildView(int playerId) {
+    return const SizedBox.expand();
+  }
+
+  @override
+  Future<void> setMixWithOthers(bool mixWithOthers) async {}
+
+  @override
+  Future<void> setAllowBackgroundPlayback(bool allowBackgroundPlayback) async {}
+
+  @override
+  Future<void> setWebOptions(int playerId, VideoPlayerWebOptions options) async {}
 }
 
 class _RouteAwareReelsHarness extends StatefulWidget {
