@@ -48,6 +48,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   bool _isRailVisible = true;
   bool _selectionMode = false;
   bool _isDeleting = false;
+  String? _selectedReelCategoryKey;
   int _currentActiveIndex = 0;
   String? _currentActiveReelKey;
   bool _didRestorePersistedSelection = false;
@@ -123,6 +124,10 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
       _scheduleViewportSync(animatedRail: false);
     }
     final snapshot = mediaAsync.valueOrNull;
+    final reelCategories =
+      snapshot == null
+        ? const <DaylySportMediaCategoryGroup>[]
+        : _reelCategoriesFromSnapshot(snapshot);
     final sortedItems =
         snapshot == null
             ? const <DaylySportMediaItem>[]
@@ -135,7 +140,10 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
         !_isDeleting &&
         lifecycleState == AppLifecycleState.resumed;
 
-    return Scaffold(
+    return DefaultTabController(
+      length: reelCategories.isEmpty ? 1 : reelCategories.length,
+      initialIndex: _selectedReelCategoryIndex(reelCategories),
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_selectionMode ? 'Select reels ($selectedCount)' : 'Reels'),
         actions: [
@@ -204,6 +212,25 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
             icon: const Icon(Icons.refresh),
           ),
         ],
+        bottom:
+            reelCategories.length <= 1
+                ? null
+                : TabBar(
+                    isScrollable: true,
+                    onTap: (index) {
+                      final nextKey = reelCategories[index].key;
+                      if (_selectedReelCategoryKey == nextKey) {
+                        return;
+                      }
+                      setState(() {
+                        _selectedReelCategoryKey = nextKey;
+                      });
+                    },
+                    tabs: [
+                      for (final category in reelCategories)
+                        Tab(text: category.label),
+                    ],
+                  ),
       ),
       body: OfflineContentDeleteProgressScope(
         progress: deleteProgress,
@@ -262,6 +289,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
             );
           },
         ),
+      ),
       ),
     );
   }
@@ -419,22 +447,100 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   List<DaylySportMediaItem> _reelItemsFromSnapshot(
     DaylySportMediaSnapshot snapshot,
   ) {
+    final allItems = _allReelItemsFromSnapshot(snapshot);
+    final selectedCategory = _selectedReelCategory(
+      _reelCategoriesFromItems(allItems),
+    );
+    return selectedCategory?.items ?? allItems;
+  }
+
+  List<DaylySportMediaItem> _allReelItemsFromSnapshot(
+    DaylySportMediaSnapshot snapshot,
+  ) {
     if (_lastSortedSnapshotAt == snapshot.scannedAt) {
       return _sortedReelItems;
     }
 
-    final reelsSection = snapshot.section(DaylySportMediaSection.reels);
-    final highlightFallback =
-        snapshot.section(DaylySportMediaSection.highlights).videoItems;
-    final items = reelsSection.hasVideoItems
-        ? reelsSection.videoItems
-        : highlightFallback;
+    final items = snapshot.section(DaylySportMediaSection.reels).videoItems;
     _sortedReelItems = sortOfflineMediaItemsForDisplay(
       items,
       ref.read(offlineSeenItemIdsProvider),
     );
     _lastSortedSnapshotAt = snapshot.scannedAt;
     return _sortedReelItems;
+  }
+
+  List<DaylySportMediaCategoryGroup> _reelCategoriesFromSnapshot(
+    DaylySportMediaSnapshot snapshot,
+  ) {
+    return _reelCategoriesFromItems(_allReelItemsFromSnapshot(snapshot));
+  }
+
+  List<DaylySportMediaCategoryGroup> _reelCategoriesFromItems(
+    List<DaylySportMediaItem> items,
+  ) {
+    final grouped = <String, _ReelCategoryAccumulator>{};
+    for (final item in items) {
+      final key = item.categoryKey ?? DaylySportMediaSection.reels.name;
+      final label = item.categoryLabel ?? 'Reels';
+      final bucket = grouped.putIfAbsent(
+        key,
+        () => _ReelCategoryAccumulator(key: key, label: label),
+      );
+      bucket.items.add(item);
+    }
+
+    final categories = [
+      for (final bucket in grouped.values)
+        DaylySportMediaCategoryGroup(
+          key: bucket.key,
+          label: bucket.label,
+          items: List<DaylySportMediaItem>.unmodifiable(bucket.items),
+        ),
+    ];
+    categories.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+
+    if (categories.length <= 1) {
+      return categories;
+    }
+
+    return [
+      DaylySportMediaCategoryGroup(
+        key: '__all__',
+        label: 'All',
+        items: List<DaylySportMediaItem>.unmodifiable(items),
+      ),
+      ...categories,
+    ];
+  }
+
+  DaylySportMediaCategoryGroup? _selectedReelCategory(
+    List<DaylySportMediaCategoryGroup> categories,
+  ) {
+    if (categories.isEmpty) {
+      return null;
+    }
+    final selectedKey = _selectedReelCategoryKey;
+    if (selectedKey == null) {
+      return categories.first;
+    }
+    for (final category in categories) {
+      if (category.key == selectedKey) {
+        return category;
+      }
+    }
+    return categories.first;
+  }
+
+  int _selectedReelCategoryIndex(
+    List<DaylySportMediaCategoryGroup> categories,
+  ) {
+    if (categories.isEmpty) {
+      return 0;
+    }
+    final selected = _selectedReelCategory(categories);
+    final index = categories.indexOf(selected!);
+    return index < 0 ? 0 : index;
   }
 
   void _setSelectionMode(bool value) {
@@ -541,6 +647,14 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
       }
     }
   }
+}
+
+class _ReelCategoryAccumulator {
+  _ReelCategoryAccumulator({required this.key, required this.label});
+
+  final String key;
+  final String label;
+  final List<DaylySportMediaItem> items = <DaylySportMediaItem>[];
 }
 
 typedef ReelOverlayThumbnailBuilder =

@@ -842,6 +842,98 @@ void main() {
     expect(find.text('item_0.mp4:active'), findsOneWidget);
   });
 
+  testWidgets(
+    'shows the empty reels state instead of falling back to highlights',
+    (tester) async {
+      tester.view.physicalSize = const Size(430, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final tempDir = Directory.systemTemp.createTempSync(
+        'eri_reels_screen_empty_no_fallback_',
+      );
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final preferences = await SharedPreferences.getInstance();
+      final services = await AppServices.create(sharedPreferences: preferences);
+      final highlightFile = File(
+        '${tempDir.path}${Platform.pathSeparator}highlight.mp4',
+      )..writeAsBytesSync(const <int>[1, 2, 3, 4]);
+      final snapshot = DaylySportMediaSnapshot(
+        rootDirectory: tempDir,
+        scannedAt: DateTime.utc(2026, 4, 20, 10),
+        sections: {
+          DaylySportMediaSection.reels: const DaylySportMediaSectionSnapshot(
+            section: DaylySportMediaSection.reels,
+            items: <DaylySportMediaItem>[],
+            existingDirectories: <String>[],
+            scannedDirectories: <String>['D:/daylySport/reels'],
+          ),
+          DaylySportMediaSection.highlights: DaylySportMediaSectionSnapshot(
+            section: DaylySportMediaSection.highlights,
+            items: [
+              DaylySportMediaItem(
+                file: highlightFile,
+                relativePath: 'highlights/highlight.mp4',
+                section: DaylySportMediaSection.highlights,
+                type: DaylySportMediaType.video,
+                lastModified: DateTime.utc(2026, 4, 20, 9),
+                sizeBytes: 4,
+                categoryKey: 'highlights',
+                categoryLabel: 'Highlights',
+              ),
+            ],
+            existingDirectories: <String>[tempDir.path],
+            scannedDirectories: <String>[tempDir.path],
+          ),
+          DaylySportMediaSection.news: const DaylySportMediaSectionSnapshot(
+            section: DaylySportMediaSection.news,
+            items: <DaylySportMediaItem>[],
+            existingDirectories: <String>[],
+            scannedDirectories: <String>[],
+          ),
+          DaylySportMediaSection.updates: const DaylySportMediaSectionSnapshot(
+            section: DaylySportMediaSection.updates,
+            items: <DaylySportMediaItem>[],
+            existingDirectories: <String>[],
+            scannedDirectories: <String>[],
+          ),
+        },
+      );
+
+      addTearDown(() async {
+        await services.database.close();
+        if (tempDir.existsSync()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appServicesProvider.overrideWithValue(services),
+            appRouteObserverProvider.overrideWithValue(
+              RouteObserver<ModalRoute<void>>(),
+            ),
+            currentShellBranchIndexProvider.overrideWith((ref) => 3),
+            appLifecycleStateProvider.overrideWith(
+              (ref) => AppLifecycleState.resumed,
+            ),
+            daylySportMediaSnapshotProvider.overrideWith(
+              () => _TestDaylySportMediaSnapshotNotifier(snapshot),
+            ),
+          ],
+          child: const MaterialApp(
+            home: ReelsScreen(enableEncryptedPrewarm: false),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('No short videos found'), findsOneWidget);
+      expect(find.text('highlight.mp4'), findsNothing);
+    },
+  );
+
   testWidgets('keeps manual rail scroll position across rebuilds', (tester) async {
     tester.view.physicalSize = const Size(430, 900);
     tester.view.devicePixelRatio = 1.0;

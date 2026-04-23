@@ -21,38 +21,35 @@ class VideoScreen extends ConsumerStatefulWidget {
   ConsumerState<VideoScreen> createState() => _VideoScreenState();
 }
 
-class _VideoScreenState extends ConsumerState<VideoScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+class _VideoScreenState extends ConsumerState<VideoScreen> {
   DateTime? _lastPrewarmScanAt;
   bool _selectionMode = false;
   bool _isDeleting = false;
+  String? _selectedVideoCategoryKey;
   final Set<String> _selectedMediaIds = <String>{};
-  DateTime? _lastSortedSnapshotAt;
-  Map<DaylySportMediaSection, List<DaylySportMediaItem>> _sortedSections =
-      const <DaylySportMediaSection, List<DaylySportMediaItem>>{};
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     final mediaAsync = ref.watch(daylySportMediaSnapshotProvider);
-    final badges = ref.watch(offlineContentBadgeCountsProvider);
     final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
     final seenItemIds = ref.watch(offlineSeenItemIdsProvider);
     final layoutMode = ref.watch(videoListLayoutModeProvider);
     final snapshot = mediaAsync.valueOrNull;
+    final categories =
+        snapshot == null
+            ? const <DaylySportMediaCategoryGroup>[]
+            : _videoCategoriesForSnapshot(snapshot, seenItemIds);
+    final selectedCategory = _selectedVideoCategory(categories);
     final allItems =
         snapshot == null
             ? const <DaylySportMediaItem>[]
             : _allVideoItems(snapshot);
     final selectedCount = _selectedMediaIds.length;
 
-    return Scaffold(
+    return DefaultTabController(
+      length: categories.isEmpty ? 1 : categories.length,
+      initialIndex: _selectedVideoCategoryIndex(categories),
+      child: Scaffold(
       appBar: AppBar(
         title: Text(
           _selectionMode ? 'Select videos ($selectedCount)' : 'Video',
@@ -121,26 +118,30 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
             icon: const Icon(Icons.refresh),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabs,
-          tabs: [
-            Tab(
-              child: _SectionTabLabel(
-                label: 'Highlights',
-                count: badges.videoHighlights,
-              ),
-            ),
-            Tab(
-              child: _SectionTabLabel(label: 'News', count: badges.videoNews),
-            ),
-            Tab(
-              child: _SectionTabLabel(
-                label: 'Updates',
-                count: badges.videoUpdates,
-              ),
-            ),
-          ],
-        ),
+        bottom:
+            categories.isEmpty
+                ? null
+                : TabBar(
+                    isScrollable: true,
+                    onTap: (index) {
+                      final nextKey = categories[index].key;
+                      if (_selectedVideoCategoryKey == nextKey) {
+                        return;
+                      }
+                      setState(() {
+                        _selectedVideoCategoryKey = nextKey;
+                      });
+                    },
+                    tabs: [
+                      for (final category in categories)
+                        Tab(
+                          child: _SectionTabLabel(
+                            label: category.label,
+                            count: category.items.length,
+                          ),
+                        ),
+                    ],
+                  ),
       ),
       body: OfflineContentDeleteProgressScope(
         progress: deleteProgress,
@@ -152,53 +153,25 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
               ),
           data: (snapshot) {
             _scheduleEncryptedPrewarm(snapshot);
-            _ensureSortedSections(snapshot);
-            return TabBarView(
-              controller: _tabs,
-              children: [
-                _SectionMediaGrid(
-                  title: 'Highlights',
-                  section: snapshot.section(DaylySportMediaSection.highlights),
-                  items: _sortedItemsForSection(DaylySportMediaSection.highlights),
-                  seenItemIds: seenItemIds,
-                  layoutMode: layoutMode,
-                  onOpenMedia: _openMediaItem,
-                  isSelectionMode: _selectionMode,
-                  selectedIds: _selectedMediaIds,
-                  onToggleSelection: _toggleMediaSelection,
-                  onStartSelection: _startSelection,
-                  onDeleteMedia: _deleteSingleMedia,
-                ),
-                _SectionMediaGrid(
-                  title: 'News',
-                  section: snapshot.section(DaylySportMediaSection.news),
-                  items: _sortedItemsForSection(DaylySportMediaSection.news),
-                  seenItemIds: seenItemIds,
-                  layoutMode: layoutMode,
-                  onOpenMedia: _openMediaItem,
-                  isSelectionMode: _selectionMode,
-                  selectedIds: _selectedMediaIds,
-                  onToggleSelection: _toggleMediaSelection,
-                  onStartSelection: _startSelection,
-                  onDeleteMedia: _deleteSingleMedia,
-                ),
-                _SectionMediaGrid(
-                  title: 'Updates',
-                  section: snapshot.section(DaylySportMediaSection.updates),
-                  items: _sortedItemsForSection(DaylySportMediaSection.updates),
-                  seenItemIds: seenItemIds,
-                  layoutMode: layoutMode,
-                  onOpenMedia: _openMediaItem,
-                  isSelectionMode: _selectionMode,
-                  selectedIds: _selectedMediaIds,
-                  onToggleSelection: _toggleMediaSelection,
-                  onStartSelection: _startSelection,
-                  onDeleteMedia: _deleteSingleMedia,
-                ),
-              ],
+            if (selectedCategory == null) {
+              return _VideoEmptyState(rootPath: snapshot.rootDirectory.path);
+            }
+            return _SectionMediaGrid(
+              title: selectedCategory.label,
+              emptyStateDirectories: <String>[snapshot.rootDirectory.path],
+              items: selectedCategory.items,
+              seenItemIds: seenItemIds,
+              layoutMode: layoutMode,
+              onOpenMedia: _openMediaItem,
+              isSelectionMode: _selectionMode,
+              selectedIds: _selectedMediaIds,
+              onToggleSelection: _toggleMediaSelection,
+              onStartSelection: _startSelection,
+              onDeleteMedia: _deleteSingleMedia,
             );
           },
         ),
+      ),
       ),
     );
   }
@@ -252,35 +225,63 @@ class _VideoScreenState extends ConsumerState<VideoScreen>
   }
 
   List<DaylySportMediaItem> _allVideoItems(DaylySportMediaSnapshot snapshot) {
-    return [
-      ...snapshot.section(DaylySportMediaSection.highlights).videoItems,
-      ...snapshot.section(DaylySportMediaSection.news).videoItems,
-      ...snapshot.section(DaylySportMediaSection.updates).videoItems,
-    ];
+    return snapshot.allVideoItems();
   }
 
-  void _ensureSortedSections(DaylySportMediaSnapshot snapshot) {
-    if (_lastSortedSnapshotAt == snapshot.scannedAt) {
-      return;
+  List<DaylySportMediaCategoryGroup> _videoCategoriesForSnapshot(
+    DaylySportMediaSnapshot snapshot,
+    Set<String> seenItemIds,
+  ) {
+    final grouped = <String, _VideoCategoryAccumulator>{};
+    for (final item in snapshot.allVideoItems()) {
+      final key = item.categoryKey ?? item.section.name;
+      final label = item.categoryLabel ?? sectionLabel(item.section);
+      final bucket = grouped.putIfAbsent(
+        key,
+        () => _VideoCategoryAccumulator(key: key, label: label),
+      );
+      bucket.items.add(item);
     }
 
-    final seenItemIds = ref.read(offlineSeenItemIdsProvider);
-    _sortedSections = {
-      for (final section in const <DaylySportMediaSection>[
-        DaylySportMediaSection.highlights,
-        DaylySportMediaSection.news,
-        DaylySportMediaSection.updates,
-      ])
-        section: sortOfflineMediaItemsForDisplay(
-          snapshot.section(section).videoItems,
-          seenItemIds,
+    final categories = [
+      for (final bucket in grouped.values)
+        DaylySportMediaCategoryGroup(
+          key: bucket.key,
+          label: bucket.label,
+          items: sortOfflineMediaItemsForDisplay(bucket.items, seenItemIds),
         ),
-    };
-    _lastSortedSnapshotAt = snapshot.scannedAt;
+    ];
+    categories.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+    return categories;
   }
 
-  List<DaylySportMediaItem> _sortedItemsForSection(DaylySportMediaSection section) {
-    return _sortedSections[section] ?? const <DaylySportMediaItem>[];
+  DaylySportMediaCategoryGroup? _selectedVideoCategory(
+    List<DaylySportMediaCategoryGroup> categories,
+  ) {
+    if (categories.isEmpty) {
+      return null;
+    }
+    final selectedKey = _selectedVideoCategoryKey;
+    if (selectedKey == null) {
+      return categories.first;
+    }
+    for (final category in categories) {
+      if (category.key == selectedKey) {
+        return category;
+      }
+    }
+    return categories.first;
+  }
+
+  int _selectedVideoCategoryIndex(
+    List<DaylySportMediaCategoryGroup> categories,
+  ) {
+    if (categories.isEmpty) {
+      return 0;
+    }
+    final selected = _selectedVideoCategory(categories);
+    final index = categories.indexOf(selected!);
+    return index < 0 ? 0 : index;
   }
 
   void _setSelectionMode(bool value) {
@@ -435,7 +436,7 @@ class _SectionTabLabel extends StatelessWidget {
 class _SectionMediaGrid extends StatelessWidget {
   const _SectionMediaGrid({
     required this.title,
-    required this.section,
+    required this.emptyStateDirectories,
     required this.items,
     required this.seenItemIds,
     required this.layoutMode,
@@ -448,7 +449,7 @@ class _SectionMediaGrid extends StatelessWidget {
   });
 
   final String title;
-  final DaylySportMediaSectionSnapshot section;
+  final List<String> emptyStateDirectories;
   final List<DaylySportMediaItem> items;
   final Set<String> seenItemIds;
   final VideoListLayoutMode layoutMode;
@@ -478,7 +479,9 @@ class _SectionMediaGrid extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Drop encrypted videos into ${section.scannedDirectories.join(' or ')} and refresh.',
+                  emptyStateDirectories.isEmpty
+                      ? 'Import encrypted videos into an internal storage category folder and refresh.'
+                      : 'Drop encrypted videos into ${emptyStateDirectories.join(' or ')} and refresh.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
@@ -692,7 +695,7 @@ class _MediaCard extends StatelessWidget {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          _VideoMetaChip(label: sectionLabel(item.section)),
+                          _VideoMetaChip(label: mediaCategoryLabel(item)),
                           _VideoMetaChip(label: timestamp),
                         ],
                       ),
@@ -728,7 +731,7 @@ class _MediaCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: Text(
-                '${sectionLabel(item.section)} · $timestamp',
+                '${mediaCategoryLabel(item)} · $timestamp',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -752,6 +755,53 @@ class _MediaCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _VideoEmptyState extends StatelessWidget {
+  const _VideoEmptyState({required this.rootPath});
+
+  final String rootPath;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.video_collection_outlined, size: 44),
+              const SizedBox(height: 12),
+              Text(
+                'No videos found',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Import encrypted videos into category folders under $rootPath and refresh.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoCategoryAccumulator {
+  _VideoCategoryAccumulator({required this.key, required this.label});
+
+  final String key;
+  final String label;
+  final List<DaylySportMediaItem> items = <DaylySportMediaItem>[];
+}
+
+String mediaCategoryLabel(DaylySportMediaItem item) {
+  return item.categoryLabel ?? sectionLabel(item.section);
 }
 
 String sectionLabel(DaylySportMediaSection section) {
