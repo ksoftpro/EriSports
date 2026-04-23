@@ -137,7 +137,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
                         Tab(
                           child: _SectionTabLabel(
                             label: category.label,
-                            count: category.items.length,
+                            count: _unseenCountForCategory(category, seenItemIds),
                           ),
                         ),
                     ],
@@ -282,6 +282,19 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
     final selected = _selectedVideoCategory(categories);
     final index = categories.indexOf(selected!);
     return index < 0 ? 0 : index;
+  }
+
+  int _unseenCountForCategory(
+    DaylySportMediaCategoryGroup category,
+    Set<String> seenItemIds,
+  ) {
+    var unseenCount = 0;
+    for (final item in category.items) {
+      if (!isOfflineMediaItemSeen(item, seenItemIds)) {
+        unseenCount += 1;
+      }
+    }
+    return unseenCount;
   }
 
   void _setSelectionMode(bool value) {
