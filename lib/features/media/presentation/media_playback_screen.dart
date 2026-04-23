@@ -8,7 +8,6 @@ import 'package:eri_sports/features/media/presentation/video_playback_position_s
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:video_player/video_player.dart';
 
 class MediaPlaybackScreen extends ConsumerStatefulWidget {
@@ -32,7 +31,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   );
 
   VideoPlayerController? _controller;
-  VlcPlayerController? _vlcController;
   bool _isPreparing = false;
   String? _errorMessage;
   bool _usedCache = false;
@@ -43,8 +41,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
       WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
   ModalRoute<dynamic>? _route;
   bool _isSavingPosition = false;
-
-  bool get _useVlcPlayback => Platform.isAndroid && widget.item.isEncrypted;
 
   @override
   void initState() {
@@ -91,13 +87,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
       unawaited(_pauseAndDisposeController(controller));
     }
 
-    final vlcController = _vlcController;
-    _detachVlcController(vlcController);
-    _vlcController = null;
-    if (vlcController != null) {
-      unawaited(_pauseAndDisposeVlcController(vlcController));
-    }
-
     super.dispose();
   }
 
@@ -133,15 +122,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
         widget.item.file,
       );
 
-      if (_useVlcPlayback) {
-        await _prepareVlcVideo(
-          playableFile: playable.file,
-          usedCache: playable.usedCache,
-          wasDecrypted: playable.wasDecrypted,
-        );
-        return;
-      }
-
       final controller = VideoPlayerController.file(File(playable.file.path));
       await controller.initialize();
       await controller.setLooping(true);
@@ -159,21 +139,15 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
       }
 
       final previousController = _controller;
-      final previousVlcController = _vlcController;
-      _detachVlcController(previousVlcController);
 
       setState(() {
         _controller = controller;
-        _vlcController = null;
         _usedCache = playable.usedCache;
         _wasDecrypted = playable.wasDecrypted;
         _isPreparing = false;
       });
       if (previousController != null) {
         unawaited(_pauseAndDisposeController(previousController));
-      }
-      if (previousVlcController != null) {
-        unawaited(_pauseAndDisposeVlcController(previousVlcController));
       }
 
       _shouldResumePlayback = true;
@@ -187,102 +161,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
         _isPreparing = false;
       });
     }
-  }
-
-  Future<void> _prepareVlcVideo({
-    required File playableFile,
-    required bool usedCache,
-    required bool wasDecrypted,
-  }) async {
-    final controller = VlcPlayerController.file(
-      playableFile,
-      autoInitialize: true,
-      autoPlay: false,
-      allowBackgroundPlayback: false,
-      hwAcc: HwAcc.auto,
-      options: VlcPlayerOptions(),
-    );
-    controller.addListener(_handleVlcControllerChanged);
-
-    late final VoidCallback onInit;
-    onInit = () {
-      controller.removeOnInitListener(onInit);
-      unawaited(_handleVlcInitialized(controller));
-    };
-    controller.addOnInitListener(onInit);
-
-    if (!mounted) {
-      _detachVlcController(controller);
-      await controller.dispose();
-      return;
-    }
-
-    final previousController = _controller;
-    final previousVlcController = _vlcController;
-    _detachVlcController(previousVlcController);
-
-    setState(() {
-      _controller = null;
-      _vlcController = controller;
-      _usedCache = usedCache;
-      _wasDecrypted = wasDecrypted;
-      _isPreparing = false;
-    });
-
-    if (previousController != null) {
-      unawaited(_pauseAndDisposeController(previousController));
-    }
-    if (previousVlcController != null) {
-      unawaited(_pauseAndDisposeVlcController(previousVlcController));
-    }
-
-    _shouldResumePlayback = true;
-  }
-
-  Future<void> _handleVlcInitialized(VlcPlayerController controller) async {
-    try {
-      await controller.setLooping(true);
-      final savedPosition = _playbackPositionStore.readPosition(widget.item);
-      final totalDuration = controller.value.duration;
-      if (savedPosition != null &&
-          savedPosition > Duration.zero &&
-          (totalDuration <= Duration.zero || savedPosition < totalDuration)) {
-        await controller.seekTo(savedPosition);
-      }
-      if (!mounted || _vlcController != controller) {
-        _detachVlcController(controller);
-        await controller.dispose();
-        return;
-      }
-      await _syncPlaybackWithVisibility();
-    } catch (error) {
-      if (!mounted || _vlcController != controller) {
-        _detachVlcController(controller);
-        await controller.dispose();
-        return;
-      }
-      setState(() {
-        _errorMessage = '$error';
-      });
-    }
-  }
-
-  void _handleVlcControllerChanged() {
-    final controller = _vlcController;
-    if (!mounted || controller == null) {
-      return;
-    }
-    if (controller.value.hasError) {
-      setState(() {
-        _errorMessage = controller.value.errorDescription;
-      });
-      return;
-    }
-    setState(() {});
-  }
-
-  void _detachVlcController(VlcPlayerController? controller) {
-    controller?.removeListener(_handleVlcControllerChanged);
   }
 
   @override
@@ -310,10 +188,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   }
 
   Widget _buildVideoBody(BuildContext context) {
-    if (_useVlcPlayback) {
-      return _buildVlcVideoBody(context);
-    }
-
     final controller = _controller;
 
     if (_isPreparing) {
@@ -387,103 +261,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
     );
   }
 
-  Widget _buildVlcVideoBody(BuildContext context) {
-    final controller = _vlcController;
-
-    if (_isPreparing) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(_errorMessage!, textAlign: TextAlign.center),
-        ),
-      );
-    }
-
-    if (controller == null) {
-      return const Center(child: Text('Unable to initialize media playback.'));
-    }
-
-    final value = controller.value;
-    final duration = value.duration;
-    final position = value.position > duration ? duration : value.position;
-    final maxMilliseconds =
-        duration > Duration.zero ? duration.inMilliseconds.toDouble() : 1.0;
-    final sliderValue =
-        duration > Duration.zero
-            ? position.inMilliseconds.clamp(0, duration.inMilliseconds).toDouble()
-            : 0.0;
-    final aspectRatio = value.aspectRatio > 0 ? value.aspectRatio : (16 / 9);
-
-    return Column(
-      children: [
-        Expanded(
-          child: Center(
-            child: AspectRatio(
-              aspectRatio: aspectRatio,
-              child: VlcPlayer(
-                controller: controller,
-                aspectRatio: aspectRatio,
-                placeholder: const Center(child: CircularProgressIndicator()),
-              ),
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Slider(
-                value: sliderValue,
-                max: maxMilliseconds,
-                onChanged: duration > Duration.zero
-                    ? (nextValue) {
-                        unawaited(
-                          controller.seekTo(
-                            Duration(milliseconds: nextValue.round()),
-                          ),
-                        );
-                      }
-                    : null,
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () async {
-                      _shouldResumePlayback = !value.isPlaying;
-                      await _syncPlaybackWithVisibility();
-                    },
-                    icon: Icon(
-                      value.isPlaying
-                          ? Icons.pause_circle_filled
-                          : Icons.play_circle_fill,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _wasDecrypted
-                          ? 'Decrypted and cached with VLC codec fallback'
-                          : (_usedCache
-                              ? 'Playing cached decrypted media with VLC codec fallback'
-                              : 'Playing local media with VLC codec fallback'),
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   void _handleRouteVisibilityChanged(bool isVisible) {
     _routeVisible = isVisible;
     if (!isVisible) {
@@ -493,11 +270,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   }
 
   Future<void> _syncPlaybackWithVisibility() async {
-    if (_useVlcPlayback) {
-      await _syncVlcPlaybackWithVisibility();
-      return;
-    }
-
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) {
       return;
@@ -523,32 +295,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
     }
   }
 
-  Future<void> _syncVlcPlaybackWithVisibility() async {
-    final controller = _vlcController;
-    if (controller == null || !controller.value.isInitialized) {
-      return;
-    }
-
-    final shouldBePlaying =
-        _shouldResumePlayback &&
-        _routeVisible &&
-        _lifecycleState == AppLifecycleState.resumed;
-    if (shouldBePlaying) {
-      if (!controller.value.isPlaying) {
-        await controller.play();
-      }
-    } else if (controller.value.isPlaying) {
-      await controller.pause();
-      await _persistVlcPlaybackPosition(controller);
-    } else {
-      await _persistVlcPlaybackPosition(controller);
-    }
-
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
   Future<void> _pauseAndDisposeController(
     VideoPlayerController controller,
   ) async {
@@ -559,26 +305,7 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
     await controller.dispose();
   }
 
-  Future<void> _pauseAndDisposeVlcController(
-    VlcPlayerController controller,
-  ) async {
-    if (controller.value.isInitialized && controller.value.isPlaying) {
-      await controller.pause();
-    }
-    await _persistVlcPlaybackPosition(controller);
-    await controller.dispose();
-  }
-
   Future<void> _persistCurrentPosition() async {
-    if (_useVlcPlayback) {
-      final controller = _vlcController;
-      if (controller == null) {
-        return;
-      }
-      await _persistVlcPlaybackPosition(controller);
-      return;
-    }
-
     final controller = _controller;
     if (controller == null) {
       return;
@@ -597,27 +324,6 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
         widget.item,
         controller.value.position,
         duration: controller.value.duration,
-      );
-    } finally {
-      _isSavingPosition = false;
-    }
-  }
-
-  Future<void> _persistVlcPlaybackPosition(VlcPlayerController controller) async {
-    if (_isSavingPosition || !controller.value.isInitialized) {
-      return;
-    }
-
-    _isSavingPosition = true;
-    try {
-      final position = await controller.getPosition();
-      await _playbackPositionStore.writePosition(
-        widget.item,
-        position,
-        duration:
-            controller.value.duration > Duration.zero
-                ? controller.value.duration
-                : null,
       );
     } finally {
       _isSavingPosition = false;

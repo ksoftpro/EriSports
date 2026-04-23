@@ -10,12 +10,6 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
 
-    packaging {
-        jniLibs {
-            pickFirsts += setOf("lib/**/libc++_shared.so")
-        }
-    }
-
     flavorDimensions += "product"
 
     compileOptions {
