@@ -52,6 +52,89 @@ typedef SecureContentInventoryScanDelegate =
 SecureContentInventoryScanDelegate secureContentInventoryScanDelegate =
     scanSecureContentInventoryInIsolate;
 
+const Set<String> _knownVideoImportRootSegments = <String>{
+  'reels',
+  'shorts',
+  'short_videos',
+  'short-videos',
+  'highlights',
+  'highlight',
+  'video-news',
+  'video_news',
+  'news-videos',
+  'news_videos',
+  'updates',
+  'update',
+};
+
+const Set<String> _knownVideoImportRootPrefixes = <String>{
+  'video/news',
+  'videos/news',
+};
+
+String resolveSecureImportRelativeOutputPath({
+  required String relativeOutputPath,
+  required SecureContentKind kind,
+  required String destinationRoot,
+}) {
+  final normalizedRelativePath = _normalizeSecureImportPath(relativeOutputPath);
+  final normalizedDestinationRoot = _normalizeSecureImportPath(destinationRoot);
+
+  if (normalizedDestinationRoot.isEmpty || normalizedRelativePath.isEmpty) {
+    return normalizedRelativePath;
+  }
+
+  if (normalizedRelativePath == normalizedDestinationRoot ||
+      normalizedRelativePath.startsWith('$normalizedDestinationRoot/')) {
+    return normalizedRelativePath;
+  }
+
+  if (kind == SecureContentKind.video &&
+      _hasKnownVideoImportRoot(normalizedRelativePath)) {
+    return normalizedRelativePath;
+  }
+
+  return p
+      .join(normalizedDestinationRoot, normalizedRelativePath)
+      .replaceAll('\\', '/');
+}
+
+bool secureContentDestinationRootRequired(SecureContentKind kind) {
+  return kind != SecureContentKind.video;
+}
+
+String _normalizeSecureImportPath(String rawPath) {
+  final normalized = p
+      .normalize(rawPath.trim().replaceAll('\\', '/'))
+      .replaceAll('\\', '/');
+  final sanitized = normalized
+      .split('/')
+      .where((segment) => segment.isNotEmpty && segment != '.' && segment != '..')
+      .join('/');
+  return sanitized;
+}
+
+bool _hasKnownVideoImportRoot(String relativeOutputPath) {
+  final segments = relativeOutputPath
+      .split('/')
+      .where((segment) => segment.isNotEmpty)
+      .toList(growable: false);
+  if (segments.isEmpty) {
+    return false;
+  }
+
+  if (_knownVideoImportRootSegments.contains(segments.first.toLowerCase())) {
+    return true;
+  }
+
+  if (segments.length < 2) {
+    return false;
+  }
+
+  final rootPrefix = '${segments[0].toLowerCase()}/${segments[1].toLowerCase()}';
+  return _knownVideoImportRootPrefixes.contains(rootPrefix);
+}
+
 class SecureContentScreen extends ConsumerStatefulWidget {
   const SecureContentScreen({super.key});
 
@@ -106,8 +189,8 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       TextEditingController(text: 'json');
   final TextEditingController _imageDestinationController =
       TextEditingController(text: 'news');
-  final TextEditingController _videoDestinationController =
-      TextEditingController(text: 'reels');
+    final TextEditingController _videoDestinationController =
+      TextEditingController();
   final List<_PendingSecureSource> _selectedSources = <_PendingSecureSource>[];
 
   @override
@@ -533,7 +616,11 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     final destinationByKind = _buildDestinationByKind();
     final missingDestinationKinds = _selectedSources
         .map((source) => source.kind)
-        .where((kind) => (destinationByKind[kind] ?? '').isEmpty)
+      .where(
+        (kind) =>
+          secureContentDestinationRootRequired(kind) &&
+          (destinationByKind[kind] ?? '').isEmpty,
+      )
         .toSet()
         .toList(growable: false);
     if (missingDestinationKinds.isNotEmpty) {
@@ -571,9 +658,10 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
             (source) => SecureContentEncryptionRequest(
               requestId: source.requestId,
               sourcePath: source.sourcePath,
-              relativeOutputPath: p.join(
-                destinationByKind[source.kind]!,
-                source.relativeOutputPath,
+              relativeOutputPath: resolveSecureImportRelativeOutputPath(
+                relativeOutputPath: source.relativeOutputPath,
+                kind: source.kind,
+                destinationRoot: destinationByKind[source.kind] ?? '',
               ),
             ),
           )
@@ -4499,6 +4587,11 @@ class _EncryptionImportPanel extends StatelessWidget {
             'Select plain JSON, image, or video files and encrypt them directly into the daylySport folder. Output files use .esj, .esi, and .esv, and each batch writes a manifest under manifest/secure_imports.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
+          const SizedBox(height: 6),
+          Text(
+            'Leave Video destination empty to preserve detected Reel and Video category folders from the imported source tree.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 12),
           _DestinationPresetEditor(
             kind: SecureContentKind.json,
@@ -4521,7 +4614,7 @@ class _EncryptionImportPanel extends StatelessWidget {
           _DestinationPresetEditor(
             kind: SecureContentKind.video,
             label: 'Video destination',
-            hintText: 'reels, highlights, or video-news',
+            hintText: 'optional: reels, highlights, or preserve source tree',
             controller: videoDestinationController,
             presets: _presetsByKind[SecureContentKind.video]!,
             onApplyPreset: onApplyPreset,
@@ -4712,6 +4805,7 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
               DataColumn(label: Text('Progress')),
               DataColumn(label: Text('Remove')),
             ],
+<<<<<<< Updated upstream
             rows: selectedSources
                 .map((source) {
                   final itemState = progressByRequestId[source.requestId];
@@ -4733,6 +4827,25 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
                             const SizedBox(width: 8),
                             Text(_kindText(source.kind)),
                           ],
+=======
+            rows: selectedSources.map((source) {
+              final itemState = progressByRequestId[source.requestId];
+              final destinationRoot = destinationByKind[source.kind] ?? '';
+              final outputPath = resolveSecureImportRelativeOutputPath(
+                relativeOutputPath: source.relativeOutputPath,
+                kind: source.kind,
+                destinationRoot: destinationRoot,
+              );
+              return DataRow(
+                cells: [
+                  DataCell(
+                    Row(
+                      children: [
+                        Icon(
+                          _iconForKind(source.kind),
+                          size: 18,
+                          color: Theme.of(context).colorScheme.primary,
+>>>>>>> Stashed changes
                         ),
                       ),
                       DataCell(
