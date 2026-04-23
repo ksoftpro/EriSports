@@ -12,6 +12,8 @@ import 'package:path/path.dart' as p;
 
 enum SportsAssetType { teams, players, leagues, banners }
 
+const _defaultPlayerPlaceholderAssetPath = 'assets/default.png';
+
 class ResolvedImageRef {
   const ResolvedImageRef._({required this.path, required this.isFile});
 
@@ -138,13 +140,19 @@ class LocalAssetResolver {
 
     final id = entityId.trim().toLowerCase();
     final normalizedName = _normalizeLookup(entityName ?? '');
-    if (id.isEmpty && normalizedName.isEmpty) {
-      return null;
-    }
-
     final cacheKey = '${type.name}|$id|$normalizedName';
     if (_resolvedCache.containsKey(cacheKey)) {
       return _resolvedCache[cacheKey];
+    }
+
+    if (type == SportsAssetType.players) {
+      final resolved = ResolvedImageRef.asset(_defaultPlayerPlaceholderAssetPath);
+      _resolvedCache[cacheKey] = resolved;
+      return resolved;
+    }
+
+    if (id.isEmpty && normalizedName.isEmpty) {
+      return null;
     }
 
     await _ensureBundledAssetsLoaded();

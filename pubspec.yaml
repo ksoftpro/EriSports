@@ -78,6 +78,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/default.png
     - assets/icon/
     - assets/placeholders/
     - assets/teams/

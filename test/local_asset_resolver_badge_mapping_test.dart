@@ -62,6 +62,18 @@ void main() {
     },
   );
 
+  test('resolves every player image to the shared placeholder asset', () async {
+    final resolved = await resolver.resolve(
+      type: SportsAssetType.players,
+      entityId: '12345',
+      entityName: 'Any Player',
+    );
+
+    expect(resolved, isNotNull);
+    expect(resolved!.isFile, isFalse);
+    expect(resolved.path, 'assets/default.png');
+  });
+
   test(
     'resolves local team badge when team name contains punctuation',
     () async {
