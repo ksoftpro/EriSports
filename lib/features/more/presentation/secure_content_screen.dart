@@ -4805,29 +4805,6 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
               DataColumn(label: Text('Progress')),
               DataColumn(label: Text('Remove')),
             ],
-<<<<<<< Updated upstream
-            rows: selectedSources
-                .map((source) {
-                  final itemState = progressByRequestId[source.requestId];
-                  final destinationRoot = destinationByKind[source.kind] ?? '';
-                  final outputPath =
-                      destinationRoot.isEmpty
-                          ? source.relativeOutputPath
-                          : p.join(destinationRoot, source.relativeOutputPath);
-                  return DataRow(
-                    cells: [
-                      DataCell(
-                        Row(
-                          children: [
-                            Icon(
-                              _iconForKind(source.kind),
-                              size: 18,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(_kindText(source.kind)),
-                          ],
-=======
             rows: selectedSources.map((source) {
               final itemState = progressByRequestId[source.requestId];
               final destinationRoot = destinationByKind[source.kind] ?? '';
@@ -4845,63 +4822,66 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
                           _iconForKind(source.kind),
                           size: 18,
                           color: Theme.of(context).colorScheme.primary,
->>>>>>> Stashed changes
                         ),
+                        const SizedBox(width: 8),
+                        Text(_kindText(source.kind)),
+                      ],
+                    ),
+                  ),
+                  DataCell(
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 220),
+                      child: Text(
+                        source.relativeOutputPath,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      DataCell(
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 220),
-                          child: Text(
-                            source.relativeOutputPath,
-                            overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  DataCell(
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 280),
+                      child: Text(
+                        itemState?.destinationPath ??
+                            _encryptedPreviewPath(outputPath, source.kind),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 160),
+                      child: Text(_statusLabel(itemState?.stage)),
+                    ),
+                  ),
+                  DataCell(
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 180),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          LinearProgressIndicator(
+                            value: itemState?.percentComplete,
+                            minHeight: 8,
                           ),
-                        ),
-                      ),
-                      DataCell(
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 280),
-                          child: Text(
-                            itemState?.destinationPath ??
-                                _encryptedPreviewPath(outputPath, source.kind),
-                            overflow: TextOverflow.ellipsis,
+                          const SizedBox(height: 6),
+                          Text(
+                            _progressLabel(itemState),
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
-                        ),
+                        ],
                       ),
-                      DataCell(
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 160),
-                          child: Text(_statusLabel(itemState?.stage)),
-                        ),
-                      ),
-                      DataCell(
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 180),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              LinearProgressIndicator(
-                                value: itemState?.percentComplete,
-                                minHeight: 8,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                _progressLabel(itemState),
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      DataCell(
-                        IconButton(
-                          tooltip: 'Remove file',
-                          onPressed: () => onRemoveSource(source),
-                          icon: const Icon(Icons.delete_outline_rounded),
-                        ),
-                      ),
-                    ],
-                  );
+                    ),
+                  ),
+                  DataCell(
+                    IconButton(
+                      tooltip: 'Remove file',
+                      onPressed: () => onRemoveSource(source),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                    ),
+                  ),
+                ],
+              );
                 })
                 .toList(growable: false),
           ),
