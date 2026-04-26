@@ -1,9 +1,11 @@
 import 'dart:io';
 
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/features/news/data/offline_news_repository.dart';
 import 'package:eri_sports/features/news/presentation/offline_news_providers.dart';
 import 'package:eri_sports/features/news/presentation/offline_news_screen.dart';
+import 'package:eri_sports/shared/widgets/pending_verification_placeholder.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,6 +82,71 @@ void main() {
     expect(find.byType(PageView), findsOneWidget);
     expect(find.textContaining('very_visible_name'), findsNothing);
     expect(find.textContaining('very_visible_name.png'), findsNothing);
+  });
+
+  testWidgets('blocks newly tracked news images until verified', (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_news_screen_unverified_',
+    );
+    addTearDown(() async {
+      await _clearPathProviderMock();
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    await _installPathProviderMock(tempDir);
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final services = await AppServices.create(sharedPreferences: preferences);
+    addTearDown(() => services.database.close());
+
+    final rootDir = Directory(
+      '${tempDir.path}${Platform.pathSeparator}daylySport',
+    )..createSync(recursive: true);
+    final newsDir = Directory('${rootDir.path}${Platform.pathSeparator}news')
+      ..createSync(recursive: true);
+    final sourceImage = File(
+      '${newsDir.path}${Platform.pathSeparator}blocked.png.esi',
+    )..writeAsBytesSync(_singlePixelPngBytes);
+    final snapshot = OfflineNewsGallerySnapshot(
+      rootDirectory: rootDir,
+      newsDirectory: newsDir,
+      images: [
+        OfflineNewsMediaItem(
+          file: sourceImage,
+          lastModified: DateTime.utc(2026, 4, 25, 8),
+          sizeBytes: _singlePixelPngBytes.length,
+        ),
+      ],
+      supportedFormats: const <String>['.esi'],
+      skippedUnsupportedCount: 0,
+      unreadableCount: 0,
+      scannedAt: DateTime.utc(2026, 4, 25, 8),
+      newsDirectoryExists: true,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appServicesProvider.overrideWithValue(services),
+          offlineActiveVerifiedItemIdsProvider.overrideWithValue(<String>{}),
+          offlineNewsGalleryProvider.overrideWith(
+            () => _TestOfflineNewsGalleryNotifier(snapshot),
+          ),
+        ],
+        child: const MaterialApp(home: OfflineNewsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PendingVerificationPlaceholder), findsWidgets);
+    expect(find.text('Pending verification'), findsOneWidget);
+    expect(find.text('Pending'), findsOneWidget);
   });
 }
 

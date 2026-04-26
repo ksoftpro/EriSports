@@ -9,6 +9,7 @@ import 'package:eri_sports/features/media/presentation/video_list_layout_control
 import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
 import 'package:eri_sports/shared/widgets/new_content_badge.dart';
 import 'package:eri_sports/shared/widgets/offline_video_thumbnail.dart';
+import 'package:eri_sports/shared/widgets/pending_verification_placeholder.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,6 +34,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
     final mediaAsync = ref.watch(daylySportMediaSnapshotProvider);
     final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
     final seenItemIds = ref.watch(offlineSeenItemIdsProvider);
+    final verifiedItemIds = ref.watch(offlineActiveVerifiedItemIdsProvider);
     final layoutMode = ref.watch(videoListLayoutModeProvider);
     final snapshot = mediaAsync.valueOrNull;
     final categories =
@@ -152,7 +154,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
                 child: Text('Unable to load local daylySport media.'),
               ),
           data: (snapshot) {
-            _scheduleEncryptedPrewarm(snapshot);
+            _scheduleEncryptedPrewarm(snapshot, verifiedItemIds);
             if (selectedCategory == null) {
               return _VideoEmptyState(rootPath: snapshot.rootDirectory.path);
             }
@@ -161,6 +163,7 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
               emptyStateDirectories: <String>[snapshot.rootDirectory.path],
               items: selectedCategory.items,
               seenItemIds: seenItemIds,
+              verifiedItemIds: verifiedItemIds,
               layoutMode: layoutMode,
               onOpenMedia: _openMediaItem,
               isSelectionMode: _selectionMode,
@@ -176,7 +179,10 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
     );
   }
 
-  void _scheduleEncryptedPrewarm(DaylySportMediaSnapshot snapshot) {
+  void _scheduleEncryptedPrewarm(
+    DaylySportMediaSnapshot snapshot,
+    Set<String>? verifiedItemIds,
+  ) {
     if (_lastPrewarmScanAt == snapshot.scannedAt) {
       return;
     }
@@ -186,7 +192,10 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
     for (final section in DaylySportMediaSection.values) {
       final items = snapshot.section(section).items;
       for (final item in items) {
-        if (item.isVideo && item.isEncrypted) {
+        if (item.isVideo &&
+            item.isEncrypted &&
+            (verifiedItemIds == null ||
+                isOfflineMediaItemVerified(item, verifiedItemIds))) {
           encryptedVideos.add(item);
         }
       }
@@ -207,6 +216,18 @@ class _VideoScreenState extends ConsumerState<VideoScreen> {
 
   void _openMediaItem(DaylySportMediaItem item) {
     if (_selectionMode || _isDeleting) {
+      return;
+    }
+    final verifiedItemIds = ref.read(offlineActiveVerifiedItemIdsProvider);
+    if (
+      verifiedItemIds != null &&
+      !isOfflineMediaItemVerified(item, verifiedItemIds)
+    ) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This content is pending official verification.'),
+        ),
+      );
       return;
     }
     unawaited(
@@ -452,6 +473,7 @@ class _SectionMediaGrid extends StatelessWidget {
     required this.emptyStateDirectories,
     required this.items,
     required this.seenItemIds,
+    required this.verifiedItemIds,
     required this.layoutMode,
     required this.onOpenMedia,
     required this.isSelectionMode,
@@ -465,6 +487,7 @@ class _SectionMediaGrid extends StatelessWidget {
   final List<String> emptyStateDirectories;
   final List<DaylySportMediaItem> items;
   final Set<String> seenItemIds;
+  final Set<String>? verifiedItemIds;
   final VideoListLayoutMode layoutMode;
   final ValueChanged<DaylySportMediaItem> onOpenMedia;
   final bool isSelectionMode;
@@ -522,6 +545,10 @@ class _SectionMediaGrid extends StatelessWidget {
               onStartSelection: () => onStartSelection(item),
               onDelete: () => onDeleteMedia(item),
               isNew: !isOfflineMediaItemSeen(item, seenItemIds),
+              isVerified:
+                  verifiedItemIds == null
+                      ? true
+                    : isOfflineMediaItemVerified(item, verifiedItemIds!),
               layoutMode: layoutMode,
             );
           },
@@ -551,6 +578,10 @@ class _SectionMediaGrid extends StatelessWidget {
               onStartSelection: () => onStartSelection(item),
               onDelete: () => onDeleteMedia(item),
               isNew: !isOfflineMediaItemSeen(item, seenItemIds),
+              isVerified:
+                  verifiedItemIds == null
+                      ? true
+                    : isOfflineMediaItemVerified(item, verifiedItemIds!),
               layoutMode: layoutMode,
             );
           },
@@ -584,6 +615,7 @@ class _MediaCard extends StatelessWidget {
     required this.onStartSelection,
     required this.onDelete,
     required this.isNew,
+    required this.isVerified,
     required this.layoutMode,
   });
 
@@ -595,6 +627,7 @@ class _MediaCard extends StatelessWidget {
   final VoidCallback onStartSelection;
   final VoidCallback onDelete;
   final bool isNew;
+  final bool isVerified;
   final VideoListLayoutMode layoutMode;
 
   @override
@@ -616,7 +649,9 @@ class _MediaCard extends StatelessWidget {
     final thumbnail = AspectRatio(
       aspectRatio: aspectRatio,
       child:
-          item.type == DaylySportMediaType.image
+          !isVerified
+              ? const PendingVerificationPlaceholder(compact: true)
+              : item.type == DaylySportMediaType.image
               ? SecureFileImage(sourceFile: item.file, fit: BoxFit.cover)
               : OfflineVideoThumbnail(
                 item: item,
@@ -708,6 +743,8 @@ class _MediaCard extends StatelessWidget {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
+                          if (!isVerified)
+                            const PendingVerificationChip(),
                           _VideoMetaChip(label: mediaCategoryLabel(item)),
                           _VideoMetaChip(label: timestamp),
                         ],
@@ -741,6 +778,11 @@ class _MediaCard extends StatelessWidget {
                 style: titleStyle,
               ),
             ),
+            if (!isVerified)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(10, 0, 10, 8),
+                child: PendingVerificationChip(),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: Text(

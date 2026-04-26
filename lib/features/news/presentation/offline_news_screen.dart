@@ -5,6 +5,7 @@ import 'package:eri_sports/features/news/presentation/offline_news_providers.dar
 import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/shared/widgets/new_content_badge.dart';
 import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
+import 'package:eri_sports/shared/widgets/pending_verification_placeholder.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,6 +50,7 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
     final badges = ref.watch(offlineContentBadgeCountsProvider);
     final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
     final seenItemIds = ref.watch(offlineSeenItemIdsProvider);
+    final verifiedItemIds = ref.watch(offlineActiveVerifiedItemIdsProvider);
     final snapshot = galleryAsync.valueOrNull;
     final displayedImages =
       snapshot == null ? const <OfflineNewsMediaItem>[] : _sortedImagesForSnapshot(snapshot);
@@ -153,7 +155,13 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
               unawaited(
                 ref
                     .read(offlineContentRefreshControllerProvider.notifier)
-                    .markNewsItemsSeen(images.take(1)),
+                    .markNewsItemsSeen(
+                      images.where(
+                        (item) =>
+                            verifiedItemIds == null ||
+                            isOfflineNewsItemVerified(item, verifiedItemIds),
+                      ).take(1),
+                    ),
               );
               if (!snapshot.newsDirectoryExists) {
                 return _OfflineNewsEmptyState(
@@ -203,12 +211,18 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                         itemCount: images.length,
                         onPageChanged: (index) {
                           unawaited(
-                            ref
-                                .read(
-                                  offlineContentRefreshControllerProvider
-                                      .notifier,
-                                )
-                                .markNewsItemSeen(images[index]),
+                            verifiedItemIds == null ||
+                                    isOfflineNewsItemVerified(
+                                      images[index],
+                                      verifiedItemIds,
+                                    )
+                                ? ref
+                                    .read(
+                                      offlineContentRefreshControllerProvider
+                                          .notifier,
+                                    )
+                                    .markNewsItemSeen(images[index])
+                                : Future<void>.value(),
                           );
                           setState(() {
                             _currentIndex = index;
@@ -217,7 +231,16 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                         },
                         itemBuilder: (context, index) {
                           final media = images[index];
-                          return _OfflineNewsPage(media: media);
+                          return _OfflineNewsPage(
+                            media: media,
+                            isVerified:
+                                verifiedItemIds == null
+                                    ? true
+                                    : isOfflineNewsItemVerified(
+                                      media,
+                                      verifiedItemIds,
+                                    ),
+                          );
                         },
                       ),
                     ),
@@ -239,6 +262,13 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                           final media = images[index];
                           final selected = index == _currentIndex;
                           final isNew = !isOfflineNewsItemSeen(media, seenItemIds);
+                          final isVerified =
+                              verifiedItemIds == null
+                                  ? true
+                                  : isOfflineNewsItemVerified(
+                                    media,
+                                    verifiedItemIds,
+                                  );
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: GestureDetector(
@@ -287,24 +317,28 @@ class _OfflineNewsScreenState extends ConsumerState<OfflineNewsScreen> {
                                 child: Stack(
                                   fit: StackFit.expand,
                                   children: [
-                                    SecureFileImage(
-                                      sourceFile: media.file,
-                                      fit: BoxFit.cover,
-                                      loadingWidget: _ThumbnailLoadingState(
-                                        isSelected: selected,
-                                      ),
-                                      errorBuilder:
-                                          (context, error, stackTrace) => Container(
-                                            color:
-                                                Theme.of(context)
-                                                    .colorScheme
-                                                    .surfaceContainerHighest,
-                                            alignment: Alignment.center,
-                                            child: const Icon(
-                                              Icons.broken_image_outlined,
-                                            ),
+                                    isVerified
+                                        ? SecureFileImage(
+                                          sourceFile: media.file,
+                                          fit: BoxFit.cover,
+                                          loadingWidget: _ThumbnailLoadingState(
+                                            isSelected: selected,
                                           ),
-                                    ),
+                                          errorBuilder:
+                                              (context, error, stackTrace) => Container(
+                                                color:
+                                                    Theme.of(context)
+                                                        .colorScheme
+                                                        .surfaceContainerHighest,
+                                                alignment: Alignment.center,
+                                                child: const Icon(
+                                                  Icons.broken_image_outlined,
+                                                ),
+                                              ),
+                                        )
+                                        : const PendingVerificationPlaceholder(
+                                          compact: true,
+                                        ),
                                     if (isNew)
                                       const Positioned(
                                         left: 4,
@@ -528,9 +562,10 @@ String _deletionSummary(
 }
 
 class _OfflineNewsPage extends StatelessWidget {
-  const _OfflineNewsPage({required this.media});
+  const _OfflineNewsPage({required this.media, required this.isVerified});
 
   final OfflineNewsMediaItem media;
+  final bool isVerified;
 
   @override
   Widget build(BuildContext context) {
@@ -550,18 +585,24 @@ class _OfflineNewsPage extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: SizedBox(
                     width: constraints.maxWidth,
-                    child: SecureFileImage(
-                      sourceFile: media.file,
-                      width: constraints.maxWidth,
-                      fit: BoxFit.fitWidth,
-                      alignment: Alignment.topCenter,
-                      filterQuality: FilterQuality.high,
-                      gaplessPlayback: true,
-                      loadingWidget: const _NewsImageLoadingState(),
-                      errorBuilder:
-                          (context, error, stackTrace) =>
-                              const _CorruptedImageState(),
-                    ),
+                    child:
+                        isVerified
+                            ? SecureFileImage(
+                              sourceFile: media.file,
+                              width: constraints.maxWidth,
+                              fit: BoxFit.fitWidth,
+                              alignment: Alignment.topCenter,
+                              filterQuality: FilterQuality.high,
+                              gaplessPlayback: true,
+                              loadingWidget: const _NewsImageLoadingState(),
+                              errorBuilder:
+                                  (context, error, stackTrace) =>
+                                      const _CorruptedImageState(),
+                            )
+                            : const PendingVerificationPlaceholder(
+                              message:
+                                  'Official approval is required before this news image can be viewed.',
+                            ),
                   ),
                 ),
               );

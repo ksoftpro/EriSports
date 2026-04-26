@@ -218,6 +218,83 @@ void main() {
     );
 
     test(
+      'keeps existing content verified, blocks newly discovered content by default, and allows later verification',
+      () async {
+        final daylySportDir =
+            await services.daylySportLocator.getOrCreateDaylySportDirectory();
+        final reelsDir = Directory(
+          '${daylySportDir.path}${Platform.pathSeparator}reels',
+        )..createSync(recursive: true);
+
+        final existingFile = File(
+          '${reelsDir.path}${Platform.pathSeparator}existing.mp4.esv',
+        )..writeAsBytesSync(const <int>[1, 2, 3, 4]);
+        final existingModifiedAt = DateTime.utc(2026, 4, 24, 9);
+        existingFile.setLastModifiedSync(existingModifiedAt);
+
+        final container = ProviderContainer(
+          overrides: [appServicesProvider.overrideWithValue(services)],
+        );
+        addTearDown(container.dispose);
+
+        await container
+            .read(offlineContentRefreshControllerProvider.notifier)
+            .refreshOnStartup();
+
+        final firstSnapshot = await container.read(
+          daylySportMediaSnapshotProvider.future,
+        );
+        final existingItem =
+            firstSnapshot.section(DaylySportMediaSection.reels).videoItems.single;
+        final existingId = offlineContentMediaItemId(existingItem);
+
+        expect(
+          container.read(offlineActiveVerifiedItemIdsProvider),
+          contains(existingId),
+        );
+
+        final newFile = File(
+          '${reelsDir.path}${Platform.pathSeparator}new_drop.mp4.esv',
+        )..writeAsBytesSync(const <int>[5, 6, 7, 8, 9]);
+        final newModifiedAt = DateTime.utc(2026, 4, 24, 10);
+        newFile.setLastModifiedSync(newModifiedAt);
+        final newItem = DaylySportMediaItem(
+          file: newFile,
+          relativePath: 'reels/new_drop.mp4.esv',
+          section: DaylySportMediaSection.reels,
+          type: DaylySportMediaType.video,
+          lastModified: newModifiedAt,
+          sizeBytes: 5,
+        );
+        final newItemId = _mediaId(
+          relativePath: newItem.relativePath,
+          modifiedAtUtc: newItem.lastModified,
+          sizeBytes: newItem.sizeBytes,
+        );
+
+        await container
+            .read(offlineContentRefreshControllerProvider.notifier)
+            .refreshOnStartup();
+
+        final verifiedIdsAfterRefresh = container.read(
+          offlineActiveVerifiedItemIdsProvider,
+        );
+        expect(verifiedIdsAfterRefresh, isNotNull);
+        expect(verifiedIdsAfterRefresh, contains(existingId));
+        expect(verifiedIdsAfterRefresh, isNot(contains(newItemId)));
+
+        await container
+            .read(offlineContentRefreshControllerProvider.notifier)
+            .setMediaItemVerified(newItem, verified: true);
+
+        expect(
+          container.read(offlineActiveVerifiedItemIdsProvider),
+          contains(newItemId),
+        );
+      },
+    );
+
+    test(
       'single delete removes reel source, cached file, seen state, and refreshes badges',
       () async {
         final daylySportDir =

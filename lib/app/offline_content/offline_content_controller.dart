@@ -14,6 +14,7 @@ const _offlineContentScope = 'offline_content_v1';
 const _offlineSeenKey = 'seen_items';
 const _offlineMediaInventoryKey = 'media_inventory';
 const _offlineNewsInventoryKey = 'news_inventory';
+const _offlineVerificationKey = 'verification_state';
 
 String offlineContentMediaItemId(DaylySportMediaItem item) {
   return 'media|${item.relativePath}|${item.lastModified.toUtc().millisecondsSinceEpoch}|${item.sizeBytes}';
@@ -35,6 +36,20 @@ bool isOfflineNewsItemSeen(
   Set<String> seenItemIds,
 ) {
   return seenItemIds.contains(offlineContentNewsItemId(item));
+}
+
+bool isOfflineMediaItemVerified(
+  DaylySportMediaItem item,
+  Set<String> verifiedItemIds,
+) {
+  return verifiedItemIds.contains(offlineContentMediaItemId(item));
+}
+
+bool isOfflineNewsItemVerified(
+  OfflineNewsMediaItem item,
+  Set<String> verifiedItemIds,
+) {
+  return verifiedItemIds.contains(offlineContentNewsItemId(item));
 }
 
 List<DaylySportMediaItem> sortOfflineMediaItemsForDisplay(
@@ -174,6 +189,56 @@ class OfflineContentItemRecord {
   }
 }
 
+class OfflineContentVerificationRegistry {
+  const OfflineContentVerificationRegistry({
+    required this.baselineInitialized,
+    required this.verifiedItemIds,
+  });
+
+  const OfflineContentVerificationRegistry.initial()
+    : baselineInitialized = false,
+      verifiedItemIds = const <String>{};
+
+  final bool baselineInitialized;
+  final Set<String> verifiedItemIds;
+
+  OfflineContentVerificationRegistry copyWith({
+    bool? baselineInitialized,
+    Set<String>? verifiedItemIds,
+  }) {
+    return OfflineContentVerificationRegistry(
+      baselineInitialized: baselineInitialized ?? this.baselineInitialized,
+      verifiedItemIds: verifiedItemIds ?? this.verifiedItemIds,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'baselineInitialized': baselineInitialized,
+      'verifiedItemIds': verifiedItemIds.toList(growable: false)..sort(),
+    };
+  }
+
+  static OfflineContentVerificationRegistry fromJson(
+    Map<String, dynamic>? json,
+  ) {
+    if (json == null) {
+      return const OfflineContentVerificationRegistry.initial();
+    }
+
+    final baselineInitialized = json['baselineInitialized'];
+    final rawVerifiedIds = json['verifiedItemIds'];
+    return OfflineContentVerificationRegistry(
+      baselineInitialized:
+          baselineInitialized is bool ? baselineInitialized : false,
+      verifiedItemIds:
+          rawVerifiedIds is List
+              ? rawVerifiedIds.whereType<String>().toSet()
+              : const <String>{},
+    );
+  }
+}
+
 class OfflineContentBadgeCounts {
   const OfflineContentBadgeCounts({
     required this.reels,
@@ -286,6 +351,8 @@ class OfflineContentRefreshState {
     required this.statusText,
     required this.badges,
     required this.seenItemIds,
+    required this.hasVerificationBaseline,
+    required this.verifiedItemIds,
     this.deletionProgress,
     this.lastCompletedAtUtc,
     this.lastError,
@@ -296,6 +363,8 @@ class OfflineContentRefreshState {
       statusText = 'Offline content is ready',
       badges = const OfflineContentBadgeCounts.zero(),
       seenItemIds = const <String>{},
+      hasVerificationBaseline = false,
+      verifiedItemIds = const <String>{},
       deletionProgress = null,
       lastCompletedAtUtc = null,
       lastError = null;
@@ -304,6 +373,8 @@ class OfflineContentRefreshState {
   final String statusText;
   final OfflineContentBadgeCounts badges;
   final Set<String> seenItemIds;
+  final bool hasVerificationBaseline;
+  final Set<String> verifiedItemIds;
   final OfflineContentDeletionProgress? deletionProgress;
   final DateTime? lastCompletedAtUtc;
   final String? lastError;
@@ -313,6 +384,8 @@ class OfflineContentRefreshState {
     String? statusText,
     OfflineContentBadgeCounts? badges,
     Set<String>? seenItemIds,
+    bool? hasVerificationBaseline,
+    Set<String>? verifiedItemIds,
     OfflineContentDeletionProgress? deletionProgress,
     DateTime? lastCompletedAtUtc,
     String? lastError,
@@ -323,7 +396,10 @@ class OfflineContentRefreshState {
       isBusy: isBusy ?? this.isBusy,
       statusText: statusText ?? this.statusText,
       badges: badges ?? this.badges,
-        seenItemIds: seenItemIds ?? this.seenItemIds,
+      seenItemIds: seenItemIds ?? this.seenItemIds,
+      hasVerificationBaseline:
+        hasVerificationBaseline ?? this.hasVerificationBaseline,
+      verifiedItemIds: verifiedItemIds ?? this.verifiedItemIds,
       deletionProgress:
           clearDeletionProgress
               ? null
@@ -349,6 +425,15 @@ final offlineSeenItemIdsProvider = Provider<Set<String>>((ref) {
   return ref.watch(offlineContentRefreshControllerProvider).seenItemIds;
 });
 
+final offlineVerifiedItemIdsProvider = Provider<Set<String>>((ref) {
+  return ref.watch(offlineContentRefreshControllerProvider).verifiedItemIds;
+});
+
+final offlineActiveVerifiedItemIdsProvider = Provider<Set<String>?>((ref) {
+  final state = ref.watch(offlineContentRefreshControllerProvider);
+  return state.hasVerificationBaseline ? state.verifiedItemIds : null;
+});
+
 final offlineContentDeletionProgressProvider =
     Provider<OfflineContentDeletionProgress?>((ref) {
       return ref
@@ -364,6 +449,7 @@ class OfflineContentRefreshController
   OfflineContentRefreshState build() {
     final services = ref.read(appServicesProvider);
     final seenItemIds = _loadSeenItemIds(services);
+    final verificationRegistry = _loadVerificationRegistry(services);
     final existingBadges = _buildBadges(
       _loadMediaInventory(services),
       _loadNewsInventory(services),
@@ -372,6 +458,8 @@ class OfflineContentRefreshController
     return OfflineContentRefreshState.initial().copyWith(
       badges: existingBadges,
       seenItemIds: seenItemIds,
+      hasVerificationBaseline: verificationRegistry.baselineInitialized,
+      verifiedItemIds: verificationRegistry.verifiedItemIds,
     );
   }
 
@@ -427,6 +515,20 @@ class OfflineContentRefreshController
   Future<void> markNewsItemsSeen(Iterable<OfflineNewsMediaItem> items) async {
     final ids = items.map(offlineContentNewsItemId).toSet();
     await _markSeenMany(ids);
+  }
+
+  Future<void> setMediaItemVerified(
+    DaylySportMediaItem item, {
+    required bool verified,
+  }) async {
+    await _setItemVerified(offlineContentMediaItemId(item), verified: verified);
+  }
+
+  Future<void> setNewsItemVerified(
+    OfflineNewsMediaItem item, {
+    required bool verified,
+  }) async {
+    await _setItemVerified(offlineContentNewsItemId(item), verified: verified);
   }
 
   Future<OfflineContentDeleteResult> deleteItems({
@@ -545,6 +647,9 @@ class OfflineContentRefreshController
         statusText: statusText,
         badges: synced.badges,
         seenItemIds: _loadSeenItemIds(services),
+        hasVerificationBaseline:
+          synced.verificationRegistry.baselineInitialized,
+        verifiedItemIds: synced.verificationRegistry.verifiedItemIds,
         lastCompletedAtUtc: DateTime.now().toUtc(),
         lastError:
             hasHardFailures
@@ -634,6 +739,9 @@ class OfflineContentRefreshController
         statusText: 'Offline content is ready',
         badges: synced.badges,
         seenItemIds: _loadSeenItemIds(services),
+        hasVerificationBaseline:
+            synced.verificationRegistry.baselineInitialized,
+        verifiedItemIds: synced.verificationRegistry.verifiedItemIds,
         lastCompletedAtUtc: DateTime.now().toUtc(),
         clearError: true,
         clearDeletionProgress: true,
@@ -688,6 +796,7 @@ class OfflineContentRefreshController
     required OfflineNewsGallerySnapshot newsSnapshot,
     required List<OfflineContentItemRecord> previousMedia,
     required List<OfflineContentItemRecord> previousNews,
+    required Set<String> verifiedItemIds,
     required bool forcePrewarm,
   }) async {
     final previousMediaIds = previousMedia.map((item) => item.id).toSet();
@@ -697,6 +806,9 @@ class OfflineContentRefreshController
     for (final section in DaylySportMediaSection.values) {
       for (final item in mediaSnapshot.section(section).videoItems) {
         final id = offlineContentMediaItemId(item);
+        if (!verifiedItemIds.contains(id)) {
+          continue;
+        }
         if (forcePrewarm || !previousMediaIds.contains(id)) {
           mediaToPrewarm.add(item.file);
         }
@@ -706,6 +818,9 @@ class OfflineContentRefreshController
     final newsToPrewarm = <File>[];
     for (final item in newsSnapshot.images) {
       final id = offlineContentNewsItemId(item);
+      if (!verifiedItemIds.contains(id)) {
+        continue;
+      }
       if (forcePrewarm || !previousNewsIds.contains(id)) {
         newsToPrewarm.add(item.file);
       }
@@ -750,6 +865,29 @@ class OfflineContentRefreshController
         _loadNewsInventory(services),
         seenIds,
       ),
+    );
+  }
+
+  Future<void> _setItemVerified(
+    String id, {
+    required bool verified,
+  }) async {
+    final services = ref.read(appServicesProvider);
+    final registry = _loadVerificationRegistry(services);
+    final verifiedItemIds = {...registry.verifiedItemIds};
+    if (verified) {
+      verifiedItemIds.add(id);
+    } else {
+      verifiedItemIds.remove(id);
+    }
+    final nextRegistry = registry.copyWith(
+      baselineInitialized: true,
+      verifiedItemIds: verifiedItemIds,
+    );
+    await _persistVerificationRegistry(services, nextRegistry);
+    state = state.copyWith(
+      hasVerificationBaseline: nextRegistry.baselineInitialized,
+      verifiedItemIds: nextRegistry.verifiedItemIds,
     );
   }
 
@@ -887,6 +1025,14 @@ class OfflineContentRefreshController
     return _loadItemRecords(services.cacheStore, _offlineNewsInventoryKey);
   }
 
+  OfflineContentVerificationRegistry _loadVerificationRegistry(
+    AppServices services,
+  ) {
+    return OfflineContentVerificationRegistry.fromJson(
+      services.cacheStore.readJsonObject(_offlineContentScope, _offlineVerificationKey),
+    );
+  }
+
   Future<void> _persistMediaInventory(
     AppServices services,
     List<OfflineContentItemRecord> records,
@@ -907,6 +1053,32 @@ class OfflineContentRefreshController
       _offlineNewsInventoryKey,
       records,
     );
+  }
+
+  Future<void> _persistVerificationRegistry(
+    AppServices services,
+    OfflineContentVerificationRegistry registry,
+  ) {
+    return services.cacheStore.writeJsonObject(
+      _offlineContentScope,
+      _offlineVerificationKey,
+      registry.toJson(),
+    );
+  }
+
+  OfflineContentVerificationRegistry _synchronizeVerificationRegistry({
+    required OfflineContentVerificationRegistry registry,
+    required Set<String> currentItemIds,
+  }) {
+    if (!registry.baselineInitialized) {
+      return registry.copyWith(
+        baselineInitialized: true,
+        verifiedItemIds: currentItemIds,
+      );
+    }
+
+    final verifiedItemIds = registry.verifiedItemIds.intersection(currentItemIds);
+    return registry.copyWith(verifiedItemIds: verifiedItemIds);
   }
 
   List<OfflineContentItemRecord> _loadItemRecords(
@@ -952,9 +1124,18 @@ class OfflineContentRefreshController
 
     final mediaRecords = _buildMediaRecords(mediaSnapshot, previousMedia);
     final newsRecords = _buildNewsRecords(newsSnapshot, previousNews);
+    final currentItemIds = {
+      ...mediaRecords.map((record) => record.id),
+      ...newsRecords.map((record) => record.id),
+    };
+    final verificationRegistry = _synchronizeVerificationRegistry(
+      registry: _loadVerificationRegistry(services),
+      currentItemIds: currentItemIds,
+    );
 
     await _persistMediaInventory(services, mediaRecords);
     await _persistNewsInventory(services, newsRecords);
+    await _persistVerificationRegistry(services, verificationRegistry);
 
     if (prewarm) {
       await _prewarmDetectedContent(
@@ -963,6 +1144,7 @@ class OfflineContentRefreshController
         newsSnapshot: newsSnapshot,
         previousMedia: previousMedia,
         previousNews: previousNews,
+        verifiedItemIds: verificationRegistry.verifiedItemIds,
         forcePrewarm: true,
       );
     }
@@ -975,6 +1157,7 @@ class OfflineContentRefreshController
         newsRecords,
         _loadSeenItemIds(services),
       ),
+      verificationRegistry: verificationRegistry,
     );
   }
 
@@ -1045,11 +1228,13 @@ class _OfflineContentScanResult {
     required this.mediaRecords,
     required this.newsRecords,
     required this.badges,
+    required this.verificationRegistry,
   });
 
   final List<OfflineContentItemRecord> mediaRecords;
   final List<OfflineContentItemRecord> newsRecords;
   final OfflineContentBadgeCounts badges;
+  final OfflineContentVerificationRegistry verificationRegistry;
 }
 
 class _OfflineDeletionTarget {

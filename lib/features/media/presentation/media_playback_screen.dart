@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/app/navigation/router.dart';
 import 'package:eri_sports/features/media/data/daylysport_media_repository.dart';
 import 'package:eri_sports/features/media/presentation/video_playback_position_store.dart';
+import 'package:eri_sports/shared/widgets/pending_verification_placeholder.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,7 +48,12 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (widget.item.isVideo) {
+    final verifiedItemIds = ref.read(offlineActiveVerifiedItemIdsProvider);
+    if (
+      widget.item.isVideo &&
+      (verifiedItemIds == null ||
+          isOfflineMediaItemVerified(widget.item, verifiedItemIds))
+    ) {
       _prepareVideo();
     }
   }
@@ -165,11 +172,32 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
 
   @override
   Widget build(BuildContext context) {
+    final verifiedItemIds = ref.watch(offlineActiveVerifiedItemIdsProvider);
+    final isVerified =
+      verifiedItemIds == null
+        ? true
+        : isOfflineMediaItemVerified(widget.item, verifiedItemIds);
+    if (isVerified &&
+        widget.item.isVideo &&
+        _controller == null &&
+        !_isPreparing &&
+        _errorMessage == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _controller == null && !_isPreparing) {
+          unawaited(_prepareVideo());
+        }
+      });
+    }
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.item.fileName)),
       body: SafeArea(
         child:
-            widget.item.isVideo ? _buildVideoBody(context) : _buildImageBody(),
+            !isVerified
+                ? const PendingVerificationPlaceholder()
+                : (widget.item.isVideo
+                    ? _buildVideoBody(context)
+                    : _buildImageBody()),
       ),
     );
   }

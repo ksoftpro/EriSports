@@ -12,6 +12,7 @@ import 'package:eri_sports/features/reels/presentation/reels_playback_session_st
 import 'package:eri_sports/shared/widgets/offline_content_delete_progress_scope.dart';
 import 'package:eri_sports/shared/widgets/offline_video_thumbnail.dart';
 import 'package:eri_sports/shared/widgets/new_content_badge.dart';
+import 'package:eri_sports/shared/widgets/pending_verification_placeholder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -114,6 +115,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
     final mediaAsync = ref.watch(daylySportMediaSnapshotProvider);
     final deleteProgress = ref.watch(offlineContentDeletionProgressProvider);
     final seenItemIds = ref.watch(offlineSeenItemIdsProvider);
+    final verifiedItemIds = ref.watch(offlineActiveVerifiedItemIdsProvider);
     final shellIndex = ref.watch(currentShellBranchIndexProvider);
     final lifecycleState = ref.watch(appLifecycleStateProvider);
     final previousLifecycleState = _lastLifecycleState;
@@ -247,7 +249,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
             final items = _reelItemsFromSnapshot(snapshot);
 
             if (widget.enableEncryptedPrewarm) {
-              _scheduleEncryptedPrewarm(snapshot, items);
+              _scheduleEncryptedPrewarm(snapshot, items, verifiedItemIds);
             }
 
             _resolveActiveReelSelection(items);
@@ -275,6 +277,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
               pageController: _reelsPageController,
               overlayController: _reelsRailController,
               seenItemIds: seenItemIds,
+              verifiedItemIds: verifiedItemIds,
               isRailVisible: _isRailVisible,
               isScreenActive: isScreenActive,
               onRailItemExtentChanged: (itemExtent) {
@@ -426,6 +429,7 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
   void _scheduleEncryptedPrewarm(
     DaylySportMediaSnapshot snapshot,
     List<DaylySportMediaItem> items,
+    Set<String>? verifiedItemIds,
   ) {
     if (_lastPrewarmScanAt == snapshot.scannedAt) {
       return;
@@ -433,7 +437,13 @@ class _ReelsScreenState extends ConsumerState<ReelsScreen> with RouteAware {
     _lastPrewarmScanAt = snapshot.scannedAt;
 
     final encryptedVideos = items
-        .where((item) => item.isVideo && item.isEncrypted)
+      .where(
+        (item) =>
+          item.isVideo &&
+          item.isEncrypted &&
+          (verifiedItemIds == null ||
+              isOfflineMediaItemVerified(item, verifiedItemIds)),
+      )
         .map((item) => item.file)
         .toList(growable: false);
     if (encryptedVideos.isEmpty) {
@@ -682,6 +692,7 @@ class ReelsPlaybackStage extends StatelessWidget {
     required this.isScreenActive,
     required this.onActiveIndexChanged,
     required this.onSelectReel,
+    this.verifiedItemIds,
     this.onRailItemExtentChanged,
     this.feedItemBuilder,
     this.overlayThumbnailBuilder,
@@ -693,6 +704,7 @@ class ReelsPlaybackStage extends StatelessWidget {
   final PageController pageController;
   final ScrollController overlayController;
   final Set<String> seenItemIds;
+  final Set<String>? verifiedItemIds;
   final bool isRailVisible;
   final bool isScreenActive;
   final ValueChanged<int> onActiveIndexChanged;
@@ -724,6 +736,7 @@ class ReelsPlaybackStage extends StatelessWidget {
                 items: items,
                 pageController: pageController,
                 isScreenActive: isScreenActive,
+                verifiedItemIds: verifiedItemIds,
                 itemBuilder: feedItemBuilder,
                 onActiveIndexChanged: onActiveIndexChanged,
               ),
@@ -777,6 +790,7 @@ class ReelsPlaybackStage extends StatelessWidget {
                                   controller: overlayController,
                                   railWidth: overlayWidth,
                                   seenItemIds: seenItemIds,
+                                  verifiedItemIds: verifiedItemIds,
                                   onSelect: onSelectReel,
                                   thumbnailBuilder: overlayThumbnailBuilder,
                                 ),
@@ -802,6 +816,7 @@ class ReelsFeed extends StatefulWidget {
     required this.items,
     this.pageController,
     this.isScreenActive = true,
+    this.verifiedItemIds,
     this.itemBuilder,
     this.onActiveIndexChanged,
     super.key,
@@ -810,6 +825,7 @@ class ReelsFeed extends StatefulWidget {
   final List<DaylySportMediaItem> items;
   final PageController? pageController;
   final bool isScreenActive;
+  final Set<String>? verifiedItemIds;
   final ReelsFeedItemBuilder? itemBuilder;
   final ValueChanged<int>? onActiveIndexChanged;
 
@@ -870,11 +886,20 @@ class _ReelsFeedState extends State<ReelsFeed> {
       itemBuilder: (context, index) {
         final item = widget.items[index];
         final isActive = widget.isScreenActive && index == _activeIndex;
+        final verifiedItemIds = widget.verifiedItemIds;
+        final isVerified =
+            verifiedItemIds == null
+                ? true
+                : verifiedItemIds.contains(offlineContentMediaItemId(item));
         final builder = widget.itemBuilder;
-        if (builder != null) {
+        if (builder != null && isVerified) {
           return builder(context, item, isActive);
         }
-        return _ReelCard(item: item, isActive: isActive);
+        return _ReelCard(
+          item: item,
+          isActive: isActive,
+          isVerified: isVerified,
+        );
       },
     );
   }
@@ -888,6 +913,7 @@ class ReelsOverlayRail extends StatelessWidget {
     required this.railWidth,
     required this.seenItemIds,
     required this.onSelect,
+    this.verifiedItemIds,
     this.thumbnailBuilder,
     super.key,
   });
@@ -897,6 +923,7 @@ class ReelsOverlayRail extends StatelessWidget {
   final ScrollController controller;
   final double railWidth;
   final Set<String> seenItemIds;
+  final Set<String>? verifiedItemIds;
   final ValueChanged<int> onSelect;
   final ReelOverlayThumbnailBuilder? thumbnailBuilder;
 
@@ -920,13 +947,20 @@ class ReelsOverlayRail extends StatelessWidget {
         final item = items[index];
         final isActive = index == activeIndex;
         final isNew = !isOfflineMediaItemSeen(item, seenItemIds);
+        final verifiedItemIds = this.verifiedItemIds;
+        final isVerified =
+          verifiedItemIds == null
+            ? true
+            : isOfflineMediaItemVerified(item, verifiedItemIds);
         final thumbnail =
-            thumbnailBuilder?.call(context, item, isActive) ??
-            OfflineVideoThumbnail(
-              item: item,
-              maxDimension: 240,
-              showPlayBadge: false,
-            );
+            !isVerified
+                ? const PendingVerificationPlaceholder(compact: true)
+                : thumbnailBuilder?.call(context, item, isActive) ??
+                    OfflineVideoThumbnail(
+                      item: item,
+                      maxDimension: 240,
+                      showPlayBadge: false,
+                    );
 
         return Align(
           alignment: Alignment.topCenter,
@@ -1175,10 +1209,15 @@ class _ReelsSelectionGrid extends StatelessWidget {
 }
 
 class _ReelCard extends StatelessWidget {
-  const _ReelCard({required this.item, required this.isActive});
+  const _ReelCard({
+    required this.item,
+    required this.isActive,
+    required this.isVerified,
+  });
 
   final DaylySportMediaItem item;
   final bool isActive;
+  final bool isVerified;
 
   @override
   Widget build(BuildContext context) {
@@ -1193,7 +1232,11 @@ class _ReelCard extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              _InlineReelVideo(item: item, isActive: isActive),
+              _InlineReelVideo(
+                item: item,
+                isActive: isActive,
+                isVerified: isVerified,
+              ),
               IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -1215,6 +1258,10 @@ class _ReelCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (!isVerified) ...[
+                      const PendingVerificationChip(),
+                      const SizedBox(height: 8),
+                    ],
                     Text(
                       item.fileName,
                       maxLines: 2,
@@ -1245,10 +1292,15 @@ class _ReelCard extends StatelessWidget {
 }
 
 class _InlineReelVideo extends ConsumerStatefulWidget {
-  const _InlineReelVideo({required this.item, required this.isActive});
+  const _InlineReelVideo({
+    required this.item,
+    required this.isActive,
+    required this.isVerified,
+  });
 
   final DaylySportMediaItem item;
   final bool isActive;
+  final bool isVerified;
 
   @override
   ConsumerState<_InlineReelVideo> createState() => _InlineReelVideoState();
@@ -1263,7 +1315,7 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
   @override
   void initState() {
     super.initState();
-    if (widget.isActive) {
+    if (widget.isActive && widget.isVerified) {
       _ensurePrepared();
     }
   }
@@ -1275,18 +1327,31 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     if (oldWidget.item.file.path != widget.item.file.path) {
       _disposeController(item: oldWidget.item, persistPosition: true);
       _errorMessage = null;
-      if (widget.isActive) {
+      if (widget.isActive && widget.isVerified) {
         _ensurePrepared();
       }
       return;
     }
 
+    if (oldWidget.isVerified && !widget.isVerified) {
+      _disposeController(item: oldWidget.item, persistPosition: true);
+      return;
+    }
+
+    if (!oldWidget.isVerified && widget.isVerified && widget.isActive) {
+      _ensurePrepared();
+      unawaited(_playIfReady());
+      return;
+    }
+
     if (!oldWidget.isActive && widget.isActive) {
-      unawaited(
-        ref
-            .read(offlineContentRefreshControllerProvider.notifier)
-            .markMediaItemSeen(widget.item),
-      );
+      if (widget.isVerified) {
+        unawaited(
+          ref
+              .read(offlineContentRefreshControllerProvider.notifier)
+              .markMediaItemSeen(widget.item),
+        );
+      }
       _ensurePrepared();
       unawaited(_playIfReady());
     } else if (oldWidget.isActive && !widget.isActive) {
@@ -1302,6 +1367,13 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.isVerified) {
+      return const PendingVerificationPlaceholder(
+        message:
+            'Official approval is required before this reel can be played.',
+      );
+    }
+
     final controller = _controller;
     final isReady = controller != null && controller.value.isInitialized;
     final isPlaying = isReady && controller.value.isPlaying;
@@ -1365,7 +1437,10 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
   }
 
   Future<void> _ensurePrepared() async {
-    if (_controller != null || _isPreparing || !widget.item.isVideo) {
+    if (_controller != null ||
+        _isPreparing ||
+        !widget.item.isVideo ||
+        !widget.isVerified) {
       return;
     }
 
@@ -1375,7 +1450,7 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     });
 
     try {
-      if (widget.isActive) {
+      if (widget.isActive && widget.isVerified) {
         unawaited(
           ref
               .read(offlineContentRefreshControllerProvider.notifier)

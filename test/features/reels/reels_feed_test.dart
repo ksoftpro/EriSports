@@ -1163,6 +1163,61 @@ void main() {
     expect(videoSize.height, closeTo(expectedHeight, 0.5));
     expect(videoSize.height, lessThan(900));
   });
+
+  testWidgets('blocks unverified reels from playback on the screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_reels_screen_unverified_',
+    );
+    final originalPlatform = VideoPlayerPlatform.instance;
+    final fakePlatform = _FakeVideoPlayerPlatform();
+    VideoPlayerPlatform.instance = fakePlatform;
+
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final services = await AppServices.create(sharedPreferences: preferences);
+    final snapshot = _buildPlainVideoSnapshot(tempDir);
+
+    addTearDown(() async {
+      VideoPlayerPlatform.instance = originalPlatform;
+      await services.database.close();
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appServicesProvider.overrideWithValue(services),
+          appRouteObserverProvider.overrideWithValue(
+            RouteObserver<ModalRoute<void>>(),
+          ),
+          currentShellBranchIndexProvider.overrideWith((ref) => 3),
+          appLifecycleStateProvider.overrideWith(
+            (ref) => AppLifecycleState.resumed,
+          ),
+          offlineActiveVerifiedItemIdsProvider.overrideWithValue(<String>{}),
+          daylySportMediaSnapshotProvider.overrideWith(
+            () => _TestDaylySportMediaSnapshotNotifier(snapshot),
+          ),
+        ],
+        child: const MaterialApp(
+          home: ReelsScreen(enableEncryptedPrewarm: false),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(fakePlatform.playCalls, isEmpty);
+    expect(find.text('Pending verification'), findsWidgets);
+  });
 }
 
 Future<void> _pumpUntil(
