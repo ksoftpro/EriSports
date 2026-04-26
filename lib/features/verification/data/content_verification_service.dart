@@ -10,6 +10,7 @@ const _contentVerificationScope = 'content_verification_v1';
 const _clientVerificationStateKey = 'client_state';
 const _requestCodePrefix = 'ERI-REQ1-';
 const _verificationCodePrefix = 'ERI-VER1-';
+const _verificationQrPrefix = 'ERI-QR1-';
 const _verificationFeatureOfflineContent = 'offline_content';
 const _verificationPepper = 'eri_sports_offline_verification_v1';
 
@@ -21,10 +22,7 @@ enum VerificationSeedSource {
 }
 
 class DeviceVerificationIdentity {
-  const DeviceVerificationIdentity({
-    required this.seed,
-    required this.source,
-  });
+  const DeviceVerificationIdentity({required this.seed, required this.source});
 
   final String seed;
   final VerificationSeedSource source;
@@ -124,6 +122,20 @@ class ClientVerificationRequest {
   final VerificationSeedSource seedSource;
   final ContentVerificationPendingCounts pendingCounts;
   final DateTime generatedAtUtc;
+}
+
+class VerificationQrPayload {
+  const VerificationQrPayload({
+    required this.qrPayload,
+    required this.request,
+    required this.verificationCode,
+    required this.issuedAtUtc,
+  });
+
+  final String qrPayload;
+  final ClientVerificationRequest request;
+  final String verificationCode;
+  final DateTime issuedAtUtc;
 }
 
 class ClientVerificationState {
@@ -277,7 +289,9 @@ class ContentVerificationService {
     }
 
     final encodedPayload = normalized.substring(_requestCodePrefix.length);
-    final decoded = utf8.decode(base64Url.decode(base64Url.normalize(encodedPayload)));
+    final decoded = utf8.decode(
+      base64Url.decode(base64Url.normalize(encodedPayload)),
+    );
     final payload = jsonDecode(decoded);
     if (payload is! Map) {
       throw const FormatException('Request code payload is invalid.');
@@ -290,7 +304,9 @@ class ContentVerificationService {
     final deviceDigest = normalizedPayload['deviceDigest'] as String?;
     final feature = normalizedPayload['feature'] as String?;
     final checksum = normalizedPayload['checksum'] as String?;
-    final generatedAtUtc = _tryParseDateTime(normalizedPayload['generatedAtUtc']);
+    final generatedAtUtc = _tryParseDateTime(
+      normalizedPayload['generatedAtUtc'],
+    );
     final seedSourceName = normalizedPayload['seedSource'] as String?;
     if (requestDayKey == null ||
         deviceDigest == null ||
@@ -329,16 +345,145 @@ class ContentVerificationService {
 
   String generateVerificationCode(String requestCode) {
     final request = parseClientRequest(requestCode);
-    final rawCode = _digest(
-      'verification|$_verificationPepper|${request.requestDayKey}|${request.deviceDigest}|${request.feature}|${request.pendingCounts.signature}',
-      length: 20,
-    ).toUpperCase();
+    final rawCode =
+        _digest(
+          'verification|$_verificationPepper|${request.requestDayKey}|${request.deviceDigest}|${request.feature}|${request.pendingCounts.signature}',
+          length: 20,
+        ).toUpperCase();
     final segments = <String>[];
     for (var index = 0; index < rawCode.length; index += 4) {
       final end = (index + 4).clamp(0, rawCode.length);
       segments.add(rawCode.substring(index, end));
     }
     return '$_verificationCodePrefix${segments.join('-')}';
+  }
+
+  VerificationQrPayload generateVerificationQrPayload(
+    String requestCode, {
+    DateTime? now,
+  }) {
+    final request = parseClientRequest(requestCode);
+    final verificationCode = generateVerificationCode(requestCode);
+    final issuedAtUtc = (now ?? DateTime.now()).toUtc();
+    final payload = <String, dynamic>{
+      'v': 1,
+      'feature': request.feature,
+      'requestCode': request.requestCode,
+      'verificationCode': verificationCode,
+      'requestDayKey': request.requestDayKey,
+      'generatedAtUtc': request.generatedAtUtc.toIso8601String(),
+      'issuedAtUtc': issuedAtUtc.toIso8601String(),
+      'counts': request.pendingCounts.toJson(),
+    };
+    payload['checksum'] = _digest(
+      'qr|$_verificationPepper|${request.requestCode}|${_normalizeVerificationCode(verificationCode)}|${request.feature}|${request.requestDayKey}|${request.pendingCounts.signature}|${issuedAtUtc.toIso8601String()}',
+      length: 20,
+    );
+
+    return VerificationQrPayload(
+      qrPayload:
+          '$_verificationQrPrefix${base64Url.encode(utf8.encode(jsonEncode(payload)))}',
+      request: request,
+      verificationCode: verificationCode,
+      issuedAtUtc: issuedAtUtc,
+    );
+  }
+
+  VerificationQrPayload parseVerificationQrPayload(String qrPayload) {
+    final normalized = qrPayload.trim();
+    if (!normalized.startsWith(_verificationQrPrefix)) {
+      throw const FormatException('QR payload format is not recognized.');
+    }
+
+    final encodedPayload = normalized.substring(_verificationQrPrefix.length);
+    final decoded = utf8.decode(
+      base64Url.decode(base64Url.normalize(encodedPayload)),
+    );
+    final payload = jsonDecode(decoded);
+    if (payload is! Map) {
+      throw const FormatException('QR payload is invalid.');
+    }
+
+    final normalizedPayload = payload.map(
+      (key, value) => MapEntry('$key', value),
+    );
+    final requestCode = normalizedPayload['requestCode'] as String?;
+    final verificationCode = normalizedPayload['verificationCode'] as String?;
+    final feature = normalizedPayload['feature'] as String?;
+    final requestDayKey = normalizedPayload['requestDayKey'] as String?;
+    final checksum = normalizedPayload['checksum'] as String?;
+    final generatedAtUtc = _tryParseDateTime(
+      normalizedPayload['generatedAtUtc'],
+    );
+    final issuedAtUtc = _tryParseDateTime(normalizedPayload['issuedAtUtc']);
+    if (requestCode == null ||
+        verificationCode == null ||
+        feature == null ||
+        requestDayKey == null ||
+        checksum == null ||
+        generatedAtUtc == null ||
+        issuedAtUtc == null) {
+      throw const FormatException('QR payload is incomplete.');
+    }
+
+    final pendingCounts = ContentVerificationPendingCounts.fromJson(
+      normalizedPayload['counts'] as Map<String, dynamic>?,
+    );
+    final expectedChecksum = _digest(
+      'qr|$_verificationPepper|$requestCode|${_normalizeVerificationCode(verificationCode)}|$feature|$requestDayKey|${pendingCounts.signature}|${issuedAtUtc.toIso8601String()}',
+      length: 20,
+    );
+    if (checksum != expectedChecksum) {
+      throw const FormatException('QR payload checksum is invalid.');
+    }
+
+    final request = parseClientRequest(requestCode);
+    if (request.feature != feature ||
+        request.requestDayKey != requestDayKey ||
+        request.generatedAtUtc != generatedAtUtc ||
+        request.pendingCounts.signature != pendingCounts.signature) {
+      throw const FormatException('QR payload does not match the request.');
+    }
+    if (!isVerificationCodeValid(
+      requestCode: request.requestCode,
+      verificationCode: verificationCode,
+    )) {
+      throw const FormatException('QR payload verification code is invalid.');
+    }
+
+    return VerificationQrPayload(
+      qrPayload: normalized,
+      request: request,
+      verificationCode: verificationCode,
+      issuedAtUtc: issuedAtUtc,
+    );
+  }
+
+  VerificationQrPayload validateVerificationQrPayload({
+    required String qrPayload,
+    required String expectedRequestCode,
+  }) {
+    final normalizedExpectedRequestCode = expectedRequestCode.trim();
+    if (normalizedExpectedRequestCode.isEmpty) {
+      throw const FormatException(
+        'Generate a device request code before scanning an admin QR code.',
+      );
+    }
+
+    final parsed = parseVerificationQrPayload(qrPayload);
+    if (parsed.request.requestCode != normalizedExpectedRequestCode) {
+      final expectedRequest = parseClientRequest(normalizedExpectedRequestCode);
+      final issuedForOlderRequest = parsed.request.generatedAtUtc.isBefore(
+        expectedRequest.generatedAtUtc,
+      );
+      throw FormatException(
+        issuedForOlderRequest
+            ? 'This admin QR code was issued for an older device request and has expired.'
+            : 'This admin QR code does not match the current device request.',
+      );
+    }
+
+    return parsed;
   }
 
   bool isVerificationCodeValid({
@@ -363,14 +508,18 @@ class ContentVerificationService {
         return featureKey;
     }
   }
+
+  static bool looksLikeVerificationQrPayload(String value) {
+    return value.trim().startsWith(_verificationQrPrefix);
+  }
 }
 
-final contentVerificationServiceProvider = Provider<ContentVerificationService>((
-  ref,
-) {
-  final services = ref.read(appServicesProvider);
-  return ContentVerificationService(cacheStore: services.cacheStore);
-});
+final contentVerificationServiceProvider = Provider<ContentVerificationService>(
+  (ref) {
+    final services = ref.read(appServicesProvider);
+    return ContentVerificationService(cacheStore: services.cacheStore);
+  },
+);
 
 DateTime? _tryParseDateTime(Object? value) {
   if (value is! String) {

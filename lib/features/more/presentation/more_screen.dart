@@ -8,6 +8,7 @@ import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/verification/data/content_verification_service.dart';
 import 'package:eri_sports/features/verification/data/device_verification_identity.dart';
+import 'package:eri_sports/features/verification/presentation/verification_qr_scanner_screen.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,9 +76,10 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     });
 
     try {
-      final identity = await ref
-          .read(deviceVerificationIdentityServiceProvider)
-          .resolveIdentity();
+      final identity =
+          await ref
+              .read(deviceVerificationIdentityServiceProvider)
+              .resolveIdentity();
       final pendingCounts = ref.read(offlinePendingVerificationCountsProvider);
       final service = ref.read(contentVerificationServiceProvider);
       final request = service.generateClientRequest(
@@ -140,14 +142,16 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     final verificationCode = _verificationCodeController.text.trim();
     if (requestCode == null || requestCode.isEmpty) {
       setState(() {
-        _verificationStatusMessage = 'Generate a request code before verifying.';
+        _verificationStatusMessage =
+            'Generate a request code before verifying.';
         _verificationStatusIsError = true;
       });
       return;
     }
     if (verificationCode.isEmpty) {
       setState(() {
-        _verificationStatusMessage = 'Enter the verification code from the admin app.';
+        _verificationStatusMessage =
+            'Enter the verification code from the admin app.';
         _verificationStatusIsError = true;
       });
       return;
@@ -161,42 +165,23 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
 
     try {
       final service = ref.read(contentVerificationServiceProvider);
-      if (
-        !service.isVerificationCodeValid(
-          requestCode: requestCode,
-          verificationCode: verificationCode,
-        )
-      ) {
+      if (!service.isVerificationCodeValid(
+        requestCode: requestCode,
+        verificationCode: verificationCode,
+      )) {
         throw const FormatException('The verification code is invalid.');
       }
       final request = service.parseClientRequest(requestCode);
-      final approvedCounts =
-          await ref
-              .read(offlineContentRefreshControllerProvider.notifier)
-              .approvePendingContent();
-      await service.markClientVerified(
+      await _completePendingVerification(
         request: request,
         verificationCode: verificationCode,
       );
-      if (!mounted) {
-        return;
-      }
-      _verificationCodeController.clear();
-      setState(() {
-        _clientVerificationState = service.readClientState();
-        _verificationStatusMessage =
-            approvedCounts.hasPending
-                ? 'Verified ${approvedCounts.totalPending} pending item${approvedCounts.totalPending == 1 ? '' : 's'} and unlocked offline content.'
-                : 'Verification accepted. No pending content needed approval.';
-        _verificationStatusIsError = false;
-      });
-      await _generateVerificationRequest(showStatus: false);
     } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
-        _verificationStatusMessage = '$error';
+        _verificationStatusMessage = _formatVerificationError(error);
         _verificationStatusIsError = true;
       });
     } finally {
@@ -206,6 +191,109 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
         });
       }
     }
+  }
+
+  Future<void> _openVerificationScanner() async {
+    final requestCode = _requestCode;
+    if (_isApplyingVerificationCode ||
+        requestCode == null ||
+        requestCode.isEmpty) {
+      return;
+    }
+
+    final qrPayload = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const VerificationQrScannerScreen(),
+      ),
+    );
+    if (!mounted || qrPayload == null || qrPayload.isEmpty) {
+      return;
+    }
+
+    await _applyVerificationQrPayload(qrPayload);
+  }
+
+  Future<void> _applyVerificationQrPayload(String qrPayload) async {
+    if (_isApplyingVerificationCode) {
+      return;
+    }
+
+    final requestCode = _requestCode;
+    if (requestCode == null || requestCode.isEmpty) {
+      setState(() {
+        _verificationStatusMessage =
+            'Generate a request code before scanning an admin QR code.';
+        _verificationStatusIsError = true;
+      });
+      return;
+    }
+
+    setState(() {
+      _isApplyingVerificationCode = true;
+      _verificationStatusMessage = null;
+      _verificationStatusIsError = false;
+    });
+
+    try {
+      final service = ref.read(contentVerificationServiceProvider);
+      final verificationPayload = service.validateVerificationQrPayload(
+        qrPayload: qrPayload,
+        expectedRequestCode: requestCode,
+      );
+      await _completePendingVerification(
+        request: verificationPayload.request,
+        verificationCode: verificationPayload.verificationCode,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _verificationStatusMessage = _formatVerificationError(error);
+        _verificationStatusIsError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isApplyingVerificationCode = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _completePendingVerification({
+    required ClientVerificationRequest request,
+    required String verificationCode,
+  }) async {
+    final service = ref.read(contentVerificationServiceProvider);
+    final approvedCounts =
+        await ref
+            .read(offlineContentRefreshControllerProvider.notifier)
+            .approvePendingContent();
+    await service.markClientVerified(
+      request: request,
+      verificationCode: verificationCode,
+    );
+    if (!mounted) {
+      return;
+    }
+    _verificationCodeController.clear();
+    setState(() {
+      _clientVerificationState = service.readClientState();
+      _verificationStatusMessage =
+          approvedCounts.hasPending
+              ? 'Verified ${approvedCounts.totalPending} pending item${approvedCounts.totalPending == 1 ? '' : 's'} and unlocked offline content.'
+              : 'Verification accepted. No pending content needed approval.';
+      _verificationStatusIsError = false;
+    });
+    await _generateVerificationRequest(showStatus: false);
+  }
+
+  String _formatVerificationError(Object error) {
+    if (error is FormatException) {
+      return '${error.message}';
+    }
+    return '$error';
   }
 
   Future<void> _pickJsonDirectory() async {
@@ -652,7 +740,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
               icon: Icons.verified_user_outlined,
               title: 'Pending Content Verification',
               subtitle:
-                  'Generate a device request code, send it to the admin app, and apply the returned verification code to unlock pending offline content.',
+                  'Generate a device request code, let the admin app turn it into a QR approval, then scan that QR here to unlock pending offline content.',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -710,7 +798,8 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         ),
                         const SizedBox(height: 8),
                         SelectableText(
-                          _requestCode ?? 'Generate a request code to begin verification.',
+                          _requestCode ??
+                              'Generate a request code to begin verification.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 12),
@@ -741,6 +830,45 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                               label: const Text('Copy request code'),
                             ),
                           ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: scheme.outlineVariant),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Admin QR approval',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Scan the QR code displayed in the admin app. Manual verification-code entry stays available below as a fallback.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed:
+                              _requestCode == null ||
+                                      _requestCode!.isEmpty ||
+                                      _isApplyingVerificationCode
+                                  ? null
+                                  : _openVerificationScanner,
+                          icon: const Icon(Icons.qr_code_scanner_rounded),
+                          label: Text(
+                            _isApplyingVerificationCode
+                                ? 'Verifying...'
+                                : 'Scan admin QR',
+                          ),
                         ),
                       ],
                     ),

@@ -107,6 +107,7 @@ void main() {
 
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Pending Content Verification'), findsOneWidget);
+    expect(find.text('Scan admin QR'), findsOneWidget);
 
     await tester.tap(find.text('Dark').first.hitTestable());
     await _pumpForStability(tester);

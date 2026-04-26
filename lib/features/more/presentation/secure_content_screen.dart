@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
+import 'package:qr_flutter/qr_flutter.dart';
 
 const adminDashboardOverviewKey = Key('adminDashboardOverview');
 const adminDashboardUserActivityKey = Key('adminDashboardUserActivity');
@@ -72,19 +73,20 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       TextEditingController(text: 'news');
   final TextEditingController _videoDestinationController =
       TextEditingController(text: 'reels');
-    final TextEditingController _verificationRequestController =
+  final TextEditingController _verificationRequestController =
       TextEditingController();
   final List<_PendingSecureSource> _selectedSources = <_PendingSecureSource>[];
-    String? _generatedVerificationCode;
-    String? _verificationMessage;
-    bool _verificationMessageIsError = false;
-    bool _isGeneratingVerificationCode = false;
-    bool _isClearingVerificationRecords = false;
+  VerificationQrPayload? _generatedVerificationQr;
+  String? _verificationMessage;
+  bool _verificationMessageIsError = false;
+  bool _isGeneratingVerificationCode = false;
+  bool _isClearingVerificationRecords = false;
 
   @override
   void initState() {
     super.initState();
-    _jobManager = ref.read(appServicesProvider).secureContentEncryptionJobManager;
+    _jobManager =
+        ref.read(appServicesProvider).secureContentEncryptionJobManager;
     _jobSnapshot = _jobManager.snapshot;
     _isEncrypting = _jobSnapshot.isRunning;
     _jobSubscription = _jobManager.stream.listen((snapshot) {
@@ -125,20 +127,23 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     if (session == null) {
       return Future<void>.value();
     }
-    return ref.read(appServicesProvider).adminActivityService.record(
-      AdminActivityRecord(
-        id: adminGenerateId(prefix: 'activity'),
-        type: type,
-        occurredAtUtc: DateTime.now().toUtc(),
-        summary: summary,
-        category: category,
-        actorUserId: session.userId,
-        actorUsername: session.username,
-        itemCount: itemCount,
-        totalBytes: totalBytes,
-        metadata: metadata,
-      ),
-    );
+    return ref
+        .read(appServicesProvider)
+        .adminActivityService
+        .record(
+          AdminActivityRecord(
+            id: adminGenerateId(prefix: 'activity'),
+            type: type,
+            occurredAtUtc: DateTime.now().toUtc(),
+            summary: summary,
+            category: category,
+            actorUserId: session.userId,
+            actorUsername: session.username,
+            itemCount: itemCount,
+            totalBytes: totalBytes,
+            metadata: metadata,
+          ),
+        );
   }
 
   Future<void> _refreshInventory({bool recordActivity = true}) async {
@@ -370,7 +375,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         return;
       }
 
-      final filePaths = await collectEncryptableSourceFilesInIsolate(folderPath);
+      final filePaths = await collectEncryptableSourceFilesInIsolate(
+        folderPath,
+      );
       final selected = <_PendingSecureSource>[];
       for (final path in filePaths) {
         final relativePath = p.relative(path, from: folderPath);
@@ -426,7 +433,8 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       if (_selectedSources.isEmpty) {
         _selectedSourceRoot = null;
       }
-      _statusMessage = 'Removed ${p.basename(source.sourcePath)} from the import list.';
+      _statusMessage =
+          'Removed ${p.basename(source.sourcePath)} from the import list.';
       _statusIsError = false;
     });
   }
@@ -475,7 +483,8 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       if (_selectedSources.isEmpty) {
         _selectedSourceRoot = null;
       }
-      _statusMessage = 'Removed $removedCount ${_kindLabel(kind)} item${removedCount == 1 ? '' : 's'} from the import list.';
+      _statusMessage =
+          'Removed $removedCount ${_kindLabel(kind)} item${removedCount == 1 ? '' : 's'} from the import list.';
       _statusIsError = false;
     });
   }
@@ -515,7 +524,8 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
           return total;
         }
       });
-      final selectedKinds = _selectedSources.map((source) => source.kind).toSet();
+      final selectedKinds =
+          _selectedSources.map((source) => source.kind).toSet();
       final category =
           selectedKinds.length == 1
               ? _kindLabel(selectedKinds.first).toLowerCase()
@@ -532,13 +542,13 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
             ),
           )
           .toList(growable: false);
-      final result = await services.secureContentEncryptionJobManager.startBatch(
-        requests: requests,
-        overwrite: _overwriteExisting,
-      );
+      final result = await services.secureContentEncryptionJobManager
+          .startBatch(requests: requests, overwrite: _overwriteExisting);
 
       if (result.importedJson) {
-        await ref.read(daylysportSyncControllerProvider.notifier).runManualSync();
+        await ref
+            .read(daylysportSyncControllerProvider.notifier)
+            .runManualSync();
       }
       await _refreshInventory(recordActivity: false);
       await _recordDashboardActivity(
@@ -598,7 +608,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                   children: [
                     TextField(
                       controller: displayNameController,
-                      decoration: const InputDecoration(labelText: 'Display name'),
+                      decoration: const InputDecoration(
+                        labelText: 'Display name',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -702,8 +714,12 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
 
   Future<void> _showProfileDialog(AdminSessionRecord session) async {
     final authService = ref.read(adminAuthServiceProvider);
-    final currentUser = authService.users.firstWhere((user) => user.id == session.userId);
-    final usernameController = TextEditingController(text: currentUser.username);
+    final currentUser = authService.users.firstWhere(
+      (user) => user.id == session.userId,
+    );
+    final usernameController = TextEditingController(
+      text: currentUser.username,
+    );
     final displayNameController = TextEditingController(
       text: currentUser.displayName,
     );
@@ -722,7 +738,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                   children: [
                     TextField(
                       controller: displayNameController,
-                      decoration: const InputDecoration(labelText: 'Display name'),
+                      decoration: const InputDecoration(
+                        labelText: 'Display name',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -939,14 +957,17 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     if (confirmed != true) {
       return;
     }
-    await ref.read(appServicesProvider).adminActivityService.clearLoginRecords(
-      actorUserId: session.userId,
-      actorUsername: session.username,
-    );
+    await ref
+        .read(appServicesProvider)
+        .adminActivityService
+        .clearLoginRecords(
+          actorUserId: session.userId,
+          actorUsername: session.username,
+        );
     _showStatus('Login records cleared.');
   }
 
-  Future<void> _generateVerificationCode() async {
+  Future<void> _generateVerificationQr() async {
     if (_isGeneratingVerificationCode) {
       return;
     }
@@ -969,12 +990,12 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
 
     try {
       final service = ref.read(contentVerificationServiceProvider);
-      final request = service.parseClientRequest(requestCode);
-      final verificationCode = service.generateVerificationCode(requestCode);
+      final verificationQr = service.generateVerificationQrPayload(requestCode);
+      final request = verificationQr.request;
       await _recordDashboardActivity(
         type: AdminActivityType.verificationCodeGenerated,
         summary:
-            'Generated ${ContentVerificationService.featureLabel(request.feature).toLowerCase()} verification code for ${request.pendingCounts.totalPending} pending item${request.pendingCounts.totalPending == 1 ? '' : 's'}.',
+            'Generated ${ContentVerificationService.featureLabel(request.feature).toLowerCase()} verification QR for ${request.pendingCounts.totalPending} pending item${request.pendingCounts.totalPending == 1 ? '' : 's'}.',
         category: 'verification',
         itemCount: request.pendingCounts.totalPending,
         metadata: <String, String>{
@@ -983,17 +1004,22 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
           'contentCategory': _verificationContentCategory(
             request.pendingCounts,
           ),
-          'pendingCategories': request.pendingCounts.activeCategoryKeys.join(','),
+          'pendingCategories': request.pendingCounts.activeCategoryKeys.join(
+            ',',
+          ),
           'seedSource': request.seedSource.name,
+          'verificationCode': verificationQr.verificationCode,
+          'verificationQrIssuedAtUtc':
+              verificationQr.issuedAtUtc.toIso8601String(),
         },
       );
       if (!mounted) {
         return;
       }
       setState(() {
-        _generatedVerificationCode = verificationCode;
+        _generatedVerificationQr = verificationQr;
         _verificationMessage =
-            'Verification code generated for ${ContentVerificationService.featureLabel(request.feature)}.';
+            'Verification QR generated for ${ContentVerificationService.featureLabel(request.feature)}.';
         _verificationMessageIsError = false;
       });
     } catch (error) {
@@ -1001,8 +1027,8 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         return;
       }
       setState(() {
-        _generatedVerificationCode = null;
-        _verificationMessage = 'Unable to generate verification code: $error';
+        _generatedVerificationQr = null;
+        _verificationMessage = 'Unable to generate verification QR: $error';
         _verificationMessageIsError = true;
       });
     } finally {
@@ -1067,7 +1093,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         return;
       }
       setState(() {
-        _generatedVerificationCode = null;
+        _generatedVerificationQr = null;
         _verificationMessage = 'Verification generation records cleared.';
         _verificationMessageIsError = false;
       });
@@ -1103,8 +1129,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor:
-            isError ? Theme.of(context).colorScheme.error : null,
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
       ),
     );
   }
@@ -1129,7 +1154,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     final normalized = p.normalize(raw.trim().replaceAll('\\', '/'));
     final sanitized = normalized
         .split('/')
-        .where((segment) => segment.isNotEmpty && segment != '.' && segment != '..')
+        .where(
+          (segment) => segment.isNotEmpty && segment != '.' && segment != '..',
+        )
         .join('/');
     return sanitized;
   }
@@ -1161,7 +1188,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     }
   }
 
-  String _buildEncryptionStatusMessage(SecureContentEncryptionBatchResult result) {
+  String _buildEncryptionStatusMessage(
+    SecureContentEncryptionBatchResult result,
+  ) {
     final parts = <String>[
       'Encrypted ${result.encryptedCount} of ${result.requestedCount} selected files.',
       if (result.skippedCount > 0) 'Skipped ${result.skippedCount}.',
@@ -1175,9 +1204,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     return parts.join(' ');
   }
 
-  String _verificationContentCategory(
-    ContentVerificationPendingCounts counts,
-  ) {
+  String _verificationContentCategory(ContentVerificationPendingCounts counts) {
     final activeKeys = counts.activeCategoryKeys;
     if (activeKeys.isEmpty) {
       return 'none';
@@ -1257,10 +1284,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                   child: Text('Clear login records'),
                 ),
                 PopupMenuDivider(),
-                PopupMenuItem<String>(
-                  value: 'logout',
-                  child: Text('Logout'),
-                ),
+                PopupMenuItem<String>(value: 'logout', child: Text('Logout')),
               ];
             },
           ),
@@ -1351,7 +1375,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                                     _isPickingSources || _isEncrypting
                                         ? null
                                         : _pickFolder,
-                                icon: const Icon(Icons.drive_folder_upload_rounded),
+                                icon: const Icon(
+                                  Icons.drive_folder_upload_rounded,
+                                ),
                                 label: const Text('Browse folder'),
                               ),
                               OutlinedButton.icon(
@@ -1370,17 +1396,24 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                             selectedSourceRoot: _selectedSourceRoot,
                             jobSnapshot: _jobSnapshot,
                             destinationByKind: _buildDestinationByKind(),
-                            jsonDestinationController: _jsonDestinationController,
-                            imageDestinationController: _imageDestinationController,
-                            videoDestinationController: _videoDestinationController,
+                            jsonDestinationController:
+                                _jsonDestinationController,
+                            imageDestinationController:
+                                _imageDestinationController,
+                            videoDestinationController:
+                                _videoDestinationController,
                             overwriteExisting: _overwriteExisting,
                             isEncrypting: _isEncrypting,
                             onApplyPreset: (kind, value) {
                               final controller = switch (kind) {
-                                SecureContentKind.json => _jsonDestinationController,
-                                SecureContentKind.image => _imageDestinationController,
-                                SecureContentKind.video => _videoDestinationController,
-                                SecureContentKind.other => _jsonDestinationController,
+                                SecureContentKind.json =>
+                                  _jsonDestinationController,
+                                SecureContentKind.image =>
+                                  _imageDestinationController,
+                                SecureContentKind.video =>
+                                  _videoDestinationController,
+                                SecureContentKind.other =>
+                                  _jsonDestinationController,
                               };
                               controller.text = value;
                               controller.selection = TextSelection.fromPosition(
@@ -1401,25 +1434,26 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                             const SizedBox(height: 12),
                             Text(
                               _statusMessage!,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color:
-                                        _statusIsError
-                                            ? scheme.error
-                                            : scheme.primary,
-                                  ),
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.copyWith(
+                                color:
+                                    _statusIsError
+                                        ? scheme.error
+                                        : scheme.primary,
+                              ),
                             ),
                           ],
                         ],
                       ),
                     ),
                     _SectionCard(
-                      title: 'Verification code operations',
+                      title: 'Verification QR operations',
                       subtitle:
-                          'Convert client request codes into verification codes and track generation counts by date and content type.',
+                          'Convert client request codes into scannable admin QR approvals, while preserving a manual verification-code fallback and the local audit trail.',
                       child: _VerificationOperationsPanel(
                         requestController: _verificationRequestController,
-                        generatedVerificationCode: _generatedVerificationCode,
+                        generatedVerificationQr: _generatedVerificationQr,
                         statusMessage: _verificationMessage,
                         statusIsError: _verificationMessageIsError,
                         isGenerating: _isGeneratingVerificationCode,
@@ -1427,7 +1461,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                         activities: activityService.records.toList(
                           growable: false,
                         ),
-                        onGenerate: _generateVerificationCode,
+                        onGenerate: _generateVerificationQr,
                         onClearRecords: _clearVerificationRecords,
                       ),
                     ),
@@ -1519,7 +1553,9 @@ class _SecureContentDashboardSnapshot {
 
   int get todayActivityCount {
     final today = DateTime.now().toUtc();
-    return activities.where((record) => _isSameUtcDay(record.occurredAtUtc, today)).length;
+    return activities
+        .where((record) => _isSameUtcDay(record.occurredAtUtc, today))
+        .length;
   }
 
   int get totalImportedItems {
@@ -1567,17 +1603,23 @@ class _SecureContentDashboardSnapshot {
   }
 
   List<_DateDashboardMetric> get dateMetrics {
-    return inventory.encryptedDateBuckets.map((bucket) {
-      final actionCount = activities
-          .where((record) => _isSameUtcDay(record.occurredAtUtc, bucket.dayUtc))
-          .length;
-      return _DateDashboardMetric(
-        dayUtc: bucket.dayUtc,
-        encryptedCount: bucket.encryptedFiles,
-        encryptedBytes: bucket.encryptedBytes,
-        actionCount: actionCount,
-      );
-    }).toList(growable: false);
+    return inventory.encryptedDateBuckets
+        .map((bucket) {
+          final actionCount =
+              activities
+                  .where(
+                    (record) =>
+                        _isSameUtcDay(record.occurredAtUtc, bucket.dayUtc),
+                  )
+                  .length;
+          return _DateDashboardMetric(
+            dayUtc: bucket.dayUtc,
+            encryptedCount: bucket.encryptedFiles,
+            encryptedBytes: bucket.encryptedBytes,
+            actionCount: actionCount,
+          );
+        })
+        .toList(growable: false);
   }
 
   List<_UserActivityMetric> get userMetrics {
@@ -1593,14 +1635,24 @@ class _SecureContentDashboardSnapshot {
         _UserActivityMetric(
           user: user,
           actionCount: userRecords.length,
-          importCount: imports.fold<int>(0, (sum, record) => sum + (record.itemCount ?? 0)),
-          importedBytes: imports.fold<int>(0, (sum, record) => sum + (record.totalBytes ?? 0)),
-          loginCount: userRecords
-              .where((record) => record.type == AdminActivityType.loginSuccess)
-              .length,
-          lastActiveAtUtc: userRecords.isEmpty
-              ? user.lastLoginAtUtc
-              : userRecords.first.occurredAtUtc,
+          importCount: imports.fold<int>(
+            0,
+            (sum, record) => sum + (record.itemCount ?? 0),
+          ),
+          importedBytes: imports.fold<int>(
+            0,
+            (sum, record) => sum + (record.totalBytes ?? 0),
+          ),
+          loginCount:
+              userRecords
+                  .where(
+                    (record) => record.type == AdminActivityType.loginSuccess,
+                  )
+                  .length,
+          lastActiveAtUtc:
+              userRecords.isEmpty
+                  ? user.lastLoginAtUtc
+                  : userRecords.first.occurredAtUtc,
           isCurrentUser: user.id == currentSession.userId,
         ),
       );
@@ -1629,19 +1681,22 @@ class _SecureContentDashboardSnapshot {
   String get dominantCategoryLabel {
     final topCategory = categoryMetrics.firstWhere(
       (metric) => metric.count > 0 || metric.bytes > 0,
-      orElse: () => _CategoryDashboardMetric(
-        kind: SecureContentKind.json,
-        label: 'JSON',
-        count: 0,
-        bytes: 0,
-        icon: Icons.data_object_rounded,
-      ),
+      orElse:
+          () => _CategoryDashboardMetric(
+            kind: SecureContentKind.json,
+            label: 'JSON',
+            count: 0,
+            bytes: 0,
+            icon: Icons.data_object_rounded,
+          ),
     );
     return topCategory.label;
   }
 
   static bool _isSameUtcDay(DateTime left, DateTime right) {
-    return left.year == right.year && left.month == right.month && left.day == right.day;
+    return left.year == right.year &&
+        left.month == right.month &&
+        left.day == right.day;
   }
 }
 
@@ -1766,7 +1821,9 @@ class _DashboardHeroCard extends StatelessWidget {
                     FilledButton.icon(
                       onPressed: isRefreshing ? null : onRefresh,
                       icon: const Icon(Icons.refresh_rounded),
-                      label: Text(isRefreshing ? 'Refreshing...' : 'Refresh inventory'),
+                      label: Text(
+                        isRefreshing ? 'Refreshing...' : 'Refresh inventory',
+                      ),
                     ),
                     OutlinedButton.icon(
                       onPressed: onOpenSync,
@@ -1797,7 +1854,9 @@ class _DashboardHeroCard extends StatelessWidget {
                   value:
                       inventoryData == null
                           ? 'Pending'
-                          : formatter.format(inventoryData.scannedAtUtc.toLocal()),
+                          : formatter.format(
+                            inventoryData.scannedAtUtc.toLocal(),
+                          ),
                 ),
                 _HeroChip(
                   label: 'Encrypted coverage',
@@ -1902,10 +1961,17 @@ class _OverviewMetricsGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final columns = width >= 1200 ? 4 : width >= 820 ? 2 : 1;
+        final columns =
+            width >= 1200
+                ? 4
+                : width >= 820
+                ? 2
+                : 1;
         const spacing = 14.0;
         final tileWidth =
-            columns == 1 ? width : (width - ((columns - 1) * spacing)) / columns;
+            columns == 1
+                ? width
+                : (width - ((columns - 1) * spacing)) / columns;
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
@@ -1960,7 +2026,10 @@ class _OverviewMetricCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(metric.value, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 6),
-          Text(metric.supportingText, style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            metric.supportingText,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
       ),
     );
@@ -1975,16 +2044,22 @@ class _DashboardPanelGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final columns = maxWidth >= 1360 ? 3 : maxWidth >= 900 ? 2 : 1;
+    final columns =
+        maxWidth >= 1360
+            ? 3
+            : maxWidth >= 900
+            ? 2
+            : 1;
     const spacing = 16.0;
     final itemWidth =
-        columns == 1 ? maxWidth : (maxWidth - ((columns - 1) * spacing)) / columns;
+        columns == 1
+            ? maxWidth
+            : (maxWidth - ((columns - 1) * spacing)) / columns;
     return Wrap(
       spacing: spacing,
       runSpacing: spacing,
       children: [
-        for (final child in children)
-          SizedBox(width: itemWidth, child: child),
+        for (final child in children) SizedBox(width: itemWidth, child: child),
       ],
     );
   }
@@ -2035,13 +2110,20 @@ class _CategoryStatisticsPanel extends StatelessWidget {
         for (final metric in snapshot.categoryMetrics) ...[
           Row(
             children: [
-              Icon(metric.icon, size: 20, color: Theme.of(context).colorScheme.primary),
+              Icon(
+                metric.icon,
+                size: 20,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(metric.label, style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      metric.label,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       '${metric.count} encrypted items • ${_humanizeBytes(metric.bytes)}',
@@ -2076,7 +2158,10 @@ class _DateAndSizePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final metrics = snapshot.dateMetrics.take(6).toList(growable: false);
-    final maxCount = metrics.fold<int>(1, (maxValue, item) => math.max(maxValue, item.encryptedCount));
+    final maxCount = metrics.fold<int>(
+      1,
+      (maxValue, item) => math.max(maxValue, item.encryptedCount),
+    );
     final formatter = DateFormat('MMM d');
 
     return Column(
@@ -2088,7 +2173,10 @@ class _DateAndSizePanel extends StatelessWidget {
           children: [
             _StatChip(
               label: 'Largest day',
-              value: metrics.isEmpty ? 'No data' : '${metrics.first.encryptedCount} items',
+              value:
+                  metrics.isEmpty
+                      ? 'No data'
+                      : '${metrics.first.encryptedCount} items',
             ),
             _StatChip(
               label: 'Encrypted size',
@@ -2096,11 +2184,14 @@ class _DateAndSizePanel extends StatelessWidget {
             ),
             _StatChip(
               label: 'Avg item size',
-              value: snapshot.totalEncryptedFiles == 0
-                  ? '0 B'
-                  : _humanizeBytes(
-                    (snapshot.totalEncryptedBytes / snapshot.totalEncryptedFiles).round(),
-                  ),
+              value:
+                  snapshot.totalEncryptedFiles == 0
+                      ? '0 B'
+                      : _humanizeBytes(
+                        (snapshot.totalEncryptedBytes /
+                                snapshot.totalEncryptedFiles)
+                            .round(),
+                      ),
             ),
           ],
         ),
@@ -2176,7 +2267,10 @@ class _UserActivityPanel extends StatelessWidget {
                     ),
                     if (entry.isCurrentUser)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.primaryContainer,
                           borderRadius: BorderRadius.circular(999),
@@ -2251,16 +2345,24 @@ class _MaintenancePanel extends StatelessWidget {
           children: [
             FilledButton.icon(
               onPressed:
-                  isWarmingCaches || isClearingCaches || isEncrypting ? null : onWarmCaches,
+                  isWarmingCaches || isClearingCaches || isEncrypting
+                      ? null
+                      : onWarmCaches,
               icon: const Icon(Icons.bolt_rounded),
-              label: Text(isWarmingCaches ? 'Warming caches...' : 'Warm secure caches'),
+              label: Text(
+                isWarmingCaches ? 'Warming caches...' : 'Warm secure caches',
+              ),
             ),
             OutlinedButton.icon(
               onPressed:
-                  isWarmingCaches || isClearingCaches || isEncrypting ? null : onClearCaches,
+                  isWarmingCaches || isClearingCaches || isEncrypting
+                      ? null
+                      : onClearCaches,
               icon: const Icon(Icons.cleaning_services_rounded),
               label: Text(
-                isClearingCaches ? 'Clearing caches...' : 'Clear decrypted caches',
+                isClearingCaches
+                    ? 'Clearing caches...'
+                    : 'Clear decrypted caches',
               ),
             ),
           ],
@@ -2271,9 +2373,18 @@ class _MaintenancePanel extends StatelessWidget {
             spacing: 10,
             runSpacing: 10,
             children: [
-              _StatChip(label: 'Supported files', value: '${inventoryData.supportedFiles}'),
-              _StatChip(label: 'Plain files', value: '${inventoryData.plainFiles}'),
-              _StatChip(label: 'Encrypted files', value: '${inventoryData.encryptedFiles}'),
+              _StatChip(
+                label: 'Supported files',
+                value: '${inventoryData.supportedFiles}',
+              ),
+              _StatChip(
+                label: 'Plain files',
+                value: '${inventoryData.plainFiles}',
+              ),
+              _StatChip(
+                label: 'Encrypted files',
+                value: '${inventoryData.encryptedFiles}',
+              ),
             ],
           ),
         const SizedBox(height: 12),
@@ -2362,7 +2473,10 @@ class _SecurityManagementPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        Text('Configured admins', style: Theme.of(context).textTheme.titleSmall),
+        Text(
+          'Configured admins',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
         const SizedBox(height: 10),
         for (final user in users) ...[
           ListTile(
@@ -2415,13 +2529,17 @@ class _RecentActivityPanel extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(activity.summary, style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      activity.summary,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       '${formatter.format(activity.occurredAtUtc.toLocal())} • ${activity.actorUsername ?? 'system'} • ${activity.category}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    if ((activity.itemCount ?? 0) > 0 || (activity.totalBytes ?? 0) > 0)
+                    if ((activity.itemCount ?? 0) > 0 ||
+                        (activity.totalBytes ?? 0) > 0)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
@@ -2475,7 +2593,7 @@ class _RecentActivityPanel extends StatelessWidget {
 class _VerificationOperationsPanel extends StatelessWidget {
   const _VerificationOperationsPanel({
     required this.requestController,
-    required this.generatedVerificationCode,
+    required this.generatedVerificationQr,
     required this.statusMessage,
     required this.statusIsError,
     required this.isGenerating,
@@ -2486,7 +2604,7 @@ class _VerificationOperationsPanel extends StatelessWidget {
   });
 
   final TextEditingController requestController;
-  final String? generatedVerificationCode;
+  final VerificationQrPayload? generatedVerificationQr;
   final String? statusMessage;
   final bool statusIsError;
   final bool isGenerating;
@@ -2500,7 +2618,8 @@ class _VerificationOperationsPanel extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final verificationActivities = activities
         .where(
-          (record) => record.type == AdminActivityType.verificationCodeGenerated,
+          (record) =>
+              record.type == AdminActivityType.verificationCodeGenerated,
         )
         .toList(growable: false);
     final dateBuckets = <String, int>{
@@ -2525,9 +2644,9 @@ class _VerificationOperationsPanel extends StatelessWidget {
 
     final sortedFeatureCounts = featureCounts.entries.toList(growable: false)
       ..sort((left, right) => right.value.compareTo(left.value));
-    final sortedContentTypeCounts =
-        contentTypeCounts.entries.toList(growable: false)
-          ..sort((left, right) => right.value.compareTo(left.value));
+    final sortedContentTypeCounts = contentTypeCounts.entries.toList(
+      growable: false,
+    )..sort((left, right) => right.value.compareTo(left.value));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2549,10 +2668,8 @@ class _VerificationOperationsPanel extends StatelessWidget {
           children: [
             FilledButton.icon(
               onPressed: isGenerating ? null : onGenerate,
-              icon: const Icon(Icons.key_rounded),
-              label: Text(
-                isGenerating ? 'Generating...' : 'Generate verification code',
-              ),
+              icon: const Icon(Icons.qr_code_2_rounded),
+              label: Text(isGenerating ? 'Generating...' : 'Generate admin QR'),
             ),
             OutlinedButton.icon(
               onPressed: isClearing ? null : onClearRecords,
@@ -2561,7 +2678,7 @@ class _VerificationOperationsPanel extends StatelessWidget {
             ),
           ],
         ),
-        if (generatedVerificationCode != null) ...[
+        if (generatedVerificationQr != null) ...[
           const SizedBox(height: 12),
           Container(
             width: double.infinity,
@@ -2575,13 +2692,39 @@ class _VerificationOperationsPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Generated verification code',
+                  'Generated admin QR approval',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: QrImageView(
+                      data: generatedVerificationQr!.qrPayload,
+                      version: QrVersions.auto,
+                      size: 220,
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Client fallback verification code',
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 const SizedBox(height: 8),
                 SelectableText(
-                  generatedVerificationCode!,
+                  generatedVerificationQr!.verificationCode,
                   style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Issued ${DateFormat('MMM d, yyyy HH:mm').format(generatedVerificationQr!.issuedAtUtc.toLocal())}',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
@@ -2631,7 +2774,7 @@ class _VerificationOperationsPanel extends StatelessWidget {
         const SizedBox(height: 8),
         if (sortedFeatureCounts.isEmpty)
           Text(
-            'No verification codes have been generated yet.',
+            'No verification QR approvals have been generated yet.',
             style: Theme.of(context).textTheme.bodySmall,
           )
         else
@@ -2675,7 +2818,11 @@ class _VerificationOperationsPanel extends StatelessWidget {
 
   static String _relativeDayBucket(DateTime value) {
     final localValue = value.toLocal();
-    final localDate = DateTime(localValue.year, localValue.month, localValue.day);
+    final localDate = DateTime(
+      localValue.year,
+      localValue.month,
+      localValue.day,
+    );
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final difference = localDate.difference(today).inDays;
@@ -2852,15 +2999,18 @@ class _EncryptionImportPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final jsonCount = selectedSources
-        .where((item) => item.kind == SecureContentKind.json)
-        .length;
-    final imageCount = selectedSources
-        .where((item) => item.kind == SecureContentKind.image)
-        .length;
-    final videoCount = selectedSources
-        .where((item) => item.kind == SecureContentKind.video)
-        .length;
+    final jsonCount =
+        selectedSources
+            .where((item) => item.kind == SecureContentKind.json)
+            .length;
+    final imageCount =
+        selectedSources
+            .where((item) => item.kind == SecureContentKind.image)
+            .length;
+    final videoCount =
+        selectedSources
+            .where((item) => item.kind == SecureContentKind.video)
+            .length;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -2996,10 +3146,13 @@ class _EncryptionImportPanel extends StatelessWidget {
             ),
           const SizedBox(height: 14),
           FilledButton.icon(
-            onPressed: selectedSources.isEmpty || isEncrypting ? null : onImport,
+            onPressed:
+                selectedSources.isEmpty || isEncrypting ? null : onImport,
             icon: const Icon(Icons.lock_rounded),
             label: Text(
-              isEncrypting ? 'Encrypting and importing...' : 'Encrypt into daylySport',
+              isEncrypting
+                  ? 'Encrypting and importing...'
+                  : 'Encrypt into daylySport',
             ),
           ),
         ],
@@ -3032,10 +3185,7 @@ class _DestinationPresetEditor extends StatelessWidget {
       children: [
         TextField(
           controller: controller,
-          decoration: InputDecoration(
-            labelText: label,
-            hintText: hintText,
-          ),
+          decoration: InputDecoration(labelText: label, hintText: hintText),
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -3093,82 +3243,85 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
               DataColumn(label: Text('Progress')),
               DataColumn(label: Text('Remove')),
             ],
-            rows: selectedSources.map((source) {
-              final itemState = progressByRequestId[source.requestId];
-              final destinationRoot = destinationByKind[source.kind] ?? '';
-              final outputPath = destinationRoot.isEmpty
-                  ? source.relativeOutputPath
-                  : p.join(destinationRoot, source.relativeOutputPath);
-              return DataRow(
-                cells: [
-                  DataCell(
-                    Row(
-                      children: [
-                        Icon(
-                          _iconForKind(source.kind),
-                          size: 18,
-                          color: Theme.of(context).colorScheme.primary,
+            rows: selectedSources
+                .map((source) {
+                  final itemState = progressByRequestId[source.requestId];
+                  final destinationRoot = destinationByKind[source.kind] ?? '';
+                  final outputPath =
+                      destinationRoot.isEmpty
+                          ? source.relativeOutputPath
+                          : p.join(destinationRoot, source.relativeOutputPath);
+                  return DataRow(
+                    cells: [
+                      DataCell(
+                        Row(
+                          children: [
+                            Icon(
+                              _iconForKind(source.kind),
+                              size: 18,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(_kindText(source.kind)),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(_kindText(source.kind)),
-                      ],
-                    ),
-                  ),
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 220),
-                      child: Text(
-                        source.relativeOutputPath,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ),
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 280),
-                      child: Text(
-                        itemState?.destinationPath ??
-                            _encryptedPreviewPath(outputPath, source.kind),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 160),
-                      child: Text(_statusLabel(itemState?.stage)),
-                    ),
-                  ),
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 180),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          LinearProgressIndicator(
-                            value: itemState?.percentComplete,
-                            minHeight: 8,
+                      DataCell(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 220),
+                          child: Text(
+                            source.relativeOutputPath,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _progressLabel(itemState),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                  DataCell(
-                    IconButton(
-                      tooltip: 'Remove file',
-                      onPressed: () => onRemoveSource(source),
-                      icon: const Icon(Icons.delete_outline_rounded),
-                    ),
-                  ),
-                ],
-              );
-            }).toList(growable: false),
+                      DataCell(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 280),
+                          child: Text(
+                            itemState?.destinationPath ??
+                                _encryptedPreviewPath(outputPath, source.kind),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 160),
+                          child: Text(_statusLabel(itemState?.stage)),
+                        ),
+                      ),
+                      DataCell(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 180),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              LinearProgressIndicator(
+                                value: itemState?.percentComplete,
+                                minHeight: 8,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _progressLabel(itemState),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      DataCell(
+                        IconButton(
+                          tooltip: 'Remove file',
+                          onPressed: () => onRemoveSource(source),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        ),
+                      ),
+                    ],
+                  );
+                })
+                .toList(growable: false),
           ),
         ),
       ],
@@ -3201,7 +3354,10 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
     }
   }
 
-  static String _encryptedPreviewPath(String logicalPath, SecureContentKind kind) {
+  static String _encryptedPreviewPath(
+    String logicalPath,
+    SecureContentKind kind,
+  ) {
     switch (kind) {
       case SecureContentKind.json:
         return '$logicalPath$kEncryptedJsonExtension';
@@ -3240,9 +3396,10 @@ class _SelectedSourcesReviewTable extends StatelessWidget {
       return '0%';
     }
     final percent = (itemState.percentComplete * 100).round();
-    final bytesLabel = itemState.totalBytes > 0
-        ? ' • ${_humanizeBytes(itemState.processedBytes)} / ${_humanizeBytes(itemState.totalBytes)}'
-        : '';
+    final bytesLabel =
+        itemState.totalBytes > 0
+            ? ' • ${_humanizeBytes(itemState.processedBytes)} / ${_humanizeBytes(itemState.totalBytes)}'
+            : '';
     return '$percent%$bytesLabel';
   }
 }
@@ -3266,7 +3423,9 @@ class _EncryptionProgressSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            snapshot.isRunning ? 'Encryption in progress' : 'Last encryption batch',
+            snapshot.isRunning
+                ? 'Encryption in progress'
+                : 'Last encryption batch',
             style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 10),
@@ -3280,7 +3439,10 @@ class _EncryptionProgressSection extends StatelessWidget {
             runSpacing: 10,
             children: [
               _StatChip(label: 'Total', value: '${snapshot.totalFiles}'),
-              _StatChip(label: 'Completed', value: '${snapshot.completedFiles}'),
+              _StatChip(
+                label: 'Completed',
+                value: '${snapshot.completedFiles}',
+              ),
               _StatChip(label: 'Queued', value: '${snapshot.queuedFiles}'),
               _StatChip(label: 'Failed', value: '${snapshot.failedFiles}'),
               _StatChip(label: 'Skipped', value: '${snapshot.skippedFiles}'),
@@ -3326,7 +3488,10 @@ List<String> collectEncryptableSourceFiles(String rootPath) {
   }
 
   final results = <String>[];
-  for (final entity in directory.listSync(recursive: true, followLinks: false)) {
+  for (final entity in directory.listSync(
+    recursive: true,
+    followLinks: false,
+  )) {
     if (entity is! File) {
       continue;
     }
@@ -3401,10 +3566,10 @@ class SecureContentInventory {
   int get encryptedFiles =>
       encryptedJsonFiles + encryptedImageFiles + encryptedVideoFiles;
 
-    int get totalEncryptedBytes =>
+  int get totalEncryptedBytes =>
       encryptedJsonBytes + encryptedImageBytes + encryptedVideoBytes;
 
-    int get totalPlainBytes => plainJsonBytes + plainImageBytes + plainVideoBytes;
+  int get totalPlainBytes => plainJsonBytes + plainImageBytes + plainVideoBytes;
 
   int get plainFiles => plainJsonFiles + plainImageFiles + plainVideoFiles;
 
@@ -3499,8 +3664,13 @@ SecureContentInventory scanSecureContentInventory(String rootPath) {
           otherFiles += 1;
       }
 
-      if (descriptor.isEncrypted && descriptor.kind != SecureContentKind.other) {
-        final dayUtc = DateTime.utc(modifiedAt.year, modifiedAt.month, modifiedAt.day);
+      if (descriptor.isEncrypted &&
+          descriptor.kind != SecureContentKind.other) {
+        final dayUtc = DateTime.utc(
+          modifiedAt.year,
+          modifiedAt.month,
+          modifiedAt.day,
+        );
         final accumulator = encryptedDateAccumulator.putIfAbsent(
           dayUtc,
           () => _EncryptedDateAccumulator(dayUtc: dayUtc),

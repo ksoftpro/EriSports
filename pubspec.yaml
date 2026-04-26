@@ -46,6 +46,8 @@ dependencies:
   pointycastle: ^3.9.1
   video_player: ^2.9.2
   video_thumbnail: ^0.5.6
+  mobile_scanner: ^5.2.3
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
