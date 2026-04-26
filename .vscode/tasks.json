@@ -1,0 +1,53 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build client release APK",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"build",
+				"apk",
+				"--release",
+				"--flavor",
+				"client",
+				"-t",
+				"lib/main_client.dart"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Build admin release APK",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"build",
+				"apk",
+				"--release",
+				"--flavor",
+				"admin",
+				"-t",
+				"lib/main_admin.dart"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Build client release APK fresh",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"build",
+				"apk",
+				"--release",
+				"--flavor",
+				"client",
+				"-t",
+				"lib/main_client.dart"
+			],
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}

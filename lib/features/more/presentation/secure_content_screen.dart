@@ -10,6 +10,7 @@ import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:eri_sports/data/secure_content/secure_content_encryption_job_manager.dart';
 import 'package:eri_sports/features/admin/data/admin_models.dart';
 import 'package:eri_sports/features/admin/data/admin_providers.dart';
+import 'package:eri_sports/features/verification/data/content_verification_service.dart';
 import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -71,7 +72,14 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       TextEditingController(text: 'news');
   final TextEditingController _videoDestinationController =
       TextEditingController(text: 'reels');
+    final TextEditingController _verificationRequestController =
+      TextEditingController();
   final List<_PendingSecureSource> _selectedSources = <_PendingSecureSource>[];
+    String? _generatedVerificationCode;
+    String? _verificationMessage;
+    bool _verificationMessageIsError = false;
+    bool _isGeneratingVerificationCode = false;
+    bool _isClearingVerificationRecords = false;
 
   @override
   void initState() {
@@ -97,6 +105,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     _jsonDestinationController.dispose();
     _imageDestinationController.dispose();
     _videoDestinationController.dispose();
+    _verificationRequestController.dispose();
     super.dispose();
   }
 
@@ -937,6 +946,148 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     _showStatus('Login records cleared.');
   }
 
+  Future<void> _generateVerificationCode() async {
+    if (_isGeneratingVerificationCode) {
+      return;
+    }
+
+    final requestCode = _verificationRequestController.text.trim();
+    if (requestCode.isEmpty) {
+      setState(() {
+        _verificationMessage =
+            'Paste the client request code before generating a verification code.';
+        _verificationMessageIsError = true;
+      });
+      return;
+    }
+
+    setState(() {
+      _isGeneratingVerificationCode = true;
+      _verificationMessage = null;
+      _verificationMessageIsError = false;
+    });
+
+    try {
+      final service = ref.read(contentVerificationServiceProvider);
+      final request = service.parseClientRequest(requestCode);
+      final verificationCode = service.generateVerificationCode(requestCode);
+      await _recordDashboardActivity(
+        type: AdminActivityType.verificationCodeGenerated,
+        summary:
+            'Generated ${ContentVerificationService.featureLabel(request.feature).toLowerCase()} verification code for ${request.pendingCounts.totalPending} pending item${request.pendingCounts.totalPending == 1 ? '' : 's'}.',
+        category: 'verification',
+        itemCount: request.pendingCounts.totalPending,
+        metadata: <String, String>{
+          'feature': request.feature,
+          'requestDayKey': request.requestDayKey,
+          'contentCategory': _verificationContentCategory(
+            request.pendingCounts,
+          ),
+          'pendingCategories': request.pendingCounts.activeCategoryKeys.join(','),
+          'seedSource': request.seedSource.name,
+        },
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _generatedVerificationCode = verificationCode;
+        _verificationMessage =
+            'Verification code generated for ${ContentVerificationService.featureLabel(request.feature)}.';
+        _verificationMessageIsError = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _generatedVerificationCode = null;
+        _verificationMessage = 'Unable to generate verification code: $error';
+        _verificationMessageIsError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGeneratingVerificationCode = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _clearVerificationRecords() async {
+    if (_isClearingVerificationRecords) {
+      return;
+    }
+
+    final session = _currentSession;
+    if (session == null) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Clear verification generation records?'),
+          content: const Text(
+            'This removes persisted verification-code generation records from the local audit history.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Clear records'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _isClearingVerificationRecords = true;
+      _verificationMessage = null;
+      _verificationMessageIsError = false;
+    });
+
+    try {
+      await ref
+          .read(appServicesProvider)
+          .adminActivityService
+          .clearVerificationCodeRecords(
+            actorUserId: session.userId,
+            actorUsername: session.username,
+          );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _generatedVerificationCode = null;
+        _verificationMessage = 'Verification generation records cleared.';
+        _verificationMessageIsError = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _verificationMessage = 'Unable to clear verification records: $error';
+        _verificationMessageIsError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isClearingVerificationRecords = false;
+        });
+      }
+    }
+  }
+
   Future<void> _logout() async {
     await ref.read(adminAuthServiceProvider).logout();
     if (!mounted) {
@@ -1022,6 +1173,19 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         'First failure: ${p.basename(result.failures.first.sourcePath)} - ${result.failures.first.message}',
     ];
     return parts.join(' ');
+  }
+
+  String _verificationContentCategory(
+    ContentVerificationPendingCounts counts,
+  ) {
+    final activeKeys = counts.activeCategoryKeys;
+    if (activeKeys.isEmpty) {
+      return 'none';
+    }
+    if (activeKeys.length == 1) {
+      return activeKeys.first;
+    }
+    return 'mixed';
   }
 
   @override
@@ -1247,6 +1411,24 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                             ),
                           ],
                         ],
+                      ),
+                    ),
+                    _SectionCard(
+                      title: 'Verification code operations',
+                      subtitle:
+                          'Convert client request codes into verification codes and track generation counts by date and content type.',
+                      child: _VerificationOperationsPanel(
+                        requestController: _verificationRequestController,
+                        generatedVerificationCode: _generatedVerificationCode,
+                        statusMessage: _verificationMessage,
+                        statusIsError: _verificationMessageIsError,
+                        isGenerating: _isGeneratingVerificationCode,
+                        isClearing: _isClearingVerificationRecords,
+                        activities: activityService.records.toList(
+                          growable: false,
+                        ),
+                        onGenerate: _generateVerificationCode,
+                        onClearRecords: _clearVerificationRecords,
                       ),
                     ),
                     _SectionCard(
@@ -2280,9 +2462,300 @@ class _RecentActivityPanel extends StatelessWidget {
         return Icons.cleaning_services_rounded;
       case AdminActivityType.encryptionBatch:
         return Icons.lock_rounded;
+      case AdminActivityType.verificationCodeGenerated:
+        return Icons.verified_user_rounded;
+      case AdminActivityType.verificationCodeRecordsCleared:
+        return Icons.playlist_remove_rounded;
       case AdminActivityType.loginRecordsCleared:
         return Icons.history_toggle_off_rounded;
     }
+  }
+}
+
+class _VerificationOperationsPanel extends StatelessWidget {
+  const _VerificationOperationsPanel({
+    required this.requestController,
+    required this.generatedVerificationCode,
+    required this.statusMessage,
+    required this.statusIsError,
+    required this.isGenerating,
+    required this.isClearing,
+    required this.activities,
+    required this.onGenerate,
+    required this.onClearRecords,
+  });
+
+  final TextEditingController requestController;
+  final String? generatedVerificationCode;
+  final String? statusMessage;
+  final bool statusIsError;
+  final bool isGenerating;
+  final bool isClearing;
+  final List<AdminActivityRecord> activities;
+  final Future<void> Function() onGenerate;
+  final Future<void> Function() onClearRecords;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final verificationActivities = activities
+        .where(
+          (record) => record.type == AdminActivityType.verificationCodeGenerated,
+        )
+        .toList(growable: false);
+    final dateBuckets = <String, int>{
+      'Today': 0,
+      'Yesterday': 0,
+      'Tomorrow': 0,
+      'Other dates': 0,
+    };
+    final featureCounts = <String, int>{};
+    final contentTypeCounts = <String, int>{};
+    for (final record in verificationActivities) {
+      final bucket = _relativeDayBucket(record.occurredAtUtc);
+      dateBuckets[bucket] = (dateBuckets[bucket] ?? 0) + 1;
+
+      final featureKey = record.metadata?['feature'] ?? 'unknown';
+      featureCounts[featureKey] = (featureCounts[featureKey] ?? 0) + 1;
+
+      final contentCategory = record.metadata?['contentCategory'] ?? 'unknown';
+      contentTypeCounts[contentCategory] =
+          (contentTypeCounts[contentCategory] ?? 0) + 1;
+    }
+
+    final sortedFeatureCounts = featureCounts.entries.toList(growable: false)
+      ..sort((left, right) => right.value.compareTo(left.value));
+    final sortedContentTypeCounts =
+        contentTypeCounts.entries.toList(growable: false)
+          ..sort((left, right) => right.value.compareTo(left.value));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: requestController,
+          decoration: const InputDecoration(
+            labelText: 'Client request code',
+            hintText: 'ERI-REQ1-...',
+            border: OutlineInputBorder(),
+          ),
+          minLines: 2,
+          maxLines: 4,
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            FilledButton.icon(
+              onPressed: isGenerating ? null : onGenerate,
+              icon: const Icon(Icons.key_rounded),
+              label: Text(
+                isGenerating ? 'Generating...' : 'Generate verification code',
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: isClearing ? null : onClearRecords,
+              icon: const Icon(Icons.restart_alt_rounded),
+              label: Text(isClearing ? 'Clearing...' : 'Clear records'),
+            ),
+          ],
+        ),
+        if (generatedVerificationCode != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Generated verification code',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                SelectableText(
+                  generatedVerificationCode!,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (statusMessage != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            statusMessage!,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: statusIsError ? scheme.error : scheme.primary,
+            ),
+          ),
+        ],
+        const SizedBox(height: 18),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _VerificationMetricBadge(
+              label: 'Generated',
+              value: '${verificationActivities.length}',
+            ),
+            _VerificationMetricBadge(
+              label: 'Today',
+              value: '${dateBuckets['Today'] ?? 0}',
+            ),
+            _VerificationMetricBadge(
+              label: 'Yesterday',
+              value: '${dateBuckets['Yesterday'] ?? 0}',
+            ),
+            _VerificationMetricBadge(
+              label: 'Tomorrow',
+              value: '${dateBuckets['Tomorrow'] ?? 0}',
+            ),
+            _VerificationMetricBadge(
+              label: 'Other dates',
+              value: '${dateBuckets['Other dates'] ?? 0}',
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'Feature distribution',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        if (sortedFeatureCounts.isEmpty)
+          Text(
+            'No verification codes have been generated yet.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else
+          Column(
+            children: [
+              for (final entry in sortedFeatureCounts) ...[
+                _VerificationCountRow(
+                  label: ContentVerificationService.featureLabel(entry.key),
+                  value: entry.value,
+                ),
+                const SizedBox(height: 8),
+              ],
+            ],
+          ),
+        const SizedBox(height: 12),
+        Text(
+          'Content type distribution',
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        if (sortedContentTypeCounts.isEmpty)
+          Text(
+            'No content-type breakdown is available yet.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else
+          Column(
+            children: [
+              for (final entry in sortedContentTypeCounts) ...[
+                _VerificationCountRow(
+                  label: _verificationContentLabel(entry.key),
+                  value: entry.value,
+                ),
+                const SizedBox(height: 8),
+              ],
+            ],
+          ),
+      ],
+    );
+  }
+
+  static String _relativeDayBucket(DateTime value) {
+    final localValue = value.toLocal();
+    final localDate = DateTime(localValue.year, localValue.month, localValue.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final difference = localDate.difference(today).inDays;
+    switch (difference) {
+      case -1:
+        return 'Yesterday';
+      case 0:
+        return 'Today';
+      case 1:
+        return 'Tomorrow';
+      default:
+        return 'Other dates';
+    }
+  }
+
+  static String _verificationContentLabel(String value) {
+    switch (value) {
+      case 'reels':
+        return 'Reels';
+      case 'videoHighlights':
+        return 'Video highlights';
+      case 'videoNews':
+        return 'Video news';
+      case 'videoUpdates':
+        return 'Video updates';
+      case 'newsImages':
+        return 'News images';
+      case 'mixed':
+        return 'Mixed pending content';
+      case 'none':
+        return 'No pending content';
+      default:
+        return value;
+    }
+  }
+}
+
+class _VerificationMetricBadge extends StatelessWidget {
+  const _VerificationMetricBadge({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 2),
+          Text(value, style: Theme.of(context).textTheme.titleSmall),
+        ],
+      ),
+    );
+  }
+}
+
+class _VerificationCountRow extends StatelessWidget {
+  const _VerificationCountRow({required this.label, required this.value});
+
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        ),
+        Text('$value', style: Theme.of(context).textTheme.titleSmall),
+      ],
+    );
   }
 }
 

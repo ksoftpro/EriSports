@@ -8,6 +8,7 @@ import 'package:eri_sports/features/media/data/daylysport_media_repository.dart'
 import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
 import 'package:eri_sports/features/news/data/offline_news_repository.dart';
 import 'package:eri_sports/features/news/presentation/offline_news_providers.dart';
+import 'package:eri_sports/features/verification/data/content_verification_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const _offlineContentScope = 'offline_content_v1';
@@ -353,6 +354,7 @@ class OfflineContentRefreshState {
     required this.seenItemIds,
     required this.hasVerificationBaseline,
     required this.verifiedItemIds,
+    required this.pendingVerificationCounts,
     this.deletionProgress,
     this.lastCompletedAtUtc,
     this.lastError,
@@ -365,6 +367,7 @@ class OfflineContentRefreshState {
       seenItemIds = const <String>{},
       hasVerificationBaseline = false,
       verifiedItemIds = const <String>{},
+      pendingVerificationCounts = const ContentVerificationPendingCounts.zero(),
       deletionProgress = null,
       lastCompletedAtUtc = null,
       lastError = null;
@@ -375,6 +378,7 @@ class OfflineContentRefreshState {
   final Set<String> seenItemIds;
   final bool hasVerificationBaseline;
   final Set<String> verifiedItemIds;
+  final ContentVerificationPendingCounts pendingVerificationCounts;
   final OfflineContentDeletionProgress? deletionProgress;
   final DateTime? lastCompletedAtUtc;
   final String? lastError;
@@ -386,6 +390,7 @@ class OfflineContentRefreshState {
     Set<String>? seenItemIds,
     bool? hasVerificationBaseline,
     Set<String>? verifiedItemIds,
+    ContentVerificationPendingCounts? pendingVerificationCounts,
     OfflineContentDeletionProgress? deletionProgress,
     DateTime? lastCompletedAtUtc,
     String? lastError,
@@ -400,6 +405,8 @@ class OfflineContentRefreshState {
       hasVerificationBaseline:
         hasVerificationBaseline ?? this.hasVerificationBaseline,
       verifiedItemIds: verifiedItemIds ?? this.verifiedItemIds,
+      pendingVerificationCounts:
+          pendingVerificationCounts ?? this.pendingVerificationCounts,
       deletionProgress:
           clearDeletionProgress
               ? null
@@ -434,6 +441,13 @@ final offlineActiveVerifiedItemIdsProvider = Provider<Set<String>?>((ref) {
   return state.hasVerificationBaseline ? state.verifiedItemIds : null;
 });
 
+final offlinePendingVerificationCountsProvider =
+    Provider<ContentVerificationPendingCounts>((ref) {
+      return ref
+          .watch(offlineContentRefreshControllerProvider)
+          .pendingVerificationCounts;
+    });
+
 final offlineContentDeletionProgressProvider =
     Provider<OfflineContentDeletionProgress?>((ref) {
       return ref
@@ -455,11 +469,17 @@ class OfflineContentRefreshController
       _loadNewsInventory(services),
       seenItemIds,
     );
+    final pendingVerificationCounts = _buildPendingVerificationCounts(
+      mediaRecords: _loadMediaInventory(services),
+      newsRecords: _loadNewsInventory(services),
+      verifiedItemIds: verificationRegistry.verifiedItemIds,
+    );
     return OfflineContentRefreshState.initial().copyWith(
       badges: existingBadges,
       seenItemIds: seenItemIds,
       hasVerificationBaseline: verificationRegistry.baselineInitialized,
       verifiedItemIds: verificationRegistry.verifiedItemIds,
+      pendingVerificationCounts: pendingVerificationCounts,
     );
   }
 
@@ -529,6 +549,38 @@ class OfflineContentRefreshController
     required bool verified,
   }) async {
     await _setItemVerified(offlineContentNewsItemId(item), verified: verified);
+  }
+
+  Future<ContentVerificationPendingCounts> approvePendingContent() async {
+    final services = ref.read(appServicesProvider);
+    final mediaRecords = _loadMediaInventory(services);
+    final newsRecords = _loadNewsInventory(services);
+    final registry = _loadVerificationRegistry(services);
+    final pendingVerificationCounts = _buildPendingVerificationCounts(
+      mediaRecords: mediaRecords,
+      newsRecords: newsRecords,
+      verifiedItemIds: registry.verifiedItemIds,
+    );
+
+    final allKnownIds = <String>{
+      ...mediaRecords.map((record) => record.id),
+      ...newsRecords.map((record) => record.id),
+    };
+    final nextRegistry = registry.copyWith(
+      baselineInitialized: true,
+      verifiedItemIds: <String>{...registry.verifiedItemIds, ...allKnownIds},
+    );
+    await _persistVerificationRegistry(services, nextRegistry);
+    state = state.copyWith(
+      hasVerificationBaseline: nextRegistry.baselineInitialized,
+      verifiedItemIds: nextRegistry.verifiedItemIds,
+      pendingVerificationCounts: _buildPendingVerificationCounts(
+        mediaRecords: mediaRecords,
+        newsRecords: newsRecords,
+        verifiedItemIds: nextRegistry.verifiedItemIds,
+      ),
+    );
+    return pendingVerificationCounts;
   }
 
   Future<OfflineContentDeleteResult> deleteItems({
@@ -650,6 +702,11 @@ class OfflineContentRefreshController
         hasVerificationBaseline:
           synced.verificationRegistry.baselineInitialized,
         verifiedItemIds: synced.verificationRegistry.verifiedItemIds,
+        pendingVerificationCounts: _buildPendingVerificationCounts(
+          mediaRecords: synced.mediaRecords,
+          newsRecords: synced.newsRecords,
+          verifiedItemIds: synced.verificationRegistry.verifiedItemIds,
+        ),
         lastCompletedAtUtc: DateTime.now().toUtc(),
         lastError:
             hasHardFailures
@@ -742,6 +799,11 @@ class OfflineContentRefreshController
         hasVerificationBaseline:
             synced.verificationRegistry.baselineInitialized,
         verifiedItemIds: synced.verificationRegistry.verifiedItemIds,
+        pendingVerificationCounts: _buildPendingVerificationCounts(
+          mediaRecords: synced.mediaRecords,
+          newsRecords: synced.newsRecords,
+          verifiedItemIds: synced.verificationRegistry.verifiedItemIds,
+        ),
         lastCompletedAtUtc: DateTime.now().toUtc(),
         clearError: true,
         clearDeletionProgress: true,
@@ -885,9 +947,60 @@ class OfflineContentRefreshController
       verifiedItemIds: verifiedItemIds,
     );
     await _persistVerificationRegistry(services, nextRegistry);
+    final mediaRecords = _loadMediaInventory(services);
+    final newsRecords = _loadNewsInventory(services);
     state = state.copyWith(
       hasVerificationBaseline: nextRegistry.baselineInitialized,
       verifiedItemIds: nextRegistry.verifiedItemIds,
+      pendingVerificationCounts: _buildPendingVerificationCounts(
+        mediaRecords: mediaRecords,
+        newsRecords: newsRecords,
+        verifiedItemIds: nextRegistry.verifiedItemIds,
+      ),
+    );
+  }
+
+  ContentVerificationPendingCounts _buildPendingVerificationCounts({
+    required List<OfflineContentItemRecord> mediaRecords,
+    required List<OfflineContentItemRecord> newsRecords,
+    required Set<String> verifiedItemIds,
+  }) {
+    var reels = 0;
+    var videoHighlights = 0;
+    var videoNews = 0;
+    var videoUpdates = 0;
+    var newsImages = 0;
+
+    for (final record in mediaRecords) {
+      if (verifiedItemIds.contains(record.id)) {
+        continue;
+      }
+      switch (record.kind) {
+        case OfflineContentKind.reel:
+          reels += 1;
+        case OfflineContentKind.videoHighlights:
+          videoHighlights += 1;
+        case OfflineContentKind.videoNews:
+          videoNews += 1;
+        case OfflineContentKind.videoUpdates:
+          videoUpdates += 1;
+        case OfflineContentKind.newsImage:
+          break;
+      }
+    }
+
+    for (final record in newsRecords) {
+      if (!verifiedItemIds.contains(record.id)) {
+        newsImages += 1;
+      }
+    }
+
+    return ContentVerificationPendingCounts(
+      reels: reels,
+      videoHighlights: videoHighlights,
+      videoNews: videoNews,
+      videoUpdates: videoUpdates,
+      newsImages: newsImages,
     );
   }
 

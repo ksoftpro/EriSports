@@ -11,6 +11,8 @@ enum AdminActivityType {
   warmCaches,
   clearCaches,
   encryptionBatch,
+  verificationCodeGenerated,
+  verificationCodeRecordsCleared,
   loginRecordsCleared,
 }
 

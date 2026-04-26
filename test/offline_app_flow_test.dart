@@ -29,6 +29,7 @@ import 'package:eri_sports/features/admin/data/admin_auth_service.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/media/data/video_resume_service.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
+import 'package:eri_sports/features/verification/data/content_verification_service.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -95,7 +96,7 @@ void main() {
     await _pumpForStability(tester);
   });
 
-  testWidgets('settings theme controls and secure content tools work', (
+  testWidgets('settings theme controls and pending verification flow work', (
     tester,
   ) async {
     final harness = await _WidgetHarness.create(tester);
@@ -105,7 +106,7 @@ void main() {
     await _pumpUntilVisible(tester, find.text('Appearance'));
 
     expect(find.text('Settings'), findsOneWidget);
-    expect(find.text('Offline Content Security'), findsOneWidget);
+    expect(find.text('Pending Content Verification'), findsOneWidget);
 
     await tester.tap(find.text('Dark').first.hitTestable());
     await _pumpForStability(tester);
@@ -116,25 +117,41 @@ void main() {
       ThemeMode.dark,
     );
 
-    await tester.tap(find.text('Open secure content').first.hitTestable());
-    await _pumpUntilVisible(tester, find.text('Encrypted offline runtime'));
-    await _pumpUntilVisible(tester, find.text('Inventory overview'));
+    final verificationService = ContentVerificationService(
+      cacheStore: DaylySportCacheStore(sharedPreferences: harness.preferences),
+    );
+    for (var attempt = 0; attempt < 10; attempt += 1) {
+      if (verificationService.readClientState().lastRequestCode != null) {
+        break;
+      }
+      await tester.pump(const Duration(milliseconds: 120));
+    }
 
-    expect(find.text('Warm secure caches'), findsOneWidget);
-    expect(find.text('Clear decrypted caches'), findsOneWidget);
+    final requestCode = verificationService.readClientState().lastRequestCode;
+    expect(requestCode, isNotNull);
+    expect(requestCode, startsWith('ERI-REQ1-'));
 
-    await tester.tap(find.text('Warm secure caches').first.hitTestable());
+    final verificationCode = verificationService.generateVerificationCode(
+      requestCode!,
+    );
+    final verificationField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.decoration?.labelText == 'Admin verification code',
+    );
+    expect(verificationField, findsOneWidget);
+
+    await tester.enterText(verificationField, verificationCode);
+    await tester.tap(find.text('Verify pending content').first.hitTestable());
     await _pumpUntilVisible(
       tester,
-      find.text('Secure runtime caches are ready for JSON, images, and video.'),
+      find.textContaining('unlocked offline content'),
     );
 
-    await tester.tap(find.text('Clear decrypted caches').first.hitTestable());
-    await _pumpUntilVisible(
-      tester,
-      find.text(
-        'Decrypted cache files were removed. Encrypted source files were not changed.',
-      ),
+    expect(verificationService.readClientState().lastVerifiedAtUtc, isNotNull);
+    expect(
+      verificationService.readClientState().lastVerifiedRequestCode,
+      isNotNull,
     );
   });
 

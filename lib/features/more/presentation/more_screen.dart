@@ -6,9 +6,12 @@ import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/data/assets/local_asset_resolver.dart';
 import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
+import 'package:eri_sports/features/verification/data/content_verification_service.dart';
+import 'package:eri_sports/features/verification/data/device_verification_identity.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -23,8 +26,187 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
   bool _isDiagnosingAssets = false;
   bool _isPickingJsonFolder = false;
   bool _isRunningOfflineAction = false;
+  bool _isGeneratingVerificationRequest = false;
+  bool _isApplyingVerificationCode = false;
   String? _folderSelectionMessage;
   AssetDiagnosticsReport? _assetDiagnostics;
+  String? _requestCode;
+  String? _verificationStatusMessage;
+  bool _verificationStatusIsError = false;
+  final TextEditingController _verificationCodeController =
+      TextEditingController();
+  ClientVerificationState _clientVerificationState =
+      const ClientVerificationState();
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(_initializeVerificationSection);
+  }
+
+  @override
+  void dispose() {
+    _verificationCodeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initializeVerificationSection() async {
+    final service = ref.read(contentVerificationServiceProvider);
+    if (mounted) {
+      setState(() {
+        _clientVerificationState = service.readClientState();
+        _requestCode = _clientVerificationState.lastRequestCode;
+      });
+    }
+    await _generateVerificationRequest(showStatus: false);
+  }
+
+  Future<void> _generateVerificationRequest({bool showStatus = true}) async {
+    if (_isGeneratingVerificationRequest) {
+      return;
+    }
+
+    setState(() {
+      _isGeneratingVerificationRequest = true;
+      if (showStatus) {
+        _verificationStatusMessage = null;
+        _verificationStatusIsError = false;
+      }
+    });
+
+    try {
+      final identity = await ref
+          .read(deviceVerificationIdentityServiceProvider)
+          .resolveIdentity();
+      final pendingCounts = ref.read(offlinePendingVerificationCountsProvider);
+      final service = ref.read(contentVerificationServiceProvider);
+      final request = service.generateClientRequest(
+        identity: identity,
+        pendingCounts: pendingCounts,
+      );
+      await service.saveGeneratedRequest(request);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _requestCode = request.requestCode;
+        _clientVerificationState = service.readClientState();
+        if (showStatus) {
+          _verificationStatusMessage =
+              pendingCounts.hasPending
+                  ? 'Generated a device request code for ${pendingCounts.totalPending} pending item${pendingCounts.totalPending == 1 ? '' : 's'}.'
+                  : 'Generated a device request code. There is no pending content right now.';
+        }
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _verificationStatusMessage = 'Unable to generate request code: $error';
+        _verificationStatusIsError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGeneratingVerificationRequest = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _copyRequestCode() async {
+    final requestCode = _requestCode;
+    if (requestCode == null || requestCode.isEmpty) {
+      return;
+    }
+
+    await Clipboard.setData(ClipboardData(text: requestCode));
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _verificationStatusMessage = 'Request code copied to the clipboard.';
+      _verificationStatusIsError = false;
+    });
+  }
+
+  Future<void> _applyVerificationCode() async {
+    if (_isApplyingVerificationCode) {
+      return;
+    }
+
+    final requestCode = _requestCode;
+    final verificationCode = _verificationCodeController.text.trim();
+    if (requestCode == null || requestCode.isEmpty) {
+      setState(() {
+        _verificationStatusMessage = 'Generate a request code before verifying.';
+        _verificationStatusIsError = true;
+      });
+      return;
+    }
+    if (verificationCode.isEmpty) {
+      setState(() {
+        _verificationStatusMessage = 'Enter the verification code from the admin app.';
+        _verificationStatusIsError = true;
+      });
+      return;
+    }
+
+    setState(() {
+      _isApplyingVerificationCode = true;
+      _verificationStatusMessage = null;
+      _verificationStatusIsError = false;
+    });
+
+    try {
+      final service = ref.read(contentVerificationServiceProvider);
+      if (
+        !service.isVerificationCodeValid(
+          requestCode: requestCode,
+          verificationCode: verificationCode,
+        )
+      ) {
+        throw const FormatException('The verification code is invalid.');
+      }
+      final request = service.parseClientRequest(requestCode);
+      final approvedCounts =
+          await ref
+              .read(offlineContentRefreshControllerProvider.notifier)
+              .approvePendingContent();
+      await service.markClientVerified(
+        request: request,
+        verificationCode: verificationCode,
+      );
+      if (!mounted) {
+        return;
+      }
+      _verificationCodeController.clear();
+      setState(() {
+        _clientVerificationState = service.readClientState();
+        _verificationStatusMessage =
+            approvedCounts.hasPending
+                ? 'Verified ${approvedCounts.totalPending} pending item${approvedCounts.totalPending == 1 ? '' : 's'} and unlocked offline content.'
+                : 'Verification accepted. No pending content needed approval.';
+        _verificationStatusIsError = false;
+      });
+      await _generateVerificationRequest(showStatus: false);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _verificationStatusMessage = '$error';
+        _verificationStatusIsError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isApplyingVerificationCode = false;
+        });
+      }
+    }
+  }
 
   Future<void> _pickJsonDirectory() async {
     if (_isPickingJsonFolder) {
@@ -301,6 +483,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     );
     final themeMode = ref.watch(themeModeProvider);
     final syncState = ref.watch(daylysportSyncControllerProvider);
+    final pendingVerificationCounts = ref.watch(
+      offlinePendingVerificationCountsProvider,
+    );
     final services = ref.read(appServicesProvider);
     final selectedJsonFolder =
         services.daylySportLocator.readCustomDirectoryPath();
@@ -464,6 +649,156 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
             ),
             const SizedBox(height: 12),
             _SectionCard(
+              icon: Icons.verified_user_outlined,
+              title: 'Pending Content Verification',
+              subtitle:
+                  'Generate a device request code, send it to the admin app, and apply the returned verification code to unlock pending offline content.',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _StatusBadge(
+                        label: 'Pending items',
+                        value: '${pendingVerificationCounts.totalPending}',
+                      ),
+                      _StatusBadge(
+                        label: 'Reels',
+                        value: '${pendingVerificationCounts.reels}',
+                      ),
+                      _StatusBadge(
+                        label: 'Videos',
+                        value:
+                            '${pendingVerificationCounts.videoHighlights + pendingVerificationCounts.videoNews + pendingVerificationCounts.videoUpdates}',
+                      ),
+                      _StatusBadge(
+                        label: 'News images',
+                        value: '${pendingVerificationCounts.newsImages}',
+                      ),
+                      _StatusBadge(
+                        label: 'Device seed',
+                        value: _verificationSeedLabel(
+                          _clientVerificationState.lastSeedSource,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    pendingVerificationCounts.hasPending
+                        ? 'Pending content remains blocked until the admin-generated verification code is applied on this device.'
+                        : 'No pending content is currently waiting for approval, but you can still refresh the request code for this device.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: scheme.outlineVariant),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Device request code',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        SelectableText(
+                          _requestCode ?? 'Generate a request code to begin verification.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            FilledButton.icon(
+                              onPressed:
+                                  _isGeneratingVerificationRequest
+                                      ? null
+                                      : _generateVerificationRequest,
+                              icon: const Icon(Icons.qr_code_rounded),
+                              label: Text(
+                                _isGeneratingVerificationRequest
+                                    ? 'Generating...'
+                                    : 'Generate request code',
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed:
+                                  _requestCode == null ||
+                                          _requestCode!.isEmpty ||
+                                          _isGeneratingVerificationRequest
+                                      ? null
+                                      : _copyRequestCode,
+                              icon: const Icon(Icons.copy_rounded),
+                              label: const Text('Copy request code'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _verificationCodeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Admin verification code',
+                      hintText: 'ERI-VER1-XXXX-XXXX-XXXX-XXXX-XXXX',
+                      border: OutlineInputBorder(),
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                    autofillHints: const <String>[AutofillHints.oneTimeCode],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      FilledButton.icon(
+                        onPressed:
+                            _isApplyingVerificationCode
+                                ? null
+                                : _applyVerificationCode,
+                        icon: const Icon(Icons.verified_rounded),
+                        label: Text(
+                          _isApplyingVerificationCode
+                              ? 'Verifying...'
+                              : 'Verify pending content',
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_verificationStatusMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _verificationStatusMessage!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color:
+                            _verificationStatusIsError
+                                ? scheme.error
+                                : scheme.primary,
+                      ),
+                    ),
+                  ],
+                  if (_clientVerificationState.lastVerifiedAtUtc != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Last verified: ${DateFormat('MMM d, yyyy HH:mm').format(_clientVerificationState.lastVerifiedAtUtc!.toLocal())}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _SectionCard(
               icon: Icons.folder_open_rounded,
               title: 'JSON Data Directory',
               subtitle:
@@ -618,6 +953,20 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
         return 'Light';
       case Brightness.dark:
         return 'Dark';
+    }
+  }
+
+  String _verificationSeedLabel(VerificationSeedSource? source) {
+    switch (source) {
+      case VerificationSeedSource.macAddress:
+        return 'MAC address';
+      case VerificationSeedSource.androidIdFallback:
+        return 'Android ID fallback';
+      case VerificationSeedSource.hostnameFallback:
+        return 'Hostname fallback';
+      case VerificationSeedSource.unknown:
+      case null:
+        return 'Pending';
     }
   }
 }
