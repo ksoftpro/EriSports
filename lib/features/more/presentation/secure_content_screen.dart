@@ -11,6 +11,7 @@ import 'package:eri_sports/data/secure_content/secure_content_encryption_job_man
 import 'package:eri_sports/features/admin/data/admin_models.dart';
 import 'package:eri_sports/features/admin/data/admin_providers.dart';
 import 'package:eri_sports/features/verification/data/content_verification_service.dart';
+import 'package:eri_sports/features/verification/presentation/admin_verification_qr_screen.dart';
 import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -18,7 +19,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
-import 'package:qr_flutter/qr_flutter.dart';
 
 const adminDashboardOverviewKey = Key('adminDashboardOverview');
 const adminDashboardUserActivityKey = Key('adminDashboardUserActivity');
@@ -1022,6 +1022,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
             'Verification QR generated for ${ContentVerificationService.featureLabel(request.feature)}.';
         _verificationMessageIsError = false;
       });
+      await _openVerificationQrScreen(verificationQr);
     } catch (error) {
       if (!mounted) {
         return;
@@ -1038,6 +1039,14 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         });
       }
     }
+  }
+
+  Future<void> _openVerificationQrScreen(VerificationQrPayload payload) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AdminVerificationQrScreen(payload: payload),
+      ),
+    );
   }
 
   Future<void> _clearVerificationRecords() async {
@@ -2692,39 +2701,34 @@ class _VerificationOperationsPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Generated admin QR approval',
+                  'Last generated admin approval',
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 const SizedBox(height: 8),
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: QrImageView(
-                      data: generatedVerificationQr!.qrPayload,
-                      version: QrVersions.auto,
-                      size: 220,
-                      backgroundColor: Colors.white,
-                    ),
-                  ),
+                Text(
+                  'A full-screen QR is shown immediately after generation so the client app can scan it from Settings.',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  'Client fallback verification code',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 8),
                 SelectableText(
                   generatedVerificationQr!.verificationCode,
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Issued ${DateFormat('MMM d, yyyy HH:mm').format(generatedVerificationQr!.issuedAtUtc.toLocal())}',
-                  style: Theme.of(context).textTheme.bodySmall,
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => onGenerate(),
+                      icon: const Icon(Icons.open_in_full_rounded),
+                      label: const Text('Regenerate and open QR'),
+                    ),
+                    Text(
+                      'Issued ${DateFormat('MMM d, yyyy HH:mm').format(generatedVerificationQr!.issuedAtUtc.toLocal())}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
               ],
             ),
