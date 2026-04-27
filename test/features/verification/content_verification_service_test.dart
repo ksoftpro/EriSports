@@ -1,8 +1,9 @@
+import 'dart:convert';
+
 import 'package:eri_sports/data/local_files/daylysport_cache_store.dart';
 import 'package:eri_sports/features/verification/data/content_verification_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -94,80 +95,28 @@ void main() {
     expect(state.lastVerifiedAtUtc, DateTime.utc(2025, 2, 2, 9, 30));
   });
 
-  test('verification QR payload round-trips and validates', () {
-    final request = service.generateClientRequest(
-      identity: const DeviceVerificationIdentity(
-        seed: 'scanner-device',
-        source: VerificationSeedSource.macAddress,
-      ),
-      pendingCounts: const ContentVerificationPendingCounts(
-        reels: 1,
-        videoHighlights: 2,
-        videoNews: 1,
-        videoUpdates: 0,
-        newsImages: 0,
-      ),
-      now: DateTime.utc(2025, 3, 8, 11, 45),
-    );
-
+  test('direct admin QR payload round-trips and validates', () {
     final generatedQr = service.generateVerificationQrPayload(
-      request.requestCode,
       now: DateTime.utc(2025, 3, 8, 11, 50),
     );
     final parsedQr = service.parseVerificationQrPayload(generatedQr.qrPayload);
     final validatedQr = service.validateVerificationQrPayload(
       qrPayload: generatedQr.qrPayload,
-      expectedRequestCode: request.requestCode,
+      now: DateTime.utc(2025, 3, 8, 11, 55),
     );
 
     expect(generatedQr.qrPayload, startsWith('ERI-QR1-'));
-    expect(parsedQr.request.requestCode, request.requestCode);
+    expect(parsedQr.feature, 'offline_content');
     expect(parsedQr.verificationCode, generatedQr.verificationCode);
-    expect(validatedQr.request.pendingCounts.totalPending, 4);
-    expect(
-      service.isVerificationCodeValid(
-        requestCode: validatedQr.request.requestCode,
-        verificationCode: validatedQr.verificationCode,
-      ),
-      isTrue,
-    );
+    expect(validatedQr.expiresAtUtc, generatedQr.expiresAtUtc);
   });
 
-  test('verification QR payload rejects tampering and stale requests', () {
-    final staleRequest = service.generateClientRequest(
-      identity: const DeviceVerificationIdentity(
-        seed: 'scanner-device',
-        source: VerificationSeedSource.macAddress,
-      ),
-      pendingCounts: const ContentVerificationPendingCounts(
-        reels: 1,
-        videoHighlights: 0,
-        videoNews: 0,
-        videoUpdates: 0,
-        newsImages: 0,
-      ),
-      now: DateTime.utc(2025, 3, 8, 10),
-    );
-    final currentRequest = service.generateClientRequest(
-      identity: const DeviceVerificationIdentity(
-        seed: 'scanner-device',
-        source: VerificationSeedSource.macAddress,
-      ),
-      pendingCounts: const ContentVerificationPendingCounts(
-        reels: 2,
-        videoHighlights: 1,
-        videoNews: 0,
-        videoUpdates: 0,
-        newsImages: 1,
-      ),
-      now: DateTime.utc(2025, 3, 8, 12),
-    );
-    final staleQr = service.generateVerificationQrPayload(
-      staleRequest.requestCode,
+  test('direct admin QR payload rejects tampering and expired approvals', () {
+    final generatedQr = service.generateVerificationQrPayload(
       now: DateTime.utc(2025, 3, 8, 12, 5),
     );
 
-    final encodedPayload = staleQr.qrPayload.substring('ERI-QR1-'.length);
+    final encodedPayload = generatedQr.qrPayload.substring('ERI-QR1-'.length);
     final decodedPayload =
         jsonDecode(
               utf8.decode(
@@ -191,16 +140,37 @@ void main() {
     );
     expect(
       () => service.validateVerificationQrPayload(
-        qrPayload: staleQr.qrPayload,
-        expectedRequestCode: currentRequest.requestCode,
+        qrPayload: generatedQr.qrPayload,
+        now: generatedQr.expiresAtUtc.add(const Duration(seconds: 1)),
       ),
       throwsA(
         isA<FormatException>().having(
           (error) => '${error.message}',
           'message',
-          contains('has expired'),
+          contains('expired'),
         ),
       ),
     );
+  });
+
+  test('client verification record can be created locally after scan', () {
+    final request = service.createClientVerificationRecord(
+      identity: const DeviceVerificationIdentity(
+        seed: 'scanner-device',
+        source: VerificationSeedSource.macAddress,
+      ),
+      pendingCounts: const ContentVerificationPendingCounts(
+        reels: 1,
+        videoHighlights: 1,
+        videoNews: 0,
+        videoUpdates: 0,
+        newsImages: 1,
+      ),
+      now: DateTime.utc(2025, 3, 8, 12),
+    );
+
+    expect(request.feature, 'offline_content');
+    expect(request.pendingCounts.totalPending, 3);
+    expect(request.requestCode, startsWith('ERI-REQ1-'));
   });
 }

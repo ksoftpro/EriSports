@@ -13,6 +13,7 @@ const _verificationCodePrefix = 'ERI-VER1-';
 const _verificationQrPrefix = 'ERI-QR1-';
 const _verificationFeatureOfflineContent = 'offline_content';
 const _verificationPepper = 'eri_sports_offline_verification_v1';
+const _defaultVerificationApprovalTtl = Duration(minutes: 10);
 
 enum VerificationSeedSource {
   macAddress,
@@ -127,15 +128,17 @@ class ClientVerificationRequest {
 class VerificationQrPayload {
   const VerificationQrPayload({
     required this.qrPayload,
-    required this.request,
+    required this.feature,
     required this.verificationCode,
     required this.issuedAtUtc,
+    required this.expiresAtUtc,
   });
 
   final String qrPayload;
-  final ClientVerificationRequest request;
+  final String feature;
   final String verificationCode;
   final DateTime issuedAtUtc;
+  final DateTime expiresAtUtc;
 }
 
 class ClientVerificationState {
@@ -358,34 +361,60 @@ class ContentVerificationService {
     return '$_verificationCodePrefix${segments.join('-')}';
   }
 
-  VerificationQrPayload generateVerificationQrPayload(
-    String requestCode, {
-    DateTime? now,
+  String generateAdminVerificationCode({
+    String feature = _verificationFeatureOfflineContent,
+    DateTime? issuedAtUtc,
+    DateTime? expiresAtUtc,
   }) {
-    final request = parseClientRequest(requestCode);
-    final verificationCode = generateVerificationCode(requestCode);
+    final normalizedIssuedAtUtc = (issuedAtUtc ?? DateTime.now()).toUtc();
+    final normalizedExpiresAtUtc =
+        (expiresAtUtc ??
+                normalizedIssuedAtUtc.add(_defaultVerificationApprovalTtl))
+            .toUtc();
+    final rawCode =
+        _digest(
+          'admin-verification|$_verificationPepper|$feature|${normalizedIssuedAtUtc.toIso8601String()}|${normalizedExpiresAtUtc.toIso8601String()}',
+          length: 20,
+        ).toUpperCase();
+    final segments = <String>[];
+    for (var index = 0; index < rawCode.length; index += 4) {
+      final end = (index + 4).clamp(0, rawCode.length);
+      segments.add(rawCode.substring(index, end));
+    }
+    return '$_verificationCodePrefix${segments.join('-')}';
+  }
+
+  VerificationQrPayload generateVerificationQrPayload({
+    String feature = _verificationFeatureOfflineContent,
+    DateTime? now,
+    Duration ttl = _defaultVerificationApprovalTtl,
+  }) {
     final issuedAtUtc = (now ?? DateTime.now()).toUtc();
+    final expiresAtUtc = issuedAtUtc.add(ttl).toUtc();
+    final verificationCode = generateAdminVerificationCode(
+      feature: feature,
+      issuedAtUtc: issuedAtUtc,
+      expiresAtUtc: expiresAtUtc,
+    );
     final payload = <String, dynamic>{
       'v': 1,
-      'feature': request.feature,
-      'requestCode': request.requestCode,
+      'feature': feature,
       'verificationCode': verificationCode,
-      'requestDayKey': request.requestDayKey,
-      'generatedAtUtc': request.generatedAtUtc.toIso8601String(),
       'issuedAtUtc': issuedAtUtc.toIso8601String(),
-      'counts': request.pendingCounts.toJson(),
+      'expiresAtUtc': expiresAtUtc.toIso8601String(),
     };
     payload['checksum'] = _digest(
-      'qr|$_verificationPepper|${request.requestCode}|${_normalizeVerificationCode(verificationCode)}|${request.feature}|${request.requestDayKey}|${request.pendingCounts.signature}|${issuedAtUtc.toIso8601String()}',
+      'qr|$_verificationPepper|$feature|${_normalizeVerificationCode(verificationCode)}|${issuedAtUtc.toIso8601String()}|${expiresAtUtc.toIso8601String()}',
       length: 20,
     );
 
     return VerificationQrPayload(
       qrPayload:
           '$_verificationQrPrefix${base64Url.encode(utf8.encode(jsonEncode(payload)))}',
-      request: request,
+      feature: feature,
       verificationCode: verificationCode,
       issuedAtUtc: issuedAtUtc,
+      expiresAtUtc: expiresAtUtc,
     );
   }
 
@@ -407,83 +436,79 @@ class ContentVerificationService {
     final normalizedPayload = payload.map(
       (key, value) => MapEntry('$key', value),
     );
-    final requestCode = normalizedPayload['requestCode'] as String?;
     final verificationCode = normalizedPayload['verificationCode'] as String?;
     final feature = normalizedPayload['feature'] as String?;
-    final requestDayKey = normalizedPayload['requestDayKey'] as String?;
     final checksum = normalizedPayload['checksum'] as String?;
-    final generatedAtUtc = _tryParseDateTime(
-      normalizedPayload['generatedAtUtc'],
-    );
     final issuedAtUtc = _tryParseDateTime(normalizedPayload['issuedAtUtc']);
-    if (requestCode == null ||
-        verificationCode == null ||
+    final expiresAtUtc = _tryParseDateTime(
+      normalizedPayload['expiresAtUtc'],
+    );
+    if (verificationCode == null ||
         feature == null ||
-        requestDayKey == null ||
         checksum == null ||
-        generatedAtUtc == null ||
-        issuedAtUtc == null) {
+        issuedAtUtc == null ||
+        expiresAtUtc == null) {
       throw const FormatException('QR payload is incomplete.');
     }
 
-    final pendingCounts = ContentVerificationPendingCounts.fromJson(
-      normalizedPayload['counts'] as Map<String, dynamic>?,
-    );
     final expectedChecksum = _digest(
-      'qr|$_verificationPepper|$requestCode|${_normalizeVerificationCode(verificationCode)}|$feature|$requestDayKey|${pendingCounts.signature}|${issuedAtUtc.toIso8601String()}',
+      'qr|$_verificationPepper|$feature|${_normalizeVerificationCode(verificationCode)}|${issuedAtUtc.toIso8601String()}|${expiresAtUtc.toIso8601String()}',
       length: 20,
     );
     if (checksum != expectedChecksum) {
       throw const FormatException('QR payload checksum is invalid.');
     }
 
-    final request = parseClientRequest(requestCode);
-    if (request.feature != feature ||
-        request.requestDayKey != requestDayKey ||
-        request.generatedAtUtc != generatedAtUtc ||
-        request.pendingCounts.signature != pendingCounts.signature) {
-      throw const FormatException('QR payload does not match the request.');
-    }
-    if (!isVerificationCodeValid(
-      requestCode: request.requestCode,
-      verificationCode: verificationCode,
-    )) {
+    final expectedCode = generateAdminVerificationCode(
+      feature: feature,
+      issuedAtUtc: issuedAtUtc,
+      expiresAtUtc: expiresAtUtc,
+    );
+    if (_normalizeVerificationCode(verificationCode) !=
+        _normalizeVerificationCode(expectedCode)) {
       throw const FormatException('QR payload verification code is invalid.');
     }
 
     return VerificationQrPayload(
       qrPayload: normalized,
-      request: request,
+      feature: feature,
       verificationCode: verificationCode,
       issuedAtUtc: issuedAtUtc,
+      expiresAtUtc: expiresAtUtc,
     );
   }
 
   VerificationQrPayload validateVerificationQrPayload({
     required String qrPayload,
-    required String expectedRequestCode,
+    String expectedFeature = _verificationFeatureOfflineContent,
+    DateTime? now,
   }) {
-    final normalizedExpectedRequestCode = expectedRequestCode.trim();
-    if (normalizedExpectedRequestCode.isEmpty) {
+    final parsed = parseVerificationQrPayload(qrPayload);
+    if (parsed.feature != expectedFeature) {
       throw const FormatException(
-        'Generate a device request code before scanning an admin QR code.',
+        'This admin QR code does not match the current verification flow.',
       );
     }
-
-    final parsed = parseVerificationQrPayload(qrPayload);
-    if (parsed.request.requestCode != normalizedExpectedRequestCode) {
-      final expectedRequest = parseClientRequest(normalizedExpectedRequestCode);
-      final issuedForOlderRequest = parsed.request.generatedAtUtc.isBefore(
-        expectedRequest.generatedAtUtc,
-      );
-      throw FormatException(
-        issuedForOlderRequest
-            ? 'This admin QR code was issued for an older device request and has expired.'
-            : 'This admin QR code does not match the current device request.',
+    final comparisonTime = (now ?? DateTime.now()).toUtc();
+    if (comparisonTime.isAfter(parsed.expiresAtUtc)) {
+      throw const FormatException(
+        'This admin QR code has expired.',
       );
     }
 
     return parsed;
+  }
+
+  ClientVerificationRequest createClientVerificationRecord({
+    required DeviceVerificationIdentity identity,
+    required ContentVerificationPendingCounts pendingCounts,
+    DateTime? now,
+  }) {
+    return generateClientRequest(
+      identity: identity,
+      pendingCounts: pendingCounts,
+      now: now,
+    );
   }
 
   bool isVerificationCodeValid({

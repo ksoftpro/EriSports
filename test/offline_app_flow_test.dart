@@ -121,39 +121,11 @@ void main() {
     final verificationService = ContentVerificationService(
       cacheStore: DaylySportCacheStore(sharedPreferences: harness.preferences),
     );
-    for (var attempt = 0; attempt < 10; attempt += 1) {
-      if (verificationService.readClientState().lastRequestCode != null) {
-        break;
-      }
-      await tester.pump(const Duration(milliseconds: 120));
-    }
-
-    final requestCode = verificationService.readClientState().lastRequestCode;
-    expect(requestCode, isNotNull);
-    expect(requestCode, startsWith('ERI-REQ1-'));
-
-    final verificationCode = verificationService.generateVerificationCode(
-      requestCode!,
-    );
-    final verificationField = find.byWidgetPredicate(
-      (widget) =>
-          widget is TextField &&
-          widget.decoration?.labelText == 'Admin verification code',
-    );
-    expect(verificationField, findsOneWidget);
-
-    await tester.enterText(verificationField, verificationCode);
-    await tester.tap(find.text('Verify pending content').first.hitTestable());
-    await _pumpUntilVisible(
-      tester,
-      find.textContaining('unlocked offline content'),
-    );
-
-    expect(verificationService.readClientState().lastVerifiedAtUtc, isNotNull);
-    expect(
-      verificationService.readClientState().lastVerifiedRequestCode,
-      isNotNull,
-    );
+    expect(find.text('Device request code'), findsNothing);
+    expect(find.text('Generate request code'), findsNothing);
+    expect(find.text('Admin verification code'), findsNothing);
+    expect(find.text('Verify pending content'), findsNothing);
+    expect(verificationService.readClientState().lastVerifiedAtUtc, isNull);
   });
 
   testWidgets('home date strip centers active day on load and date changes', (
