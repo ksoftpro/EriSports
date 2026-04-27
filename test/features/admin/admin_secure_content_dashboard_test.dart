@@ -27,6 +27,7 @@ import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/more/presentation/secure_content_screen.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
+import 'package:eri_sports/features/verification/data/content_verification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -42,6 +43,66 @@ const MethodChannel _pathProviderChannel = MethodChannel(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
+  test('admin verification records are generated and can be cleared', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final cacheStore = DaylySportCacheStore(sharedPreferences: preferences);
+    final activityService = AdminActivityService(cacheStore: cacheStore);
+    final verificationService = ContentVerificationService(
+      cacheStore: cacheStore,
+    );
+
+    final verificationQr = verificationService.generateVerificationQrPayload(
+      now: DateTime.utc(2025, 1, 14, 10),
+    );
+
+    await activityService.record(
+      AdminActivityRecord(
+        id: adminGenerateId(prefix: 'activity'),
+        type: AdminActivityType.verificationCodeGenerated,
+        occurredAtUtc: DateTime.utc(2025, 1, 14, 10, 5),
+        summary: 'Generated offline content direct verification QR approval.',
+        category: 'verification',
+        actorUserId: 'admin-1',
+        actorUsername: 'opslead',
+        metadata: <String, String>{
+          'feature': verificationQr.feature,
+          'contentCategory': verificationQr.feature,
+          'verificationMode': 'direct_qr',
+          'verificationCode': verificationQr.verificationCode,
+        },
+      ),
+    );
+
+    expect(
+      activityService.records.single.type,
+      AdminActivityType.verificationCodeGenerated,
+    );
+    expect(
+      activityService.records.single.metadata?['verificationMode'],
+      'direct_qr',
+    );
+
+    await activityService.clearVerificationCodeRecords(
+      actorUserId: 'admin-1',
+      actorUsername: 'opslead',
+    );
+
+    expect(
+      activityService.records.any(
+        (record) => record.type == AdminActivityType.verificationCodeGenerated,
+      ),
+      isFalse,
+    );
+    expect(
+      activityService.records.any(
+        (record) =>
+            record.type == AdminActivityType.verificationCodeRecordsCleared,
+      ),
+      isTrue,
+    );
+  });
 
   testWidgets('admin dashboard stays protected while unauthenticated', (
     tester,

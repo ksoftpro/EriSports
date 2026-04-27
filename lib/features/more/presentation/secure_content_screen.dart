@@ -10,6 +10,8 @@ import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:eri_sports/data/secure_content/secure_content_encryption_job_manager.dart';
 import 'package:eri_sports/features/admin/data/admin_models.dart';
 import 'package:eri_sports/features/admin/data/admin_providers.dart';
+import 'package:eri_sports/features/verification/data/content_verification_service.dart';
+import 'package:eri_sports/features/verification/presentation/admin_verification_qr_screen.dart';
 import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -172,8 +174,12 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
   bool _isPickingSources = false;
   bool _isEncrypting = false;
   bool _requestedInitialInventoryLoad = false;
+  bool _isGeneratingVerificationCode = false;
+  bool _isClearingVerificationRecords = false;
   bool _overwriteExisting = true;
   String? _selectedSourceRoot;
+  String? _verificationMessage;
+  bool _verificationMessageIsError = false;
   String _coverageQuery = '';
   String _coverageStatusFilter = 'all';
   SecureContentKind? _coverageKindFilter;
@@ -190,8 +196,9 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
   final TextEditingController _imageDestinationController =
       TextEditingController(text: 'news');
     final TextEditingController _videoDestinationController =
-      TextEditingController();
+      TextEditingController(text: 'reels');
   final List<_PendingSecureSource> _selectedSources = <_PendingSecureSource>[];
+    VerificationQrPayload? _generatedVerificationQr;
 
   @override
   void initState() {
@@ -1100,6 +1107,146 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     _showStatus('Login records cleared.');
   }
 
+  Future<void> _generateVerificationQr() async {
+    if (_isGeneratingVerificationCode) {
+      return;
+    }
+
+    setState(() {
+      _isGeneratingVerificationCode = true;
+      _verificationMessage = null;
+      _verificationMessageIsError = false;
+    });
+
+    try {
+      final verificationQr =
+          ref.read(contentVerificationServiceProvider).generateVerificationQrPayload();
+      await _recordDashboardActivity(
+        type: AdminActivityType.verificationCodeGenerated,
+        summary:
+            'Generated ${ContentVerificationService.featureLabel(verificationQr.feature).toLowerCase()} direct verification QR approval.',
+        category: 'verification',
+        metadata: <String, String>{
+          'feature': verificationQr.feature,
+          'contentCategory': verificationQr.feature,
+          'verificationMode': 'direct_qr',
+          'verificationCode': verificationQr.verificationCode,
+          'verificationQrIssuedAtUtc':
+              verificationQr.issuedAtUtc.toIso8601String(),
+          'verificationQrExpiresAtUtc':
+              verificationQr.expiresAtUtc.toIso8601String(),
+        },
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _generatedVerificationQr = verificationQr;
+        _verificationMessage =
+            'Verification QR generated for ${ContentVerificationService.featureLabel(verificationQr.feature)}.';
+        _verificationMessageIsError = false;
+      });
+      await _openVerificationQrScreen(verificationQr);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _generatedVerificationQr = null;
+        _verificationMessage = 'Unable to generate verification QR: $error';
+        _verificationMessageIsError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGeneratingVerificationCode = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _openVerificationQrScreen(VerificationQrPayload payload) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AdminVerificationQrScreen(payload: payload),
+      ),
+    );
+  }
+
+  Future<void> _clearVerificationRecords() async {
+    if (_isClearingVerificationRecords) {
+      return;
+    }
+
+    final session = _currentSession;
+    if (session == null) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Clear verification generation records?'),
+          content: const Text(
+            'This removes persisted verification QR generation records from the local audit history.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Clear records'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _isClearingVerificationRecords = true;
+      _verificationMessage = null;
+      _verificationMessageIsError = false;
+    });
+
+    try {
+      await ref
+          .read(appServicesProvider)
+          .adminActivityService
+          .clearVerificationCodeRecords(
+            actorUserId: session.userId,
+            actorUsername: session.username,
+          );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _generatedVerificationQr = null;
+        _verificationMessage = 'Verification generation records cleared.';
+        _verificationMessageIsError = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _verificationMessage = 'Unable to clear verification records: $error';
+        _verificationMessageIsError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isClearingVerificationRecords = false;
+        });
+      }
+    }
+  }
+
   Future<void> _logout() async {
     await ref.read(adminAuthServiceProvider).logout();
     if (!mounted) {
@@ -1620,6 +1767,24 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
                   isEncrypting: _isEncrypting,
                   onWarmCaches: _warmCaches,
                   onClearCaches: _clearCaches,
+                ),
+              ),
+              _SectionCard(
+                title: 'Verification QR operations',
+                subtitle:
+                    'Generate direct admin QR approvals with no client request-code transfer, then let the client app complete verification by scanning them.',
+                child: _VerificationOperationsPanel(
+                  generatedVerificationQr: _generatedVerificationQr,
+                  statusMessage: _verificationMessage,
+                  statusIsError: _verificationMessageIsError,
+                  isGenerating: _isGeneratingVerificationCode,
+                  isClearing: _isClearingVerificationRecords,
+                  activities: ref
+                      .watch(adminActivityServiceProvider)
+                      .records
+                      .toList(growable: false),
+                  onGenerate: _generateVerificationQr,
+                  onClearRecords: _clearVerificationRecords,
                 ),
               ),
             ],
@@ -3976,6 +4141,10 @@ String _activityTypeLabel(AdminActivityType type) {
       return 'Clear caches';
     case AdminActivityType.encryptionBatch:
       return 'Encryption batch';
+    case AdminActivityType.verificationCodeGenerated:
+      return 'Verification QR generated';
+    case AdminActivityType.verificationCodeRecordsCleared:
+      return 'Verification records cleared';
     case AdminActivityType.loginRecordsCleared:
       return 'Login records cleared';
   }
@@ -3987,6 +4156,8 @@ String _activityStatusLabel(AdminActivityRecord activity) {
       return 'Warning';
     case AdminActivityType.encryptionBatch:
       return 'Encrypted';
+    case AdminActivityType.verificationCodeGenerated:
+    case AdminActivityType.verificationCodeRecordsCleared:
     case AdminActivityType.inventoryRefresh:
     case AdminActivityType.warmCaches:
     case AdminActivityType.clearCaches:
@@ -4005,6 +4176,8 @@ _AlertTone _activityTone(AdminActivityRecord activity) {
     case AdminActivityType.loginFailure:
       return _AlertTone.warning;
     case AdminActivityType.encryptionBatch:
+    case AdminActivityType.verificationCodeGenerated:
+    case AdminActivityType.verificationCodeRecordsCleared:
     case AdminActivityType.inventoryRefresh:
     case AdminActivityType.warmCaches:
     case AdminActivityType.clearCaches:
@@ -4403,9 +4576,146 @@ class _RecentActivityPanel extends StatelessWidget {
         return Icons.cleaning_services_rounded;
       case AdminActivityType.encryptionBatch:
         return Icons.lock_rounded;
+      case AdminActivityType.verificationCodeGenerated:
+        return Icons.qr_code_2_rounded;
+      case AdminActivityType.verificationCodeRecordsCleared:
+        return Icons.restart_alt_rounded;
       case AdminActivityType.loginRecordsCleared:
         return Icons.history_toggle_off_rounded;
     }
+  }
+}
+
+class _VerificationOperationsPanel extends StatelessWidget {
+  const _VerificationOperationsPanel({
+    required this.generatedVerificationQr,
+    required this.statusMessage,
+    required this.statusIsError,
+    required this.isGenerating,
+    required this.isClearing,
+    required this.activities,
+    required this.onGenerate,
+    required this.onClearRecords,
+  });
+
+  final VerificationQrPayload? generatedVerificationQr;
+  final String? statusMessage;
+  final bool statusIsError;
+  final bool isGenerating;
+  final bool isClearing;
+  final List<AdminActivityRecord> activities;
+  final Future<void> Function() onGenerate;
+  final Future<void> Function() onClearRecords;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final verificationActivities = activities
+        .where(
+          (activity) =>
+              activity.type == AdminActivityType.verificationCodeGenerated ||
+              activity.type == AdminActivityType.verificationCodeRecordsCleared,
+        )
+        .take(5)
+        .toList(growable: false);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Generate a QR approval directly in the admin app. The client app only needs to scan it from Settings.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            FilledButton.icon(
+              onPressed: isGenerating ? null : onGenerate,
+              icon: const Icon(Icons.qr_code_2_rounded),
+              label: Text(isGenerating ? 'Generating...' : 'Generate admin QR'),
+            ),
+            OutlinedButton.icon(
+              onPressed: isClearing ? null : onClearRecords,
+              icon: const Icon(Icons.restart_alt_rounded),
+              label: Text(isClearing ? 'Clearing...' : 'Clear records'),
+            ),
+          ],
+        ),
+        if (generatedVerificationQr != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Last generated admin approval',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'A full-screen QR is shown immediately after generation so the client app can scan it from Settings without any request-code handoff.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: onGenerate,
+                      icon: const Icon(Icons.open_in_full_rounded),
+                      label: const Text('Regenerate and open QR'),
+                    ),
+                    Text(
+                      'Issued ${DateFormat('MMM d, yyyy HH:mm').format(generatedVerificationQr!.issuedAtUtc.toLocal())}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    Text(
+                      'Valid until ${DateFormat('MMM d, yyyy HH:mm').format(generatedVerificationQr!.expiresAtUtc.toLocal())}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (statusMessage != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            statusMessage!,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: statusIsError ? scheme.error : scheme.primary,
+            ),
+          ),
+        ],
+        if (verificationActivities.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Recent verification activity',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          for (final activity in verificationActivities)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '${DateFormat('MMM d, HH:mm').format(activity.occurredAtUtc.toLocal())} • ${activity.summary}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+        ],
+      ],
+    );
   }
 }
 

@@ -54,6 +54,29 @@ class AdminActivityService extends ChangeNotifier {
     );
   }
 
+  Future<void> clearVerificationCodeRecords({
+    required String actorUserId,
+    required String actorUsername,
+  }) async {
+    _records = _records
+        .where(
+          (record) =>
+              record.type != AdminActivityType.verificationCodeGenerated,
+        )
+        .toList(growable: false);
+    await record(
+      AdminActivityRecord(
+        id: adminGenerateId(prefix: 'activity'),
+        type: AdminActivityType.verificationCodeRecordsCleared,
+        occurredAtUtc: DateTime.now().toUtc(),
+        summary: 'Cleared persisted verification QR generation records.',
+        category: 'verification',
+        actorUserId: actorUserId,
+        actorUsername: actorUsername,
+      ),
+    );
+  }
+
   List<AdminActivityRecord> recentByTypes(Set<AdminActivityType> types) {
     return _records.where((record) => types.contains(record.type)).toList();
   }
