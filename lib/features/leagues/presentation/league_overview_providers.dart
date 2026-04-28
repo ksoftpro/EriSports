@@ -4,7 +4,6 @@ import 'package:eri_sports/data/db/app_database.dart';
 import 'package:eri_sports/data/local_files/daylysport_sync_models.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/leagues/presentation/league_theme_resolver.dart';
-import 'package:eri_sports/shared/formatters/match_display_formatter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,8 +12,6 @@ enum LeagueTableMode { short, full, form }
 enum LeagueScopeMode { overall, home, away }
 
 enum LeagueFixtureFilter { all, live, upcoming, finished }
-
-enum LeagueNewsFilter { all, updates, insights }
 
 enum LeagueTeamStatMetric {
   points,
@@ -27,19 +24,12 @@ enum LeagueTeamStatMetric {
 
 @immutable
 class LeagueHeaderPreference {
-  const LeagueHeaderPreference({
-    this.isFollowing = false,
-    this.notificationsOn = false,
-  });
+  const LeagueHeaderPreference({this.isFollowing = false});
 
   final bool isFollowing;
-  final bool notificationsOn;
 
-  LeagueHeaderPreference copyWith({bool? isFollowing, bool? notificationsOn}) {
-    return LeagueHeaderPreference(
-      isFollowing: isFollowing ?? this.isFollowing,
-      notificationsOn: notificationsOn ?? this.notificationsOn,
-    );
+  LeagueHeaderPreference copyWith({bool? isFollowing}) {
+    return LeagueHeaderPreference(isFollowing: isFollowing ?? this.isFollowing);
   }
 }
 
@@ -47,32 +37,6 @@ final leagueHeaderPreferenceProvider =
     StateProvider.family<LeagueHeaderPreference, String>(
       (ref, competitionId) => const LeagueHeaderPreference(),
     );
-
-class LeagueNewsItem {
-  const LeagueNewsItem({
-    required this.id,
-    required this.title,
-    required this.excerpt,
-    required this.source,
-    required this.publishedAtUtc,
-    required this.isInsight,
-    this.matchId,
-    this.imagePlayerId,
-    this.imageTeamId,
-    this.imageTeamName,
-  });
-
-  final String id;
-  final String title;
-  final String excerpt;
-  final String source;
-  final DateTime publishedAtUtc;
-  final bool isInsight;
-  final String? matchId;
-  final String? imagePlayerId;
-  final String? imageTeamId;
-  final String? imageTeamName;
-}
 
 class LeagueTransferItem {
   const LeagueTransferItem({
@@ -120,9 +84,6 @@ class LeagueOverviewState {
     required this.fixtureRows,
     required this.playerStatCategories,
     required this.playerStatsByType,
-    required this.goalLeaders,
-    required this.assistsLeaders,
-    required this.newsItems,
     required this.transferItems,
   });
 
@@ -136,9 +97,6 @@ class LeagueOverviewState {
   final List<HomeMatchView> fixtureRows;
   final List<TopStatCategoryView> playerStatCategories;
   final Map<String, List<TopPlayerLeaderboardEntryView>> playerStatsByType;
-  final List<TopPlayerLeaderboardEntryView> goalLeaders;
-  final List<TopPlayerLeaderboardEntryView> assistsLeaders;
-  final List<LeagueNewsItem> newsItems;
   final List<LeagueTransferItem> transferItems;
 }
 
@@ -176,7 +134,8 @@ final leagueOverviewProvider = FutureProvider.family<
   final competition = await services.database.readCompetitionById(
     competitionId,
   );
-  final sourceCompetitionName = competition?.name ?? request.competitionNameHint;
+  final sourceCompetitionName =
+      competition?.name ?? request.competitionNameHint;
   final leagueDataset = await services.leagueStandingsSource
       .readLeagueDatasetByCompetitionId(
         competitionId,
@@ -188,14 +147,8 @@ final leagueOverviewProvider = FutureProvider.family<
   final fixtureRows = leagueDataset.fixtures;
   final playerStatCategories = leagueDataset.playerStatCategories;
   final playerStatsByType = leagueDataset.playerStatsByType;
-  final goalLeaders = (playerStatsByType['goals'] ?? const [])
-      .take(8)
-      .toList(growable: false);
-  final assistsLeaders = (playerStatsByType['assists'] ?? const [])
-      .take(8)
-      .toList(growable: false);
 
-    final competitionName =
+  final competitionName =
       sourceCompetitionName ?? standings?.displayName ?? 'League';
   final country = competition?.country;
   final visualTheme = LeagueThemeResolver.resolve(
@@ -207,12 +160,8 @@ final leagueOverviewProvider = FutureProvider.family<
     fixtureRows,
     explicitSeason: standings?.meta.season,
   );
-  final transferItems = _buildTransferItems(transferFeed: leagueDataset.transferFeed);
-  final newsItems = _buildLeagueNews(
-    competitionName: competitionName,
-    standingsRows: overallRows,
-    fixtures: fixtureRows,
-    goalLeaders: goalLeaders,
+  final transferItems = _buildTransferItems(
+    transferFeed: leagueDataset.transferFeed,
   );
 
   return LeagueOverviewState(
@@ -226,9 +175,6 @@ final leagueOverviewProvider = FutureProvider.family<
     fixtureRows: fixtureRows,
     playerStatCategories: playerStatCategories,
     playerStatsByType: playerStatsByType,
-    goalLeaders: goalLeaders,
-    assistsLeaders: assistsLeaders,
-    newsItems: newsItems,
     transferItems: transferItems,
   );
 });
@@ -421,123 +367,6 @@ int _formPoints(String? form) {
     }
   }
   return points;
-}
-
-List<LeagueNewsItem> _buildLeagueNews({
-  required String competitionName,
-  required List<LeagueStandingsRow> standingsRows,
-  required List<HomeMatchView> fixtures,
-  required List<TopPlayerLeaderboardEntryView> goalLeaders,
-}) {
-  final items = <LeagueNewsItem>[];
-  final now = DateTime.now().toUtc();
-  final lifecycles = <String, MatchLifecycle>{
-    for (final fixture in fixtures)
-      fixture.match.id: MatchDisplayFormatter.lifecycle(
-        status: fixture.match.status,
-        kickoffUtc: fixture.match.kickoffUtc,
-        nowUtc: now,
-      ),
-  };
-
-  if (standingsRows.isNotEmpty) {
-    final top = standingsRows.first;
-    items.add(
-      LeagueNewsItem(
-        id: 'table-top-${top.teamId}',
-        title: '${top.displayTeamName} lead the $competitionName table',
-        excerpt:
-            '${top.displayTeamName} are on ${top.points} points after ${top.played} matches.',
-        source: 'Offline Desk',
-        publishedAtUtc: now,
-        isInsight: true,
-        imageTeamId: top.teamId,
-        imageTeamName: top.displayTeamName,
-      ),
-    );
-  }
-
-  if (goalLeaders.isNotEmpty) {
-    final scorer = goalLeaders.first;
-    items.add(
-      LeagueNewsItem(
-        id: 'goal-leader-${scorer.stat.playerId}',
-        title: '${scorer.stat.playerName} tops the scoring chart',
-        excerpt:
-            'The ${competitionName.toLowerCase()} race is led with ${scorer.stat.statValue.toInt()} goals.',
-        source: 'Stats Hub',
-        publishedAtUtc: now.subtract(const Duration(hours: 2)),
-        isInsight: true,
-        imagePlayerId: scorer.stat.playerId,
-        imageTeamId: scorer.stat.teamId,
-        imageTeamName: scorer.teamName,
-      ),
-    );
-  }
-
-  final recent =
-      fixtures
-          .where(
-            (fixture) =>
-                lifecycles[fixture.match.id] == MatchLifecycle.finished,
-          )
-          .toList()
-        ..sort((a, b) => b.match.kickoffUtc.compareTo(a.match.kickoffUtc));
-
-  for (final match in recent.take(4)) {
-    final score = MatchDisplayFormatter.scoreDisplay(
-      status: match.match.status,
-      kickoffUtc: match.match.kickoffUtc,
-      homeScore: match.match.homeScore,
-      awayScore: match.match.awayScore,
-      nowUtc: now,
-    );
-
-    items.add(
-      LeagueNewsItem(
-        id: 'result-${match.match.id}',
-        title:
-            '${match.homeTeamName} ${score.centerLabel} ${match.awayTeamName}',
-        excerpt: 'Full-time result in the $competitionName.',
-        source: 'Match Centre',
-        publishedAtUtc: match.match.kickoffUtc,
-        isInsight: false,
-        matchId: match.match.id,
-        imageTeamId: match.match.homeTeamId,
-        imageTeamName: match.homeTeamName,
-      ),
-    );
-  }
-
-  final upcoming =
-      fixtures
-          .where(
-            (fixture) =>
-                lifecycles[fixture.match.id] == MatchLifecycle.upcoming,
-          )
-          .toList()
-        ..sort((a, b) => a.match.kickoffUtc.compareTo(b.match.kickoffUtc));
-
-  for (final match in upcoming.take(4)) {
-    items.add(
-      LeagueNewsItem(
-        id: 'preview-${match.match.id}',
-        title: '${match.homeTeamName} vs ${match.awayTeamName} preview',
-        excerpt: 'Upcoming fixture coverage and match centre access.',
-        source: 'Match Centre',
-        publishedAtUtc: match.match.kickoffUtc.subtract(
-          const Duration(hours: 4),
-        ),
-        isInsight: false,
-        matchId: match.match.id,
-        imageTeamId: match.match.homeTeamId,
-        imageTeamName: match.homeTeamName,
-      ),
-    );
-  }
-
-  items.sort((a, b) => b.publishedAtUtc.compareTo(a.publishedAtUtc));
-  return items;
 }
 
 List<LeagueTransferItem> _buildTransferItems({
