@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
@@ -145,6 +146,92 @@ void main() {
     expect(fakePlatform.seekCalls, contains(const Duration(seconds: 38)));
     expect(fakePlatform.playCalls, hasLength(1));
   });
+
+  testWidgets(
+    'shows file metadata and restores default orientations on exit', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final tempDir = Directory.systemTemp.createTempSync(
+        'eri_media_playback_metadata_',
+      );
+      final originalPlatform = VideoPlayerPlatform.instance;
+      final fakePlatform = _FakeVideoPlayerPlatform();
+      VideoPlayerPlatform.instance = fakePlatform;
+
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final preferences = await SharedPreferences.getInstance();
+      final services = await AppServices.create(sharedPreferences: preferences);
+      final routeObserver = RouteObserver<ModalRoute<void>>();
+      final item = _buildVideoItem(tempDir, 'training_ground.mp4');
+      final orientationCalls = <List<dynamic>>[];
+
+      addTearDown(() async {
+        VideoPlayerPlatform.instance = originalPlatform;
+        await _clearPathProviderMock();
+        await _clearSystemChromeMock();
+        await services.database.close();
+        if (tempDir.existsSync()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+
+      await _installPathProviderMock(tempDir);
+      await _installSystemChromeMock(orientationCalls);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appServicesProvider.overrideWithValue(services),
+            appRouteObserverProvider.overrideWithValue(routeObserver),
+          ],
+          child: MaterialApp(
+            navigatorObservers: [routeObserver],
+            home: _PlaybackLaunchHarness(item: item),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open playback'));
+      await tester.pump();
+      await _pumpUntil(
+        tester,
+        () =>
+            find.byType(MediaPlaybackScreen).evaluate().isNotEmpty &&
+            fakePlatform.playCalls.isNotEmpty,
+      );
+
+      expect(find.text('training_ground.mp4'), findsWidgets);
+      expect(
+        find.text(DateFormat('MMM d, yyyy • h:mm a').format(item.lastModified.toLocal())),
+        findsOneWidget,
+      );
+      expect(orientationCalls, isNotEmpty);
+      expect(
+        orientationCalls.first,
+        equals(<String>[
+          'DeviceOrientation.portraitUp',
+          'DeviceOrientation.portraitDown',
+          'DeviceOrientation.landscapeLeft',
+          'DeviceOrientation.landscapeRight',
+        ]),
+      );
+
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pump();
+      await _pumpUntil(
+        tester,
+        () =>
+            find.text('Open playback').evaluate().isNotEmpty &&
+            orientationCalls.any((call) => call.isEmpty),
+      );
+
+      expect(orientationCalls.last, isEmpty);
+    },
+  );
 }
 
 Future<void> _pumpUntil(
@@ -342,5 +429,26 @@ Future<void> _clearPathProviderMock() {
   TestWidgetsFlutterBinding.ensureInitialized();
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(_pathProviderChannel, null);
+  return Future<void>.value();
+}
+
+Future<void> _installSystemChromeMock(List<List<dynamic>> orientationCalls) {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'SystemChrome.setPreferredOrientations') {
+          final arguments = (call.arguments as List<dynamic>? ?? <dynamic>[])
+              .toList(growable: false);
+          orientationCalls.add(arguments);
+        }
+        return null;
+      });
+  return Future<void>.value();
+}
+
+Future<void> _clearSystemChromeMock() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(SystemChannels.platform, null);
   return Future<void>.value();
 }

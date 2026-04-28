@@ -1040,6 +1040,8 @@ void main() {
     final snapshot = _buildPlainVideoSnapshot(tempDir);
 
     addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       VideoPlayerPlatform.instance = originalPlatform;
       await services.database.close();
       if (tempDir.existsSync()) {
@@ -1097,6 +1099,73 @@ void main() {
     expect(fakePlatform.seekCalls, contains(const Duration(seconds: 27)));
   });
 
+  testWidgets('shows a progress slider and seeks when scrubbing the active reel', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final tempDir = Directory.systemTemp.createTempSync(
+      'eri_reels_screen_scrub_seek_',
+    );
+    final originalPlatform = VideoPlayerPlatform.instance;
+    final fakePlatform = _FakeVideoPlayerPlatform();
+    VideoPlayerPlatform.instance = fakePlatform;
+
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final services = await AppServices.create(sharedPreferences: preferences);
+    final snapshot = _buildPlainVideoSnapshot(tempDir);
+
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      VideoPlayerPlatform.instance = originalPlatform;
+      await services.database.close();
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appServicesProvider.overrideWithValue(services),
+          appRouteObserverProvider.overrideWithValue(
+            RouteObserver<ModalRoute<void>>(),
+          ),
+          currentShellBranchIndexProvider.overrideWith((ref) => 3),
+          appLifecycleStateProvider.overrideWith(
+            (ref) => AppLifecycleState.resumed,
+          ),
+          daylySportMediaSnapshotProvider.overrideWith(
+            () => _TestDaylySportMediaSnapshotNotifier(snapshot),
+          ),
+        ],
+        child: const MaterialApp(
+          home: ReelsScreen(enableEncryptedPrewarm: false),
+        ),
+      ),
+    );
+    await tester.pump();
+    await _pumpUntil(
+      tester,
+      () =>
+          fakePlatform.playCalls.isNotEmpty &&
+          find.byType(Slider).evaluate().isNotEmpty,
+    );
+
+    expect(find.byType(Slider), findsOneWidget);
+    fakePlatform.seekCalls.clear();
+
+    await tester.drag(find.byType(Slider), const Offset(180, 0));
+    await _pumpUntil(tester, () => fakePlatform.seekCalls.isNotEmpty);
+
+    expect(fakePlatform.seekCalls, isNotEmpty);
+    expect(fakePlatform.seekCalls.last, greaterThan(Duration.zero));
+  });
+
   testWidgets('fits the active reel video within the player bounds', (
     tester,
   ) async {
@@ -1119,6 +1188,8 @@ void main() {
     final snapshot = _buildPlainVideoSnapshot(tempDir);
 
     addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       VideoPlayerPlatform.instance = originalPlatform;
       await services.database.close();
       if (tempDir.existsSync()) {
@@ -1184,6 +1255,8 @@ void main() {
     final snapshot = _buildPlainVideoSnapshot(tempDir);
 
     addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
       VideoPlayerPlatform.instance = originalPlatform;
       await services.database.close();
       if (tempDir.existsSync()) {

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:intl/intl.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
@@ -128,6 +129,49 @@ void main() {
     final secondPlayerId = fakePlatform.lastCreatedPlayerId;
     expect(secondPlayerId, isNotNull);
     expect(fakePlatform.seekCallsForPlayer(secondPlayerId!), isEmpty);
+  });
+
+  testWidgets('shows playback file metadata for the current video', (tester) async {
+    final previousPlatform = VideoPlayerPlatform.instance;
+    final fakePlatform = _FakeVideoPlayerPlatform(
+      duration: const Duration(seconds: 100),
+    );
+    VideoPlayerPlatform.instance = fakePlatform;
+
+    SharedPreferences.setMockInitialValues(const <String, Object>{});
+    final preferences = await SharedPreferences.getInstance();
+    final services = await AppServices.create(sharedPreferences: preferences);
+    final tempRoot = Directory.systemTemp.createTempSync(
+      'eri_media_metadata_integration_',
+    );
+
+    addTearDown(() async {
+      VideoPlayerPlatform.instance = previousPlatform;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await services.database.close();
+      if (tempRoot.existsSync()) {
+        await tempRoot.delete(recursive: true);
+      }
+    });
+
+    final item = _buildVideoItem(
+      tempRoot: tempRoot,
+      fileName: 'matchday_focus.mp4',
+      relativePath: 'highlights/matchday_focus.mp4.esv',
+      section: DaylySportMediaSection.highlights,
+      lastModified: DateTime.utc(2026, 4, 28, 14, 30),
+    );
+
+    await tester.pumpWidget(_PlaybackHarness(services: services, item: item));
+    await tester.pumpAndSettle();
+
+    expect(find.text('matchday_focus.mp4'), findsWidgets);
+    expect(
+      find.text(
+        DateFormat('MMM d, yyyy • h:mm a').format(item.lastModified.toLocal()),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -313,6 +357,7 @@ DaylySportMediaItem _buildVideoItem({
   required String fileName,
   required String relativePath,
   required DaylySportMediaSection section,
+  DateTime? lastModified,
 }) {
   final file = File('${tempRoot.path}${Platform.pathSeparator}$fileName')
     ..writeAsBytesSync(const <int>[0, 1, 2, 3, 4, 5]);
@@ -321,7 +366,7 @@ DaylySportMediaItem _buildVideoItem({
     relativePath: relativePath,
     section: section,
     type: DaylySportMediaType.video,
-    lastModified: DateTime.now().toUtc(),
+    lastModified: (lastModified ?? DateTime.now()).toUtc(),
     sizeBytes: file.lengthSync(),
   );
 }

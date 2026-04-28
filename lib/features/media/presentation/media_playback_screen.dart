@@ -9,7 +9,9 @@ import 'package:eri_sports/features/media/presentation/video_playback_position_s
 import 'package:eri_sports/shared/widgets/pending_verification_placeholder.dart';
 import 'package:eri_sports/shared/widgets/secure_file_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:video_player/video_player.dart';
 
 class MediaPlaybackScreen extends ConsumerStatefulWidget {
@@ -43,11 +45,13 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
       WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
   ModalRoute<dynamic>? _route;
   bool _isSavingPosition = false;
+  bool _orientationConfigured = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_enablePlaybackOrientations());
     final verifiedItemIds = ref.read(offlineActiveVerifiedItemIdsProvider);
     if (
       widget.item.isVideo &&
@@ -87,6 +91,7 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
     if (_route is PageRoute<dynamic>) {
       _routeObserver.unsubscribe(this);
     }
+    unawaited(_restoreDefaultOrientations());
 
     final controller = _controller;
     _controller = null;
@@ -250,13 +255,17 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              VideoProgressIndicator(
-                controller,
-                allowScrubbing: true,
-                padding: const EdgeInsets.symmetric(vertical: 4),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(trackHeight: 3),
+                child: VideoProgressIndicator(
+                  controller,
+                  allowScrubbing: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                ),
               ),
               const SizedBox(height: 8),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   IconButton(
                     onPressed: () async {
@@ -271,13 +280,24 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      _wasDecrypted
-                          ? 'Decrypted and cached'
-                          : (_usedCache
-                              ? 'Playing cached decrypted media'
-                              : 'Playing local media'),
-                      style: Theme.of(context).textTheme.labelLarge,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _metadataTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _metadataSubtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -356,5 +376,38 @@ class _MediaPlaybackScreenState extends ConsumerState<MediaPlaybackScreen>
     } finally {
       _isSavingPosition = false;
     }
+  }
+
+  Future<void> _enablePlaybackOrientations() async {
+    await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    _orientationConfigured = true;
+  }
+
+  Future<void> _restoreDefaultOrientations() async {
+    if (!_orientationConfigured) {
+      return;
+    }
+    await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[]);
+    _orientationConfigured = false;
+  }
+
+  String get _metadataTitle {
+    final fileName = widget.item.fileName.trim();
+    return fileName.isEmpty ? 'Offline video' : fileName;
+  }
+
+  String get _metadataSubtitle {
+    final formattedDate = DateFormat('MMM d, yyyy • h:mm a').format(
+      widget.item.lastModified.toLocal(),
+    );
+    if (_usedCache || _wasDecrypted) {
+      return formattedDate;
+    }
+    return formattedDate;
   }
 }

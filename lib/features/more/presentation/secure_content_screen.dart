@@ -990,8 +990,10 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
 
     try {
       final service = ref.read(contentVerificationServiceProvider);
-      final verificationQr = service.generateVerificationQrPayload(requestCode);
-      final request = verificationQr.request;
+      final request = service.parseClientRequest(requestCode);
+      final verificationQr = service.generateVerificationQrPayload(
+        feature: request.feature,
+      );
       await _recordDashboardActivity(
         type: AdminActivityType.verificationCodeGenerated,
         summary:
@@ -1022,7 +1024,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
             'Verification QR generated for ${ContentVerificationService.featureLabel(request.feature)}.';
         _verificationMessageIsError = false;
       });
-      await _openVerificationQrScreen(verificationQr);
+      await _openVerificationQrScreen(verificationQr, request);
     } catch (error) {
       if (!mounted) {
         return;
@@ -1041,10 +1043,16 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     }
   }
 
-  Future<void> _openVerificationQrScreen(VerificationQrPayload payload) {
+  Future<void> _openVerificationQrScreen(
+    VerificationQrPayload payload,
+    ClientVerificationRequest request,
+  ) {
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => AdminVerificationQrScreen(payload: payload),
+        builder: (_) => AdminVerificationQrScreen(
+          payload: payload,
+          request: request,
+        ),
       ),
     );
   }

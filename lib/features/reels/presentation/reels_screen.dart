@@ -1311,6 +1311,8 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
   VideoPlayerController? _controller;
   bool _isPreparing = false;
   String? _errorMessage;
+  bool _isScrubbing = false;
+  Duration _scrubPosition = Duration.zero;
 
   @override
   void initState() {
@@ -1377,6 +1379,11 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     final controller = _controller;
     final isReady = controller != null && controller.value.isInitialized;
     final isPlaying = isReady && controller.value.isPlaying;
+    final duration = isReady ? controller.value.duration : Duration.zero;
+    final playbackPosition =
+      isReady ? controller.value.position : Duration.zero;
+    final displayPosition =
+      _isScrubbing ? _scrubPosition : playbackPosition;
     final aspectRatio =
         isReady && controller.value.aspectRatio > 0
             ? controller.value.aspectRatio
@@ -1431,6 +1438,65 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
                 color: Colors.white70,
               ),
             ),
+          if (isReady)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 18,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.58),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 3,
+                          thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 6,
+                          ),
+                          overlayShape: const RoundSliderOverlayShape(
+                            overlayRadius: 12,
+                          ),
+                        ),
+                        child: Slider(
+                          value: _sliderValue(
+                            position: displayPosition,
+                            duration: duration,
+                          ),
+                          min: 0,
+                          max: duration.inMilliseconds > 0
+                              ? duration.inMilliseconds.toDouble()
+                              : 1,
+                          onChanged: (value) => _handleScrubChanged(value),
+                          onChangeStart: (value) => _handleScrubStart(value),
+                          onChangeEnd: (value) => _handleScrubEnd(value),
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            _formatDuration(displayPosition),
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(color: Colors.white),
+                          ),
+                          const Spacer(),
+                          Text(
+                            _formatDuration(duration),
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(color: Colors.white70),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1463,6 +1529,7 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
       final controller = VideoPlayerController.file(File(playable.file.path));
       await controller.initialize();
       await controller.setLooping(true);
+      controller.addListener(_handleControllerUpdated);
       final resumePosition = await _services.videoResumeService.readPosition(
         videoKey: reelPlaybackItemKey(widget.item),
         totalDuration: controller.value.duration,
@@ -1483,6 +1550,7 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
       setState(() {
         _controller = controller;
         _isPreparing = false;
+        _scrubPosition = controller.value.position;
       });
       if (previousController != null) {
         unawaited(_pausePersistAndDispose(previousController, widget.item));
@@ -1519,6 +1587,54 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  void _handleControllerUpdated() {
+    if (!mounted || _isScrubbing) {
+      return;
+    }
+    setState(() {});
+  }
+
+  void _handleScrubStart(double value) {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+    setState(() {
+      _isScrubbing = true;
+      _scrubPosition = Duration(milliseconds: value.round());
+    });
+  }
+
+  void _handleScrubChanged(double value) {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+    setState(() {
+      _isScrubbing = true;
+      _scrubPosition = Duration(milliseconds: value.round());
+    });
+  }
+
+  Future<void> _handleScrubEnd(double value) async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+    final target = Duration(milliseconds: value.round());
+    setState(() {
+      _scrubPosition = target;
+    });
+    await controller.seekTo(target);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isScrubbing = false;
+      _scrubPosition = controller.value.position;
+    });
   }
 
   Future<void> _playIfReady() async {
@@ -1567,6 +1683,7 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     VideoPlayerController controller,
     DaylySportMediaItem item,
   ) async {
+    controller.removeListener(_handleControllerUpdated);
     if (controller.value.isInitialized && controller.value.isPlaying) {
       await controller.pause();
     }
@@ -1587,6 +1704,26 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
         unawaited(controller.dispose());
       }
     }
+  }
+
+  double _sliderValue({
+    required Duration position,
+    required Duration duration,
+  }) {
+    final max =
+        duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1;
+    return position.inMilliseconds.toDouble().clamp(0.0, max).toDouble();
+  }
+
+  String _formatDuration(Duration duration) {
+    final totalSeconds = duration.inSeconds.clamp(0, 359999);
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 }
 

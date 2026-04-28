@@ -4,15 +4,19 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 class AdminVerificationQrScreen extends StatelessWidget {
-  const AdminVerificationQrScreen({super.key, required this.payload});
+  const AdminVerificationQrScreen({
+    super.key,
+    required this.payload,
+    required this.request,
+  });
 
   final VerificationQrPayload payload;
+  final ClientVerificationRequest request;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final request = payload.request;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Admin verification QR')),
