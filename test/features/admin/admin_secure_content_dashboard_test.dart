@@ -134,7 +134,7 @@ void main() {
   });
 
   testWidgets(
-    'admin dashboard shows tabbed dashboard shell after authentication',
+    'admin dashboard renders five tabs and keeps panels on the intended tab',
     (tester) async {
       tester.view.physicalSize = const Size(1400, 1800);
       tester.view.devicePixelRatio = 1.0;
@@ -167,21 +167,97 @@ void main() {
       await _pumpForUi(tester, frames: 12);
 
       expect(find.text('Secure Content Operations'), findsOneWidget);
-      expect(find.byKey(adminDashboardUserActivityKey), findsNothing);
-      expect(find.byKey(adminDashboardRecentActivityKey), findsNothing);
       expect(find.byKey(adminDashboardHomeTabKey), findsOneWidget);
-      expect(find.byKey(adminDashboardCoverageTabKey), findsOneWidget);
+      expect(find.byKey(adminDashboardImportTabKey), findsOneWidget);
       expect(find.byKey(adminDashboardOperationsTabKey), findsOneWidget);
-      expect(find.byKey(adminDashboardActivityTabKey), findsOneWidget);
-      expect(find.text('Overview'), findsOneWidget);
-      expect(find.text('Coverage'), findsOneWidget);
-      expect(find.text('Operations'), findsOneWidget);
-      expect(find.text('Activity'), findsOneWidget);
+      expect(find.byKey(adminDashboardProfileTabKey), findsOneWidget);
+      expect(find.byKey(adminDashboardStatsTabKey), findsOneWidget);
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Import'), findsOneWidget);
+      expect(find.text('Operation'), findsOneWidget);
+      expect(find.text('Profile'), findsOneWidget);
+      expect(find.text('Stats'), findsOneWidget);
 
-      await tester.tap(find.byKey(adminDashboardCoverageTabKey).hitTestable());
+      expect(
+        find.text(
+          'Professional control surface for encrypted daylySport operations',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(adminDashboardRecentActivityKey), findsNothing);
+      expect(find.text('Import and encrypt'), findsNothing);
+      expect(find.text('Verification QR operations'), findsNothing);
+      expect(find.text('User and security management'), findsNothing);
+      expect(find.text('Inventory and statistics'), findsNothing);
+
+      await tester.tap(find.byKey(adminDashboardImportTabKey).hitTestable());
       await _pumpForUi(tester, frames: 8);
 
-      expect(find.byKey(adminDashboardCoverageTabKey), findsOneWidget);
+      expect(find.text('Import and encrypt'), findsOneWidget);
+      expect(
+        find.text(
+          'Professional control surface for encrypted daylySport operations',
+        ),
+        findsNothing,
+      );
+      expect(find.byKey(adminDashboardRecentActivityKey), findsNothing);
+      expect(find.text('Verification QR operations'), findsNothing);
+      expect(find.text('User and security management'), findsNothing);
+      expect(find.text('Inventory and statistics'), findsNothing);
+
+      await tester.tap(
+        find.byKey(adminDashboardOperationsTabKey).hitTestable(),
+      );
+      await _pumpForUi(tester, frames: 8);
+
+      expect(find.text('Verification QR operations'), findsOneWidget);
+      expect(find.text('Import and encrypt'), findsNothing);
+      expect(
+        find.text(
+          'Professional control surface for encrypted daylySport operations',
+        ),
+        findsNothing,
+      );
+      expect(find.byKey(adminDashboardRecentActivityKey), findsNothing);
+
+      await tester.tap(find.byKey(adminDashboardProfileTabKey).hitTestable());
+      await _pumpForUi(tester, frames: 8);
+
+      expect(find.byKey(adminDashboardRecentActivityKey), findsOneWidget);
+      expect(find.text('User and security management'), findsOneWidget);
+      expect(
+        find.text(
+          'Professional control surface for encrypted daylySport operations',
+        ),
+        findsNothing,
+      );
+      expect(find.text('Verification QR operations'), findsNothing);
+      expect(find.text('Inventory and statistics'), findsNothing);
+
+      await tester.tap(find.byKey(adminDashboardStatsTabKey).hitTestable());
+      await _pumpForUi(tester, frames: 8);
+
+      expect(find.text('Inventory and statistics'), findsOneWidget);
+      expect(find.byKey(adminDashboardRecentActivityKey), findsNothing);
+      expect(find.text('Import and encrypt'), findsNothing);
+      expect(find.text('Verification QR operations'), findsNothing);
+      expect(
+        find.text(
+          'Professional control surface for encrypted daylySport operations',
+        ),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(adminDashboardHomeTabKey).hitTestable());
+      await _pumpForUi(tester, frames: 8);
+
+      expect(
+        find.text(
+          'Professional control surface for encrypted daylySport operations',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(adminDashboardRecentActivityKey), findsNothing);
     },
   );
 }
@@ -201,8 +277,6 @@ class _AdminDashboardHarness {
 
   static Future<_AdminDashboardHarness> create() async {
     initSqlite3ForTests();
-    secureContentInventoryScanDelegate =
-        (rootPath) async => scanSecureContentInventory(rootPath);
 
     final tempRoot = Directory(
       '${Directory.systemTemp.path}${Platform.pathSeparator}eri_admin_dashboard_${DateTime.now().microsecondsSinceEpoch}',
@@ -401,7 +475,6 @@ class _AdminDashboardHarness {
   }
 
   Future<void> dispose() async {
-    secureContentInventoryScanDelegate = scanSecureContentInventoryInIsolate;
     services.secureContentEncryptionJobManager.dispose();
     await services.database.close();
     await _clearPathProviderMock();
@@ -411,7 +484,6 @@ class _AdminDashboardHarness {
   }
 
   void disposeForTest() {
-    secureContentInventoryScanDelegate = scanSecureContentInventoryInIsolate;
     services.secureContentEncryptionJobManager.dispose();
   }
 }

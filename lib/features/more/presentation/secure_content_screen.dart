@@ -24,6 +24,61 @@ import 'package:path/path.dart' as p;
 const adminDashboardOverviewKey = Key('adminDashboardOverview');
 const adminDashboardUserActivityKey = Key('adminDashboardUserActivity');
 const adminDashboardRecentActivityKey = Key('adminDashboardRecentActivity');
+const adminDashboardMenuButtonKey = Key('adminDashboardMenuButton');
+const adminDashboardHomeTabKey = Key('adminDashboardHomeTab');
+const adminDashboardImportTabKey = Key('adminDashboardImportTab');
+const adminDashboardOperationsTabKey = Key('adminDashboardOperationsTab');
+const adminDashboardProfileTabKey = Key('adminDashboardProfileTab');
+const adminDashboardStatsTabKey = Key('adminDashboardStatsTab');
+
+enum _SecureContentDashboardTab { home, import, operation, profile, stats }
+
+extension _SecureContentDashboardTabX on _SecureContentDashboardTab {
+  String get label {
+    switch (this) {
+      case _SecureContentDashboardTab.home:
+        return 'Home';
+      case _SecureContentDashboardTab.import:
+        return 'Import';
+      case _SecureContentDashboardTab.operation:
+        return 'Operation';
+      case _SecureContentDashboardTab.profile:
+        return 'Profile';
+      case _SecureContentDashboardTab.stats:
+        return 'Stats';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case _SecureContentDashboardTab.home:
+        return Icons.dashboard_outlined;
+      case _SecureContentDashboardTab.import:
+        return Icons.file_upload_outlined;
+      case _SecureContentDashboardTab.operation:
+        return Icons.settings_suggest_outlined;
+      case _SecureContentDashboardTab.profile:
+        return Icons.admin_panel_settings_outlined;
+      case _SecureContentDashboardTab.stats:
+        return Icons.query_stats_outlined;
+    }
+  }
+
+  Key get key {
+    switch (this) {
+      case _SecureContentDashboardTab.home:
+        return adminDashboardHomeTabKey;
+      case _SecureContentDashboardTab.import:
+        return adminDashboardImportTabKey;
+      case _SecureContentDashboardTab.operation:
+        return adminDashboardOperationsTabKey;
+      case _SecureContentDashboardTab.profile:
+        return adminDashboardProfileTabKey;
+      case _SecureContentDashboardTab.stats:
+        return adminDashboardStatsTabKey;
+    }
+  }
+}
 
 class SecureContentScreen extends ConsumerStatefulWidget {
   const SecureContentScreen({super.key});
@@ -1318,6 +1373,388 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
     return 'mixed';
   }
 
+  Widget _buildInventoryAsyncPanel() {
+    if (_isRefreshing && _inventory == null) {
+      return const _DashboardLoadingPanel();
+    }
+    if (_errorMessage != null) {
+      return _DashboardErrorPanel(message: _errorMessage!);
+    }
+    return const _DashboardLoadingPanel();
+  }
+
+  Widget _buildTabPage({
+    required List<Widget> Function(double maxWidth) childrenBuilder,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final pageWidth =
+            constraints.maxWidth > 1480 ? 1480.0 : constraints.maxWidth;
+        return RefreshIndicator(
+          onRefresh: _refreshInventory,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            children: [
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1480),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: childrenBuilder(pageWidth),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildHomeTab({
+    required double maxWidth,
+    required AdminSessionRecord session,
+    required SecureContentInventory? inventory,
+    required _SecureContentDashboardSnapshot? snapshot,
+  }) {
+    return [
+      _DashboardHeroCard(
+        session: session,
+        inventory: inventory,
+        isRefreshing: _isRefreshing,
+        onRefresh: _refreshInventory,
+        onOpenSync: () => context.push('/sync'),
+        onLogout: _logout,
+      ),
+      const SizedBox(height: 18),
+      if (snapshot != null)
+        _OverviewMetricsGrid(key: adminDashboardOverviewKey, snapshot: snapshot)
+      else
+        _buildInventoryAsyncPanel(),
+      if (snapshot != null) ...[
+        const SizedBox(height: 18),
+        _DashboardPanelGrid(
+          maxWidth: maxWidth,
+          children: [
+            _SectionCard(
+              title: 'Category coverage',
+              subtitle:
+                  'Encrypted counts and storage footprint grouped by secure content type.',
+              child: _CategoryStatisticsPanel(snapshot: snapshot),
+            ),
+            _SectionCard(
+              title: 'Date and size trends',
+              subtitle:
+                  'Recent encrypted file volume grouped by file activity date and payload size.',
+              child: _DateAndSizePanel(snapshot: snapshot),
+            ),
+            _SectionCard(
+              key: adminDashboardUserActivityKey,
+              title: 'User activity',
+              subtitle:
+                  'Local admin activity, import volume, and recent sign-in behavior.',
+              child: _UserActivityPanel(snapshot: snapshot),
+            ),
+          ],
+        ),
+      ],
+    ];
+  }
+
+  List<Widget> _buildImportTab({required double maxWidth}) {
+    return [
+      _DashboardTabIntroCard(
+        icon: _SecureContentDashboardTab.import.icon,
+        title: 'Import workspace',
+        subtitle:
+            'Keep source selection, destination routing, and encryption review in one focused workspace without crowding the rest of the admin dashboard.',
+        badges: [
+          _StatChip(label: 'Queued files', value: '${_selectedSources.length}'),
+          _StatChip(
+            label: 'Batch status',
+            value:
+                _jobSnapshot.isRunning
+                    ? '${_jobSnapshot.settledFiles}/${_jobSnapshot.totalFiles}'
+                    : 'Idle',
+          ),
+          _StatChip(
+            label: 'Overwrite',
+            value: _overwriteExisting ? 'Enabled' : 'Disabled',
+          ),
+        ],
+      ),
+      const SizedBox(height: 18),
+      _SectionCard(
+        title: 'Import and encrypt',
+        subtitle:
+            'All import and encryption operations remain unchanged; only the GUI layout has been reorganized for clarity.',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  onPressed:
+                      _isPickingSources || _isEncrypting
+                          ? null
+                          : () => _pickFiles(),
+                  icon: const Icon(Icons.upload_file_rounded),
+                  label: Text(
+                    _isPickingSources ? 'Opening picker...' : 'Browse files',
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed:
+                      _isPickingSources || _isEncrypting
+                          ? null
+                          : () => _pickFiles(
+                            defaultVideoCategory:
+                                SecureVideoImportCategory.video,
+                            videoOnly: true,
+                          ),
+                  icon: const Icon(Icons.video_library_outlined),
+                  label: const Text('Browse videos'),
+                ),
+                OutlinedButton.icon(
+                  onPressed:
+                      _isPickingSources || _isEncrypting
+                          ? null
+                          : () => _pickFiles(
+                            defaultVideoCategory:
+                                SecureVideoImportCategory.reels,
+                            videoOnly: true,
+                          ),
+                  icon: const Icon(Icons.movie_filter_outlined),
+                  label: const Text('Browse reels'),
+                ),
+                OutlinedButton.icon(
+                  onPressed:
+                      _isPickingSources || _isEncrypting ? null : _pickFolder,
+                  icon: const Icon(Icons.drive_folder_upload_rounded),
+                  label: const Text('Browse folder'),
+                ),
+                OutlinedButton.icon(
+                  onPressed:
+                      _selectedSources.isEmpty || _isEncrypting
+                          ? null
+                          : _clearSelection,
+                  icon: const Icon(Icons.clear_all_rounded),
+                  label: const Text('Clear selection'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _EncryptionImportPanel(
+              selectedSources: _selectedSources,
+              selectedSourceRoot: _selectedSourceRoot,
+              jobSnapshot: _jobSnapshot,
+              destinationRoots: _buildDestinationRoots(),
+              jsonDestinationController: _jsonDestinationController,
+              imageDestinationController: _imageDestinationController,
+              videoDestinationController: _videoDestinationController,
+              reelsDestinationController: _reelsDestinationController,
+              overwriteExisting: _overwriteExisting,
+              isEncrypting: _isEncrypting,
+              onApplyPreset: (kind, value) {
+                final controller = switch (kind) {
+                  SecureContentImportDestinationSlot.json =>
+                    _jsonDestinationController,
+                  SecureContentImportDestinationSlot.image =>
+                    _imageDestinationController,
+                  SecureContentImportDestinationSlot.video =>
+                    _videoDestinationController,
+                  SecureContentImportDestinationSlot.reels =>
+                    _reelsDestinationController,
+                };
+                controller.text = value;
+                controller.selection = TextSelection.fromPosition(
+                  TextPosition(offset: controller.text.length),
+                );
+                setState(() {});
+              },
+              onOverwriteChanged: (value) {
+                setState(() {
+                  _overwriteExisting = value;
+                });
+              },
+              onRemoveAllByKind: _removeSourcesBySlot,
+              onAssignVideoCategory: _assignVideoCategory,
+              onRemoveSource: _removeSelectedSource,
+              onImport: _encryptSelection,
+            ),
+            if (_statusMessage != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _statusMessage!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color:
+                      _statusIsError
+                          ? Theme.of(context).colorScheme.error
+                          : Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildOperationTab({
+    required double maxWidth,
+    required List<AdminActivityRecord> activities,
+    required SecureContentInventory? inventory,
+  }) {
+    return [
+      _DashboardTabIntroCard(
+        icon: _SecureContentDashboardTab.operation.icon,
+        title: 'Operations',
+        subtitle:
+            'Keep approval workflows and maintenance actions in a dedicated operational view so routine admin tasks are easier to scan and execute.',
+        badges: [
+          _StatChip(
+            label: 'QR state',
+            value: _generatedVerificationQr == null ? 'Idle' : 'Ready',
+          ),
+          _StatChip(
+            label: 'Maintenance',
+            value: _isWarmingCaches || _isClearingCaches ? 'Busy' : 'Available',
+          ),
+        ],
+      ),
+      const SizedBox(height: 18),
+      _DashboardPanelGrid(
+        maxWidth: maxWidth,
+        children: [
+          _SectionCard(
+            title: 'Verification QR operations',
+            subtitle:
+                'Convert client request codes into scannable admin QR approvals, while preserving a manual verification-code fallback and the local audit trail.',
+            child: _VerificationOperationsPanel(
+              requestController: _verificationRequestController,
+              generatedVerificationQr: _generatedVerificationQr,
+              statusMessage: _verificationMessage,
+              statusIsError: _verificationMessageIsError,
+              isGenerating: _isGeneratingVerificationCode,
+              isClearing: _isClearingVerificationRecords,
+              activities: activities,
+              onGenerate: _generateVerificationQr,
+              onClearRecords: _clearVerificationRecords,
+            ),
+          ),
+          _SectionCard(
+            title: 'Maintenance controls',
+            subtitle:
+                'Prewarm secure caches, clear decrypted outputs, and verify scanner health.',
+            child: _MaintenancePanel(
+              inventory: inventory,
+              isWarmingCaches: _isWarmingCaches,
+              isClearingCaches: _isClearingCaches,
+              isEncrypting: _isEncrypting,
+              onWarmCaches: _warmCaches,
+              onClearCaches: _clearCaches,
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  List<Widget> _buildProfileTab({
+    required double maxWidth,
+    required AdminSessionRecord session,
+    required List<AdminUserRecord> users,
+    required List<AdminActivityRecord> activities,
+  }) {
+    return [
+      _DashboardTabIntroCard(
+        icon: _SecureContentDashboardTab.profile.icon,
+        title: 'Profile and security',
+        subtitle:
+            'Separate identity, account management, and audit visibility from operational tooling to keep administrative access workflows focused.',
+        badges: [
+          _StatChip(label: 'Admins', value: '${users.length}'),
+          _StatChip(label: 'Audit rows', value: '${activities.length}'),
+        ],
+      ),
+      const SizedBox(height: 18),
+      _DashboardPanelGrid(
+        maxWidth: maxWidth,
+        children: [
+          _SectionCard(
+            title: 'User and security management',
+            subtitle:
+                'Manage the signed-in admin account, create additional admins, and review local access state.',
+            child: _SecurityManagementPanel(
+              session: session,
+              users: users,
+              onEditAccount: () => _showProfileDialog(session),
+              onChangePassword: _showPasswordDialog,
+              onCreateAdmin: _showCreateUserDialog,
+              onClearLoginRecords: _clearLoginRecords,
+            ),
+          ),
+          _SectionCard(
+            key: adminDashboardRecentActivityKey,
+            title: 'Recent activity and login records',
+            subtitle:
+                'Audit history for authentication, inventory, maintenance, and encryption jobs.',
+            child: _RecentActivityPanel(activities: activities),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  List<Widget> _buildStatsTab({
+    required double maxWidth,
+    required SecureContentInventory? inventory,
+  }) {
+    return [
+      _DashboardTabIntroCard(
+        icon: _SecureContentDashboardTab.stats.icon,
+        title: 'Inventory and statistics',
+        subtitle:
+            'Review storage coverage, encrypted breakdowns, and detected inventory samples in a dedicated stats workspace designed for scanning large data surfaces.',
+        badges: [
+          _StatChip(
+            label: 'Coverage',
+            value:
+                inventory == null
+                    ? 'Pending'
+                    : '${inventory.encryptedCoveragePercent}%',
+          ),
+          _StatChip(
+            label: 'Encrypted files',
+            value:
+                inventory == null ? 'Pending' : '${inventory.encryptedFiles}',
+          ),
+          _StatChip(
+            label: 'Plain files',
+            value: inventory == null ? 'Pending' : '${inventory.plainFiles}',
+          ),
+        ],
+      ),
+      const SizedBox(height: 18),
+      if (inventory == null)
+        _buildInventoryAsyncPanel()
+      else ...[
+        _DashboardPanelGrid(
+          maxWidth: maxWidth,
+          children: [
+            _InventoryOverviewCard(inventory: inventory),
+            _InventoryBreakdownCard(inventory: inventory),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _InventorySamplesCard(inventory: inventory),
+      ],
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1339,315 +1776,122 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       return const Scaffold(body: SizedBox.shrink());
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Secure Content Operations'),
-        actions: [
-          IconButton(
-            onPressed: _isRefreshing ? null : _refreshInventory,
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Rescan offline content',
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'profile':
-                  _showProfileDialog(session);
-                  break;
-                case 'password':
-                  _showPasswordDialog();
-                  break;
-                case 'user':
-                  _showCreateUserDialog();
-                  break;
-                case 'logins':
-                  _clearLoginRecords();
-                  break;
-                case 'logout':
-                  _logout();
-                  break;
-              }
-            },
-            itemBuilder: (context) {
-              return const [
-                PopupMenuItem<String>(
-                  value: 'profile',
-                  child: Text('Account settings'),
-                ),
-                PopupMenuItem<String>(
-                  value: 'password',
-                  child: Text('Change password'),
-                ),
-                PopupMenuItem<String>(
-                  value: 'user',
-                  child: Text('Create admin user'),
-                ),
-                PopupMenuItem<String>(
-                  value: 'logins',
-                  child: Text('Clear login records'),
-                ),
-                PopupMenuDivider(),
-                PopupMenuItem<String>(value: 'logout', child: Text('Logout')),
-              ];
-            },
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _refreshInventory,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                _DashboardHeroCard(
-                  session: session,
-                  inventory: inventory,
-                  isRefreshing: _isRefreshing,
-                  onRefresh: _refreshInventory,
-                  onOpenSync: () => context.push('/sync'),
-                  onLogout: _logout,
-                ),
-                const SizedBox(height: 18),
-                if (snapshot != null)
-                  _OverviewMetricsGrid(
-                    key: adminDashboardOverviewKey,
-                    snapshot: snapshot,
-                  )
-                else if (_isRefreshing)
-                  const _DashboardLoadingPanel()
-                else if (_errorMessage != null)
-                  _DashboardErrorPanel(message: _errorMessage!)
-                else
-                  const _DashboardLoadingPanel(),
-                const SizedBox(height: 18),
-                if (snapshot != null)
-                  _DashboardPanelGrid(
-                    maxWidth: constraints.maxWidth,
-                    children: [
-                      _SectionCard(
-                        title: 'Category coverage',
-                        subtitle:
-                            'Encrypted counts and storage footprint grouped by secure content type.',
-                        child: _CategoryStatisticsPanel(snapshot: snapshot),
-                      ),
-                      _SectionCard(
-                        title: 'Date and size trends',
-                        subtitle:
-                            'Recent encrypted file volume grouped by file activity date and payload size.',
-                        child: _DateAndSizePanel(snapshot: snapshot),
-                      ),
-                      _SectionCard(
-                        key: adminDashboardUserActivityKey,
-                        title: 'User activity',
-                        subtitle:
-                            'Local admin activity, import volume, and recent sign-in behavior.',
-                        child: _UserActivityPanel(snapshot: snapshot),
-                      ),
-                    ],
+    return DefaultTabController(
+      length: _SecureContentDashboardTab.values.length,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Secure Content Operations'),
+          actions: [
+            IconButton(
+              onPressed: _isRefreshing ? null : _refreshInventory,
+              icon: const Icon(Icons.refresh_rounded),
+              tooltip: 'Rescan offline content',
+            ),
+            PopupMenuButton<String>(
+              key: adminDashboardMenuButtonKey,
+              onSelected: (value) {
+                switch (value) {
+                  case 'profile':
+                    _showProfileDialog(session);
+                    break;
+                  case 'password':
+                    _showPasswordDialog();
+                    break;
+                  case 'user':
+                    _showCreateUserDialog();
+                    break;
+                  case 'logins':
+                    _clearLoginRecords();
+                    break;
+                  case 'logout':
+                    _logout();
+                    break;
+                }
+              },
+              itemBuilder: (context) {
+                return const [
+                  PopupMenuItem<String>(
+                    value: 'profile',
+                    child: Text('Account settings'),
                   ),
-                if (snapshot != null) const SizedBox(height: 18),
-                _DashboardPanelGrid(
-                  maxWidth: constraints.maxWidth,
-                  children: [
-                    _SectionCard(
-                      title: 'Encryption actions',
-                      subtitle:
-                          'Select plain files or folders and import them into encrypted daylySport destinations.',
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: [
-                              FilledButton.icon(
-                                onPressed:
-                                    _isPickingSources || _isEncrypting
-                                        ? null
-                                        : () => _pickFiles(),
-                                icon: const Icon(Icons.upload_file_rounded),
-                                label: Text(
-                                  _isPickingSources
-                                      ? 'Opening picker...'
-                                      : 'Browse files',
-                                ),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed:
-                                    _isPickingSources || _isEncrypting
-                                        ? null
-                                        : () => _pickFiles(
-                                          defaultVideoCategory:
-                                              SecureVideoImportCategory.video,
-                                          videoOnly: true,
-                                        ),
-                                icon: const Icon(Icons.video_library_outlined),
-                                label: const Text('Browse videos'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed:
-                                    _isPickingSources || _isEncrypting
-                                        ? null
-                                        : () => _pickFiles(
-                                          defaultVideoCategory:
-                                              SecureVideoImportCategory.reels,
-                                          videoOnly: true,
-                                        ),
-                                icon: const Icon(Icons.movie_filter_outlined),
-                                label: const Text('Browse reels'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed:
-                                    _isPickingSources || _isEncrypting
-                                        ? null
-                                        : _pickFolder,
-                                icon: const Icon(
-                                  Icons.drive_folder_upload_rounded,
-                                ),
-                                label: const Text('Browse folder'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed:
-                                    _selectedSources.isEmpty || _isEncrypting
-                                        ? null
-                                        : _clearSelection,
-                                icon: const Icon(Icons.clear_all_rounded),
-                                label: const Text('Clear selection'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          _EncryptionImportPanel(
-                            selectedSources: _selectedSources,
-                            selectedSourceRoot: _selectedSourceRoot,
-                            jobSnapshot: _jobSnapshot,
-                            destinationRoots: _buildDestinationRoots(),
-                            jsonDestinationController:
-                                _jsonDestinationController,
-                            imageDestinationController:
-                                _imageDestinationController,
-                            videoDestinationController:
-                                _videoDestinationController,
-                            reelsDestinationController:
-                                _reelsDestinationController,
-                            overwriteExisting: _overwriteExisting,
-                            isEncrypting: _isEncrypting,
-                            onApplyPreset: (kind, value) {
-                              final controller = switch (kind) {
-                                SecureContentImportDestinationSlot.json =>
-                                  _jsonDestinationController,
-                                SecureContentImportDestinationSlot.image =>
-                                  _imageDestinationController,
-                                SecureContentImportDestinationSlot.video =>
-                                  _videoDestinationController,
-                                SecureContentImportDestinationSlot.reels =>
-                                  _reelsDestinationController,
-                              };
-                              controller.text = value;
-                              controller.selection = TextSelection.fromPosition(
-                                TextPosition(offset: controller.text.length),
-                              );
-                              setState(() {});
-                            },
-                            onOverwriteChanged: (value) {
-                              setState(() {
-                                _overwriteExisting = value;
-                              });
-                            },
-                            onRemoveAllByKind: _removeSourcesBySlot,
-                            onAssignVideoCategory: _assignVideoCategory,
-                            onRemoveSource: _removeSelectedSource,
-                            onImport: _encryptSelection,
-                          ),
-                          if (_statusMessage != null) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              _statusMessage!,
-                              style: Theme.of(
-                                context,
-                              ).textTheme.bodySmall?.copyWith(
-                                color:
-                                    _statusIsError
-                                        ? scheme.error
-                                        : scheme.primary,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    _SectionCard(
-                      title: 'Verification QR operations',
-                      subtitle:
-                          'Convert client request codes into scannable admin QR approvals, while preserving a manual verification-code fallback and the local audit trail.',
-                      child: _VerificationOperationsPanel(
-                        requestController: _verificationRequestController,
-                        generatedVerificationQr: _generatedVerificationQr,
-                        statusMessage: _verificationMessage,
-                        statusIsError: _verificationMessageIsError,
-                        isGenerating: _isGeneratingVerificationCode,
-                        isClearing: _isClearingVerificationRecords,
-                        activities: activityService.records.toList(
-                          growable: false,
-                        ),
-                        onGenerate: _generateVerificationQr,
-                        onClearRecords: _clearVerificationRecords,
-                      ),
-                    ),
-                    _SectionCard(
-                      title: 'Maintenance controls',
-                      subtitle:
-                          'Prewarm secure caches, clear decrypted outputs, and verify scanner health.',
-                      child: _MaintenancePanel(
-                        inventory: inventory,
-                        isWarmingCaches: _isWarmingCaches,
-                        isClearingCaches: _isClearingCaches,
-                        isEncrypting: _isEncrypting,
-                        onWarmCaches: _warmCaches,
-                        onClearCaches: _clearCaches,
-                      ),
-                    ),
-                    _SectionCard(
-                      title: 'User and security management',
-                      subtitle:
-                          'Manage the signed-in admin account, create additional admins, and review local access state.',
-                      child: _SecurityManagementPanel(
-                        session: session,
-                        users: authService.users.toList(growable: false),
-                        onEditAccount: () => _showProfileDialog(session),
-                        onChangePassword: _showPasswordDialog,
-                        onCreateAdmin: _showCreateUserDialog,
-                        onClearLoginRecords: _clearLoginRecords,
-                      ),
-                    ),
-                  ],
+                  PopupMenuItem<String>(
+                    value: 'password',
+                    child: Text('Change password'),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'user',
+                    child: Text('Create admin user'),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'logins',
+                    child: Text('Clear login records'),
+                  ),
+                  PopupMenuDivider(),
+                  PopupMenuItem<String>(value: 'logout', child: Text('Logout')),
+                ];
+              },
+            ),
+          ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(64),
+            child: Container(
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: TabBar(
+                isScrollable: true,
+                dividerColor: Colors.transparent,
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 18),
+                indicator: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(999),
                 ),
-                const SizedBox(height: 18),
-                _SectionCard(
-                  key: adminDashboardRecentActivityKey,
-                  title: 'Recent activity and login records',
-                  subtitle:
-                      'Audit history for authentication, inventory, maintenance, and encryption jobs.',
-                  child: _RecentActivityPanel(
+                tabs: [
+                  for (final tab in _SecureContentDashboardTab.values)
+                    Tab(key: tab.key, icon: Icon(tab.icon), text: tab.label),
+                ],
+              ),
+            ),
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            _buildTabPage(
+              childrenBuilder:
+                  (maxWidth) => _buildHomeTab(
+                    maxWidth: maxWidth,
+                    session: session,
+                    inventory: inventory,
+                    snapshot: snapshot,
+                  ),
+            ),
+            _buildTabPage(
+              childrenBuilder:
+                  (maxWidth) => _buildImportTab(maxWidth: maxWidth),
+            ),
+            _buildTabPage(
+              childrenBuilder:
+                  (maxWidth) => _buildOperationTab(
+                    maxWidth: maxWidth,
+                    activities: activityService.records.toList(growable: false),
+                    inventory: inventory,
+                  ),
+            ),
+            _buildTabPage(
+              childrenBuilder:
+                  (maxWidth) => _buildProfileTab(
+                    maxWidth: maxWidth,
+                    session: session,
+                    users: authService.users.toList(growable: false),
                     activities: activityService.records.toList(growable: false),
                   ),
-                ),
-                const SizedBox(height: 18),
-                if (_isRefreshing && inventory == null)
-                  const _DashboardLoadingPanel()
-                else if (_errorMessage != null)
-                  _DashboardErrorPanel(message: _errorMessage!)
-                else if (inventory != null) ...[
-                  _InventoryOverviewCard(inventory: inventory),
-                  const SizedBox(height: 14),
-                  _InventoryBreakdownCard(inventory: inventory),
-                  const SizedBox(height: 14),
-                  _InventorySamplesCard(inventory: inventory),
-                ],
-              ],
-            );
-          },
+            ),
+            _buildTabPage(
+              childrenBuilder:
+                  (maxWidth) =>
+                      _buildStatsTab(maxWidth: maxWidth, inventory: inventory),
+            ),
+          ],
         ),
       ),
     );
@@ -2258,6 +2502,79 @@ class _SectionCard extends StatelessWidget {
             child,
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DashboardTabIntroCard extends StatelessWidget {
+  const _DashboardTabIntroCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.badges = const <Widget>[],
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Widget> badges;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            scheme.primary.withValues(alpha: 0.1),
+            scheme.surfaceContainerLow,
+            scheme.secondary.withValues(alpha: 0.08),
+          ],
+        ),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Icon(icon, color: scheme.onPrimaryContainer),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (badges.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Wrap(spacing: 10, runSpacing: 10, children: badges),
+          ],
+        ],
       ),
     );
   }
