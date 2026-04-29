@@ -28,11 +28,13 @@ import 'package:eri_sports/features/admin/data/admin_auth_service.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
 import 'package:eri_sports/features/media/data/video_resume_service.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
+import 'package:eri_sports/features/verification/data/content_verification_service.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -113,13 +115,45 @@ void main() {
 
     expect(find.text('Position'), findsOneWidget);
   });
+
+  testWidgets('settings verification flow generates and stores a client request QR', (
+    tester,
+  ) async {
+    final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+    final harness = await _TestHarness.create(tester, binding);
+    addTearDown(harness.dispose);
+
+    GoRouter.of(tester.element(find.text('Arsenal').first)).go('/settings');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pending Content Verification'), findsOneWidget);
+    expect(find.text('Generate client QR'), findsOneWidget);
+
+    await tester.tap(find.text('Generate client QR').first.hitTestable());
+    await tester.pumpAndSettle();
+
+    final verificationService = ContentVerificationService(
+      cacheStore: harness.services.cacheStore,
+    );
+    final pendingRequest = verificationService.readPendingClientRequest();
+
+    expect(find.text('Client verification QR'), findsOneWidget);
+    expect(find.text('Show this QR to the admin app first'), findsOneWidget);
+    expect(pendingRequest, isNotNull);
+    expect(pendingRequest!.requestCode, startsWith('ERI-REQ1-'));
+  });
 }
 
 class _TestHarness {
-  _TestHarness({required this.database, required this.tempRoot});
+  _TestHarness({
+    required this.database,
+    required this.tempRoot,
+    required this.services,
+  });
 
   final AppDatabase database;
   final Directory tempRoot;
+  final AppServices services;
 
   static Future<_TestHarness> create(
     WidgetTester tester,
@@ -240,7 +274,11 @@ class _TestHarness {
     );
     await tester.pumpAndSettle();
 
-    return _TestHarness(database: database, tempRoot: tempRoot);
+    return _TestHarness(
+      database: database,
+      tempRoot: tempRoot,
+      services: services,
+    );
   }
 
   Future<void> dispose() async {
