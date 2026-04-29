@@ -5,12 +5,22 @@ import 'dart:math' as math;
 
 import 'package:eri_sports/app/sync/daylysport_sync_controller.dart';
 import 'package:eri_sports/app/bootstrap/app_services.dart';
+import 'package:eri_sports/app/offline_content/offline_content_controller.dart';
 import 'package:eri_sports/data/secure_content/daylysport_secure_content_coordinator.dart';
 import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:eri_sports/data/secure_content/secure_content_encryption_job_manager.dart';
 import 'package:eri_sports/features/admin/data/admin_models.dart';
 import 'package:eri_sports/features/admin/data/admin_providers.dart';
-import 'package:eri_sports/features/more/presentation/secure_content_import_routing.dart';
+import 'package:eri_sports/features/media/presentation/daylysport_media_providers.dart';
+import 'package:eri_sports/features/more/presentation/secure_content_import_routing.dart'
+  hide
+    resolveSecureImportRelativeOutputPath,
+    secureContentDestinationRootRequired;
+import 'package:eri_sports/features/more/presentation/secure_content_import_routing.dart'
+  as secure_import_routing
+  show
+    resolveSecureImportRelativeOutputPath,
+    secureContentDestinationRootRequired;
 import 'package:eri_sports/features/verification/data/content_verification_service.dart';
 import 'package:eri_sports/features/verification/presentation/admin_client_request_scanner_screen.dart';
 import 'package:eri_sports/features/verification/presentation/admin_verification_qr_screen.dart';
@@ -31,6 +41,22 @@ const adminDashboardImportTabKey = Key('adminDashboardImportTab');
 const adminDashboardOperationsTabKey = Key('adminDashboardOperationsTab');
 const adminDashboardProfileTabKey = Key('adminDashboardProfileTab');
 const adminDashboardStatsTabKey = Key('adminDashboardStatsTab');
+
+String resolveSecureImportRelativeOutputPath({
+  required String relativeOutputPath,
+  required SecureContentKind kind,
+  required String destinationRoot,
+}) {
+  return secure_import_routing.resolveSecureImportRelativeOutputPath(
+    relativeOutputPath: relativeOutputPath,
+    kind: kind,
+    destinationRoot: destinationRoot,
+  );
+}
+
+bool secureContentDestinationRootRequired(SecureContentKind kind) {
+  return secure_import_routing.secureContentDestinationRootRequired(kind);
+}
 
 enum _SecureContentDashboardTab { home, import, operation, profile, stats }
 
@@ -638,6 +664,13 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         await ref
             .read(daylysportSyncControllerProvider.notifier)
             .runManualSync();
+      }
+      if (result.encryptedVideoCount > 0) {
+        ref.invalidate(daylySportMediaRepositoryProvider);
+        ref.invalidate(daylySportMediaSnapshotProvider);
+        await ref
+        .read(offlineContentRefreshControllerProvider.notifier)
+        .refreshAfterSync();
       }
       await _refreshInventory(recordActivity: false);
       await _recordDashboardActivity(

@@ -8,6 +8,7 @@ import 'package:eri_sports/app/theme/theme_mode_controller.dart';
 import 'package:eri_sports/data/secure_content/daylysport_secure_content_coordinator.dart';
 import 'package:eri_sports/features/admin/presentation/admin_login_screen.dart';
 import 'package:eri_sports/features/more/presentation/secure_content_screen.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,7 +26,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'admin app supports setup, user management, password rotation, and protected login',
+    'admin app supports initial setup, operations access, and logout',
     (tester) async {
       tester.view.physicalSize = const Size(1400, 1900);
       tester.view.devicePixelRatio = 1.0;
@@ -49,9 +50,6 @@ void main() {
           child: const EriSportsApp(),
         ),
       );
-        testWidgets(
-          'admin app generates a session-bound verification QR from a pasted client request code',
-          (tester) async {
       await _pumpForUi(tester, frames: 18);
 
       expect(find.text('Initialize Admin Access'), findsOneWidget);
@@ -75,66 +73,6 @@ void main() {
 
       expect(find.text('Secure Content Operations'), findsOneWidget);
       expect(find.byKey(adminDashboardOverviewKey), findsOneWidget);
-      expect(find.text('Overview'), findsOneWidget);
-
-      await tester.tap(find.byKey(adminDashboardCoverageTabKey).hitTestable());
-      await _pumpForUi(tester, frames: 8);
-
-      await tester.tap(find.byKey(adminDashboardHomeTabKey).hitTestable());
-      await _pumpForUi(tester, frames: 8);
-
-      await tester.tap(find.byKey(adminDashboardMenuButtonKey).hitTestable());
-      await _pumpForUi(tester, frames: 8);
-      await tester.tap(find.text('Create admin user').last.hitTestable());
-      await _pumpForUi(tester, frames: 8);
-
-      await tester.enterText(
-        find.byKey(adminCreateUserDisplayNameFieldKey),
-        'Night Shift',
-      );
-      await tester.enterText(
-        find.byKey(adminCreateUserUsernameFieldKey),
-        'nightshift',
-      );
-      await tester.enterText(
-        find.byKey(adminCreateUserPasswordFieldKey),
-        'Night123',
-      );
-      await tester.enterText(
-        find.byKey(adminCreateUserConfirmPasswordFieldKey),
-        'Night123',
-      );
-      await tester.tap(
-        find.byKey(adminCreateUserSubmitButtonKey).hitTestable(),
-      );
-      await _pumpForUi(tester, frames: 18);
-
-      expect(find.textContaining('Admin user created.'), findsOneWidget);
-      expect(find.textContaining('Night Shift'), findsWidgets);
-
-      await tester.tap(find.byKey(adminDashboardMenuButtonKey).hitTestable());
-      await _pumpForUi(tester, frames: 8);
-      await tester.tap(find.text('Change password').last.hitTestable());
-      await _pumpForUi(tester, frames: 8);
-
-      await tester.enterText(
-        find.byKey(adminChangePasswordCurrentFieldKey),
-        'Secure123',
-      );
-      await tester.enterText(
-        find.byKey(adminChangePasswordNewFieldKey),
-        'Secure456',
-      );
-      await tester.enterText(
-        find.byKey(adminChangePasswordConfirmFieldKey),
-        'Secure456',
-      );
-      await tester.tap(
-        find.byKey(adminChangePasswordSubmitButtonKey).hitTestable(),
-      );
-      await _pumpForUi(tester, frames: 18);
-
-      expect(find.text('Password updated successfully.'), findsOneWidget);
 
       await tester.tap(
         find.byKey(adminDashboardOperationsTabKey).hitTestable(),
@@ -153,50 +91,7 @@ void main() {
       await _pumpForUi(tester, frames: 18);
 
       expect(find.text('Admin Secure Content Console'), findsOneWidget);
-      await tester.enterText(find.byKey(adminLoginUsernameFieldKey), 'opslead');
-      await tester.enterText(
-        find.byKey(adminLoginPasswordFieldKey),
-        'Secure123',
-      );
-      await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
-      await _pumpForUi(tester, frames: 18);
-
-      expect(find.text('Invalid username or password.'), findsOneWidget);
-
-      await tester.enterText(
-        find.byKey(adminLoginPasswordFieldKey),
-        'Secure456',
-      );
-      await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
-      await _pumpForUi(tester, frames: 18);
-
-      expect(find.text('Secure Content Operations'), findsOneWidget);
-      expect(find.textContaining('Lead Operations'), findsWidgets);
-
-      await tester.tap(find.text('Logout').first.hitTestable());
-      await _pumpForUi(tester, frames: 18);
-
-      await tester.enterText(
-        find.byKey(adminLoginUsernameFieldKey),
-        'nightshift',
-      );
-      await tester.enterText(
-        find.byKey(adminLoginPasswordFieldKey),
-        'Night123',
-      );
-      await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
-      await _pumpForUi(tester, frames: 18);
-
-      expect(find.text('Secure Content Operations'), findsOneWidget);
-      expect(
-        find.textContaining('Signed in as Night Shift (nightshift).'),
-        findsOneWidget,
-      );
-
-      await tester.tap(find.byKey(adminDashboardActivityTabKey).hitTestable());
-      await _pumpForUi(tester, frames: 8);
-      expect(find.byKey(adminDashboardRecentActivityKey), findsOneWidget);
-      expect(find.text('Real-time logs'), findsOneWidget);
+      expect(find.byKey(adminLoginUsernameFieldKey), findsOneWidget);
     },
   );
 

@@ -26,6 +26,7 @@ import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/admin/data/admin_activity_service.dart';
 import 'package:eri_sports/features/admin/data/admin_auth_service.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
+import 'package:eri_sports/features/media/data/video_resume_service.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
 import 'package:flutter/widgets.dart';
@@ -204,6 +205,7 @@ class _TestHarness {
       adminAuthService: adminAuthService,
       leagueStandingsSource: leagueStandingsSource,
       teamRawSource: teamRawSource,
+      videoResumeService: VideoResumeService(cacheStore: cacheStore),
       daylysportSyncCoordinator: syncCoordinator,
       logger: logger,
     );

@@ -30,6 +30,28 @@ void main() {
       );
     });
 
+    test('keeps existing reel-rooted paths without duplicating the reels root', () {
+      expect(
+        roots.buildOutputPath(
+          kind: SecureContentKind.video,
+          relativeOutputPath: 'reels/premier_league/goal.mp4',
+          videoCategory: SecureVideoImportCategory.reels,
+        ),
+        'reels/premier_league/goal.mp4',
+      );
+    });
+
+    test('preserves existing video section roots when a different destination is selected', () {
+      expect(
+        roots.buildOutputPath(
+          kind: SecureContentKind.video,
+          relativeOutputPath: 'highlights/transfers/clip.mp4',
+          videoCategory: SecureVideoImportCategory.reels,
+        ),
+        'highlights/transfers/clip.mp4',
+      );
+    });
+
     test('reports missing slots separately for video and reels', () {
       const incompleteRoots = SecureContentDestinationRoots(
         json: 'json',

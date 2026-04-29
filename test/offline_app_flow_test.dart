@@ -27,6 +27,7 @@ import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/admin/data/admin_activity_service.dart';
 import 'package:eri_sports/features/admin/data/admin_auth_service.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
+import 'package:eri_sports/features/media/data/video_resume_service.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
 import 'package:flutter/material.dart';
@@ -94,7 +95,7 @@ void main() {
     await _pumpForStability(tester);
   });
 
-  testWidgets('settings theme controls and secure content tools work', (
+  testWidgets('settings theme controls and offline runtime tools work', (
     tester,
   ) async {
     final harness = await _WidgetHarness.create(tester);
@@ -104,7 +105,7 @@ void main() {
     await _pumpUntilVisible(tester, find.text('Appearance'));
 
     expect(find.text('Settings'), findsOneWidget);
-    expect(find.text('Offline Content Security'), findsOneWidget);
+    expect(find.text('Offline Content Runtime'), findsOneWidget);
 
     await tester.tap(find.text('Dark').first.hitTestable());
     await _pumpForStability(tester);
@@ -115,26 +116,17 @@ void main() {
       ThemeMode.dark,
     );
 
-    await tester.tap(find.text('Open secure content').first.hitTestable());
-    await _pumpUntilVisible(tester, find.text('Encrypted offline runtime'));
-    await _pumpUntilVisible(tester, find.text('Inventory overview'));
+    expect(find.text('Open sync tools'), findsOneWidget);
+    expect(find.text('Prewarm decryption'), findsOneWidget);
+    expect(find.text('Refresh cache'), findsOneWidget);
 
-    expect(find.text('Warm secure caches'), findsOneWidget);
-    expect(find.text('Clear decrypted caches'), findsOneWidget);
-
-    await tester.tap(find.text('Warm secure caches').first.hitTestable());
+    await tester.tap(find.text('Open sync tools').first.hitTestable());
+    await _pumpUntilVisible(tester, find.text('Synchronize Data'));
     await _pumpUntilVisible(
       tester,
-      find.text('Secure runtime caches are ready for JSON, images, and video.'),
+      find.text('daylySport runtime synchronization'),
     );
-
-    await tester.tap(find.text('Clear decrypted caches').first.hitTestable());
-    await _pumpUntilVisible(
-      tester,
-      find.text(
-        'Decrypted cache files were removed. Encrypted source files were not changed.',
-      ),
-    );
+    expect(find.text('Synchronize daylySport data'), findsOneWidget);
   });
 
   testWidgets('home date strip centers active day on load and date changes', (
@@ -276,6 +268,7 @@ class _WidgetHarness {
       adminAuthService: adminAuthService,
       leagueStandingsSource: leagueStandingsSource,
       teamRawSource: teamRawSource,
+      videoResumeService: VideoResumeService(cacheStore: cacheStore),
       daylysportSyncCoordinator: syncCoordinator,
       logger: logger,
     );

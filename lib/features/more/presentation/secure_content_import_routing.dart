@@ -1,6 +1,23 @@
 import 'package:eri_sports/data/secure_content/encrypted_file_resolver.dart';
 import 'package:path/path.dart' as p;
 
+const Set<String> _knownSecureVideoDestinationRoots = <String>{
+  'reels',
+  'shorts',
+  'short-videos',
+  'short_videos',
+  'highlights',
+  'highlight',
+  'video-news',
+  'video_news',
+  'news-videos',
+  'news_videos',
+  'updates',
+  'update',
+  'video',
+  'videos',
+};
+
 enum SecureContentImportDestinationSlot { json, image, video, reels }
 
 enum SecureVideoImportCategory { video, reels }
@@ -39,6 +56,40 @@ extension SecureVideoImportCategoryX on SecureVideoImportCategory {
         return SecureContentImportDestinationSlot.reels;
     }
   }
+}
+
+bool secureContentDestinationRootRequired(SecureContentKind kind) {
+  switch (kind) {
+    case SecureContentKind.json:
+    case SecureContentKind.image:
+      return true;
+    case SecureContentKind.video:
+    case SecureContentKind.other:
+      return false;
+  }
+}
+
+String resolveSecureImportRelativeOutputPath({
+  required String relativeOutputPath,
+  required SecureContentKind kind,
+  required String destinationRoot,
+}) {
+  final normalizedPath = _normalizeSecureImportPath(relativeOutputPath);
+  final normalizedRoot = _normalizeSecureImportPath(destinationRoot);
+
+  if (normalizedPath.isEmpty) {
+    return normalizedRoot;
+  }
+  if (normalizedRoot.isEmpty) {
+    return normalizedPath;
+  }
+  if (_pathStartsWithRoot(normalizedPath, normalizedRoot)) {
+    return normalizedPath;
+  }
+  if (kind == SecureContentKind.video && _hasKnownVideoRoot(normalizedPath)) {
+    return normalizedPath;
+  }
+  return p.join(normalizedRoot, normalizedPath).replaceAll('\\', '/');
 }
 
 class SecureContentImportRoutingEntry {
@@ -102,10 +153,11 @@ class SecureContentDestinationRoots {
     SecureVideoImportCategory videoCategory = SecureVideoImportCategory.video,
   }) {
     final root = rootFor(kind: kind, videoCategory: videoCategory);
-    if (root.isEmpty) {
-      return relativeOutputPath.replaceAll('\\', '/');
-    }
-    return p.join(root, relativeOutputPath).replaceAll('\\', '/');
+    return resolveSecureImportRelativeOutputPath(
+      relativeOutputPath: relativeOutputPath,
+      kind: kind,
+      destinationRoot: root,
+    );
   }
 
   List<SecureContentImportDestinationSlot> missingSlotsFor(
@@ -125,4 +177,25 @@ class SecureContentDestinationRoots {
     }
     return missing.toList(growable: false);
   }
+}
+
+String _normalizeSecureImportPath(String rawPath) {
+  final normalized = p.normalize(rawPath.trim().replaceAll('\\', '/'));
+  return normalized
+      .replaceAll('\\', '/')
+      .split('/')
+      .where(
+        (segment) => segment.isNotEmpty && segment != '.' && segment != '..',
+      )
+      .join('/');
+}
+
+bool _pathStartsWithRoot(String path, String root) {
+  return path == root || path.startsWith('$root/');
+}
+
+bool _hasKnownVideoRoot(String path) {
+  final slashIndex = path.indexOf('/');
+  final firstSegment = slashIndex >= 0 ? path.substring(0, slashIndex) : path;
+  return _knownSecureVideoDestinationRoots.contains(firstSegment);
 }
