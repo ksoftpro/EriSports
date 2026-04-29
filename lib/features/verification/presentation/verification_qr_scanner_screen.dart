@@ -59,7 +59,7 @@ class _VerificationQrScannerScreenState
             errorBuilder: (context, error, child) {
               return _ScannerErrorPanel(
                 message:
-                    'Unable to access the camera. Use the manual verification code fallback instead.',
+                    'Unable to access the camera. Re-open this screen after camera access is available to scan the admin approval QR.',
                 accentColor: scheme.primary,
               );
             },
@@ -97,7 +97,7 @@ class _VerificationQrScannerScreenState
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'The client app will validate the approval payload before any pending content is unlocked.',
+                    'The client app will validate that the approval payload matches the request QR generated on this device before any pending content is unlocked.',
                     textAlign: TextAlign.center,
                     style: Theme.of(
                       context,
@@ -139,7 +139,7 @@ class _VerificationQrScannerScreenState
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'If scanning is unavailable, use the manual verification code shown in the admin app as a fallback.',
+                          'The scanned QR must come from the admin app after it has already scanned the client request QR for this same verification session.',
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: Colors.white70),
                         ),

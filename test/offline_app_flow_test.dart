@@ -107,6 +107,7 @@ void main() {
 
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Pending Content Verification'), findsOneWidget);
+    expect(find.text('Generate client QR'), findsOneWidget);
     expect(find.text('Scan admin QR'), findsOneWidget);
 
     await tester.tap(find.text('Dark').first.hitTestable());
@@ -121,10 +122,8 @@ void main() {
     final verificationService = ContentVerificationService(
       cacheStore: DaylySportCacheStore(sharedPreferences: harness.preferences),
     );
-    expect(find.text('Device request code'), findsNothing);
-    expect(find.text('Generate request code'), findsNothing);
-    expect(find.text('Admin verification code'), findsNothing);
-    expect(find.text('Verify pending content'), findsNothing);
+    expect(find.text('Step 1: Generate client request QR'), findsOneWidget);
+    expect(find.text('Step 2: Scan admin approval QR'), findsOneWidget);
     expect(verificationService.readClientState().lastVerifiedAtUtc, isNull);
   });
 

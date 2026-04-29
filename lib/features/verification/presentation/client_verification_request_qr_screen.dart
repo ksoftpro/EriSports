@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-class AdminVerificationQrScreen extends StatelessWidget {
-  const AdminVerificationQrScreen({
+class ClientVerificationRequestQrScreen extends StatelessWidget {
+  const ClientVerificationRequestQrScreen({
     super.key,
-    required this.payload,
+    required this.request,
   });
 
-  final VerificationQrPayload payload;
+  final ClientVerificationRequest request;
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +17,7 @@ class AdminVerificationQrScreen extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Admin verification QR')),
+      appBar: AppBar(title: const Text('Client verification QR')),
       body: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -26,7 +26,7 @@ class AdminVerificationQrScreen extends StatelessWidget {
             colors: <Color>[
               scheme.primary.withValues(alpha: 0.08),
               scheme.surface,
-              scheme.secondary.withValues(alpha: 0.08),
+              scheme.tertiary.withValues(alpha: 0.08),
             ],
           ),
         ),
@@ -40,13 +40,13 @@ class AdminVerificationQrScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Scan this session-bound QR from the client app',
+                      'Show this QR to the admin app first',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'This approval is bound to the scanned client request, expires automatically, and completes the second half of the device verification flow after a successful scan.',
+                      'The admin app must scan this client request QR before it can generate the unique approval QR for this device and verification session.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium,
                     ),
@@ -67,7 +67,7 @@ class AdminVerificationQrScreen extends StatelessWidget {
                       child: Column(
                         children: [
                           QrImageView(
-                            data: payload.qrPayload,
+                            data: request.requestCode,
                             version: QrVersions.auto,
                             size: 280,
                             backgroundColor: Colors.white,
@@ -75,7 +75,7 @@ class AdminVerificationQrScreen extends StatelessWidget {
                           const SizedBox(height: 18),
                           Text(
                             ContentVerificationService.featureLabel(
-                              payload.feature,
+                              request.feature,
                             ),
                             style: theme.textTheme.titleMedium?.copyWith(
                               color: Colors.black87,
@@ -85,10 +85,11 @@ class AdminVerificationQrScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Session-bound admin approval',
+                            '${request.pendingCounts.totalPending} pending item${request.pendingCounts.totalPending == 1 ? '' : 's'} waiting for admin verification',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: Colors.black54,
                             ),
+                            textAlign: TextAlign.center,
                           ),
                         ],
                       ),
@@ -100,16 +101,18 @@ class AdminVerificationQrScreen extends StatelessWidget {
                       runSpacing: 10,
                       children: [
                         _InfoChip(
-                          label: 'Issued',
+                          label: 'Generated',
                           value: DateFormat(
                             'MMM d, yyyy HH:mm',
-                          ).format(payload.issuedAtUtc.toLocal()),
+                          ).format(request.generatedAtUtc.toLocal()),
                         ),
                         _InfoChip(
-                          label: 'Valid until',
-                          value: DateFormat(
-                            'MMM d, yyyy HH:mm',
-                          ).format(payload.expiresAtUtc.toLocal()),
+                          label: 'Request day',
+                          value: request.requestDayKey,
+                        ),
+                        _InfoChip(
+                          label: 'Device seed',
+                          value: request.seedSource.name,
                         ),
                       ],
                     ),

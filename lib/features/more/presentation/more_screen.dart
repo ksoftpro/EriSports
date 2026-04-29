@@ -8,6 +8,7 @@ import 'package:eri_sports/data/import/import_coordinator.dart';
 import 'package:eri_sports/data/sync/daylysport_sync_coordinator.dart';
 import 'package:eri_sports/features/verification/data/content_verification_service.dart';
 import 'package:eri_sports/features/verification/data/device_verification_identity.dart';
+import 'package:eri_sports/features/verification/presentation/client_verification_request_qr_screen.dart';
 import 'package:eri_sports/features/verification/presentation/verification_qr_scanner_screen.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +28,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
   bool _isPickingJsonFolder = false;
   bool _isRunningOfflineAction = false;
   bool _isApplyingVerificationCode = false;
+  bool _isPreparingRequestQr = false;
   String? _folderSelectionMessage;
   AssetDiagnosticsReport? _assetDiagnostics;
   String? _verificationStatusMessage;
@@ -79,10 +81,19 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
 
     try {
       final service = ref.read(contentVerificationServiceProvider);
+      final pendingRequest = service.readPendingClientRequest();
+      if (pendingRequest == null) {
+        throw const FormatException(
+          'Generate the client verification QR first, then scan the admin QR for the same session.',
+        );
+      }
       final verificationPayload = service.validateVerificationQrPayload(
         qrPayload: qrPayload,
+        expectedRequest: pendingRequest,
+        currentState: service.readClientState(),
       );
       await _completePendingVerification(
+        request: pendingRequest,
         verificationCode: verificationPayload.verificationCode,
       );
     } catch (error) {
@@ -103,18 +114,10 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
   }
 
   Future<void> _completePendingVerification({
+    required ClientVerificationRequest request,
     required String verificationCode,
   }) async {
     final service = ref.read(contentVerificationServiceProvider);
-    final identity =
-        await ref
-            .read(deviceVerificationIdentityServiceProvider)
-            .resolveIdentity();
-    final pendingCounts = ref.read(offlinePendingVerificationCountsProvider);
-    final request = service.createClientVerificationRecord(
-      identity: identity,
-      pendingCounts: pendingCounts,
-    );
     final approvedCounts =
         await ref
             .read(offlineContentRefreshControllerProvider.notifier)
@@ -134,6 +137,61 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
               : 'Verification accepted. No pending content needed approval.';
       _verificationStatusIsError = false;
     });
+  }
+
+  Future<void> _generateClientRequestQr() async {
+    if (_isPreparingRequestQr) {
+      return;
+    }
+
+    setState(() {
+      _isPreparingRequestQr = true;
+      _verificationStatusMessage = null;
+      _verificationStatusIsError = false;
+    });
+
+    try {
+      final service = ref.read(contentVerificationServiceProvider);
+      final identity =
+          await ref
+              .read(deviceVerificationIdentityServiceProvider)
+              .resolveIdentity();
+      final pendingCounts = ref.read(offlinePendingVerificationCountsProvider);
+      final request = service.createClientVerificationRecord(
+        identity: identity,
+        pendingCounts: pendingCounts,
+      );
+      await service.saveGeneratedRequest(request);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _clientVerificationState = service.readClientState();
+        _verificationStatusMessage =
+            'Client verification QR generated. Open it in the admin app and scan it there to receive the matching approval QR.';
+        _verificationStatusIsError = false;
+      });
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ClientVerificationRequestQrScreen(request: request),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _verificationStatusMessage =
+            'Unable to generate the client verification QR: $error';
+        _verificationStatusIsError = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPreparingRequestQr = false;
+        });
+      }
+    }
   }
 
   String _formatVerificationError(Object error) {
@@ -587,7 +645,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
               icon: Icons.verified_user_outlined,
               title: 'Pending Content Verification',
               subtitle:
-                  'Open the admin app, generate a QR approval there, then scan it here to unlock pending offline content automatically.',
+                  'Generate a client QR first, let the admin app scan it and mint the second-step approval QR, then scan that admin QR here to complete verification.',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -623,8 +681,8 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   const SizedBox(height: 12),
                   Text(
                     pendingVerificationCounts.hasPending
-                        ? 'Pending content remains blocked until this device scans a valid admin-generated QR approval.'
-                        : 'No pending content is currently waiting for approval, but the scanner remains available for direct admin verification.',
+                        ? 'Pending content remains blocked until this device shows its request QR to the admin app and then scans the matching admin approval QR.'
+                        : 'No pending content is waiting for approval right now, but you can still generate a device-bound request QR and complete the two-step verification flow.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 12),
@@ -640,18 +698,63 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Admin QR approval',
+                          'Step 1: Generate client request QR',
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Scan the QR code displayed in the admin app. No client request code or admin copy/paste step is required.',
+                          'Show this QR to the admin app first. The admin app will scan it and automatically generate the unique approval QR for this same verification session.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 12),
                         FilledButton.icon(
                           onPressed:
-                              _isApplyingVerificationCode
+                              _isPreparingRequestQr ? null : _generateClientRequestQr,
+                          icon: const Icon(Icons.qr_code_2_rounded),
+                          label: Text(
+                            _isPreparingRequestQr
+                                ? 'Preparing QR...'
+                                : _clientVerificationState.lastRequestCode == null
+                                ? 'Generate client QR'
+                                : 'Regenerate client QR',
+                          ),
+                        ),
+                        if (_clientVerificationState.lastRequestAtUtc != null) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            'Latest request: ${DateFormat('MMM d, yyyy HH:mm').format(_clientVerificationState.lastRequestAtUtc!.toLocal())}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: scheme.outlineVariant),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Step 2: Scan admin approval QR',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'After the admin app scans your request QR, scan the generated admin QR here. It must match the current request, cannot be reused, and expires automatically.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed:
+                              _isApplyingVerificationCode ||
+                                      _clientVerificationState.lastRequestCode == null
                                   ? null
                                   : _openVerificationScanner,
                           icon: const Icon(Icons.qr_code_scanner_rounded),

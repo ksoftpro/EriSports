@@ -95,24 +95,57 @@ void main() {
     expect(state.lastVerifiedAtUtc, DateTime.utc(2025, 2, 2, 9, 30));
   });
 
-  test('direct admin QR payload round-trips and validates', () {
+  test('request-bound admin QR payload round-trips and validates', () {
+    final request = service.generateClientRequest(
+      identity: const DeviceVerificationIdentity(
+        seed: 'request-bound-device',
+        source: VerificationSeedSource.hostnameFallback,
+      ),
+      pendingCounts: const ContentVerificationPendingCounts(
+        reels: 1,
+        videoHighlights: 0,
+        videoNews: 1,
+        videoUpdates: 0,
+        newsImages: 0,
+      ),
+      now: DateTime.utc(2025, 3, 8, 11, 45),
+    );
     final generatedQr = service.generateVerificationQrPayload(
+      request: request,
       now: DateTime.utc(2025, 3, 8, 11, 50),
     );
     final parsedQr = service.parseVerificationQrPayload(generatedQr.qrPayload);
     final validatedQr = service.validateVerificationQrPayload(
       qrPayload: generatedQr.qrPayload,
+      expectedRequest: request,
+      currentState: const ClientVerificationState(),
       now: DateTime.utc(2025, 3, 8, 11, 55),
     );
 
     expect(generatedQr.qrPayload, startsWith('ERI-QR1-'));
     expect(parsedQr.feature, 'offline_content');
+    expect(parsedQr.requestCode, request.requestCode);
     expect(parsedQr.verificationCode, generatedQr.verificationCode);
     expect(validatedQr.expiresAtUtc, generatedQr.expiresAtUtc);
   });
 
-  test('direct admin QR payload rejects tampering and expired approvals', () {
+  test('request-bound admin QR payload rejects tampering and expired approvals', () {
+    final request = service.generateClientRequest(
+      identity: const DeviceVerificationIdentity(
+        seed: 'tamper-device',
+        source: VerificationSeedSource.macAddress,
+      ),
+      pendingCounts: const ContentVerificationPendingCounts(
+        reels: 1,
+        videoHighlights: 1,
+        videoNews: 0,
+        videoUpdates: 0,
+        newsImages: 0,
+      ),
+      now: DateTime.utc(2025, 3, 8, 12),
+    );
     final generatedQr = service.generateVerificationQrPayload(
+      request: request,
       now: DateTime.utc(2025, 3, 8, 12, 5),
     );
 
@@ -141,6 +174,8 @@ void main() {
     expect(
       () => service.validateVerificationQrPayload(
         qrPayload: generatedQr.qrPayload,
+        expectedRequest: request,
+        currentState: const ClientVerificationState(),
         now: generatedQr.expiresAtUtc.add(const Duration(seconds: 1)),
       ),
       throwsA(
@@ -172,5 +207,51 @@ void main() {
     expect(request.feature, 'offline_content');
     expect(request.pendingCounts.totalPending, 3);
     expect(request.requestCode, startsWith('ERI-REQ1-'));
+  });
+
+  test('saving a new request clears stale verified state and exposes the pending request', () async {
+    final initialRequest = service.generateClientRequest(
+      identity: const DeviceVerificationIdentity(
+        seed: 'saved-state-device',
+        source: VerificationSeedSource.hostnameFallback,
+      ),
+      pendingCounts: const ContentVerificationPendingCounts(
+        reels: 0,
+        videoHighlights: 1,
+        videoNews: 1,
+        videoUpdates: 0,
+        newsImages: 0,
+      ),
+      now: DateTime.utc(2025, 4, 1, 9),
+    );
+    await service.saveGeneratedRequest(initialRequest);
+    await service.markClientVerified(
+      request: initialRequest,
+      verificationCode: service.generateVerificationCode(initialRequest.requestCode),
+      verifiedAtUtc: DateTime.utc(2025, 4, 1, 9, 10),
+    );
+
+    final nextRequest = service.generateClientRequest(
+      identity: const DeviceVerificationIdentity(
+        seed: 'saved-state-device',
+        source: VerificationSeedSource.hostnameFallback,
+      ),
+      pendingCounts: const ContentVerificationPendingCounts(
+        reels: 1,
+        videoHighlights: 0,
+        videoNews: 0,
+        videoUpdates: 0,
+        newsImages: 0,
+      ),
+      now: DateTime.utc(2025, 4, 1, 9, 20),
+    );
+    await service.saveGeneratedRequest(nextRequest);
+
+    final state = service.readClientState();
+
+    expect(state.lastRequestCode, nextRequest.requestCode);
+    expect(state.lastVerifiedAtUtc, isNull);
+    expect(state.lastVerifiedRequestCode, isNull);
+    expect(service.readPendingClientRequest()?.requestCode, nextRequest.requestCode);
   });
 }
