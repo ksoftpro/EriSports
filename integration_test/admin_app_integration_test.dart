@@ -11,6 +11,7 @@ import 'package:eri_sports/features/more/presentation/secure_content_screen.dart
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:eri_sports/features/verification/data/content_verification_service.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -48,6 +49,9 @@ void main() {
           child: const EriSportsApp(),
         ),
       );
+        testWidgets(
+          'admin app generates a session-bound verification QR from a pasted client request code',
+          (tester) async {
       await _pumpForUi(tester, frames: 18);
 
       expect(find.text('Initialize Admin Access'), findsOneWidget);
@@ -193,6 +197,91 @@ void main() {
       await _pumpForUi(tester, frames: 8);
       expect(find.byKey(adminDashboardRecentActivityKey), findsOneWidget);
       expect(find.text('Real-time logs'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'admin app generates a session-bound verification QR from a pasted client request code',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 1900);
+      tester.view.devicePixelRatio = 1.0;
+
+      final harness = await _AdminIntegrationHarness.create();
+      addTearDown(() async {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+        await harness.dispose();
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(harness.preferences),
+            appServicesProvider.overrideWithValue(harness.services),
+            appProductVariantProvider.overrideWithValue(
+              AppProductVariant.admin,
+            ),
+          ],
+          child: const EriSportsApp(),
+        ),
+      );
+      await _pumpForUi(tester, frames: 18);
+
+      expect(find.text('Initialize Admin Access'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(adminLoginDisplayNameFieldKey),
+        'Lead Operations',
+      );
+      await tester.enterText(find.byKey(adminLoginUsernameFieldKey), 'opslead');
+      await tester.enterText(
+        find.byKey(adminLoginPasswordFieldKey),
+        'Secure123',
+      );
+      await tester.enterText(
+        find.byKey(adminLoginConfirmPasswordFieldKey),
+        'Secure123',
+      );
+      await tester.tap(find.byKey(adminLoginSubmitButtonKey).hitTestable());
+      await _pumpForUi(tester, frames: 28);
+
+      expect(find.text('Secure Content Operations'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(adminDashboardOperationsTabKey).hitTestable(),
+      );
+      await _pumpForUi(tester, frames: 8);
+
+      final verificationService = ContentVerificationService(
+        cacheStore: harness.services.cacheStore,
+      );
+      final request = verificationService.createClientVerificationRecord(
+        identity: const DeviceVerificationIdentity(
+          seed: 'integration-client-device',
+          source: VerificationSeedSource.hostnameFallback,
+        ),
+        pendingCounts: const ContentVerificationPendingCounts(
+          reels: 1,
+          videoHighlights: 2,
+          videoNews: 0,
+          videoUpdates: 0,
+          newsImages: 1,
+        ),
+        now: DateTime.utc(2026, 4, 29, 12),
+      );
+
+      expect(find.text('Verification QR operations'), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), request.requestCode);
+      await tester.tap(find.text('Generate from pasted code').hitTestable());
+      await _pumpForUi(tester, frames: 18);
+
+      expect(
+        find.text('Scan this session-bound QR from the client app'),
+        findsOneWidget,
+      );
+      expect(find.text('Session-bound admin approval'), findsOneWidget);
+      expect(find.text('Valid until'), findsOneWidget);
     },
   );
 }

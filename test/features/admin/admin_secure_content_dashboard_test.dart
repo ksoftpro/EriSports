@@ -24,6 +24,7 @@ import 'package:eri_sports/features/admin/data/admin_activity_service.dart';
 import 'package:eri_sports/features/admin/data/admin_auth_service.dart';
 import 'package:eri_sports/features/admin/data/admin_models.dart';
 import 'package:eri_sports/features/leagues/data/league_standings_source.dart';
+import 'package:eri_sports/features/media/data/video_resume_service.dart';
 import 'package:eri_sports/features/media/security/encrypted_media_service.dart';
 import 'package:eri_sports/features/more/presentation/secure_content_screen.dart';
 import 'package:eri_sports/features/team/data/team_raw_source.dart';
@@ -276,6 +277,51 @@ void main() {
       expect(find.byKey(adminDashboardRecentActivityKey), findsNothing);
     },
   );
+
+  testWidgets('admin operations tab exposes two-way verification controls', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1800);
+    tester.view.devicePixelRatio = 1.0;
+
+    final harness = await _AdminDashboardHarness.create();
+    final container = ProviderContainer(
+      overrides: [appServicesProvider.overrideWithValue(harness.services)],
+    );
+    addTearDown(() {
+      container.dispose();
+      harness.disposeForTest();
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final loginResult = await harness.services.adminAuthService.login(
+      username: 'opslead',
+      password: 'Secure123',
+      persistSession: false,
+    );
+    expect(loginResult.success, isTrue);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: SecureContentScreen()),
+      ),
+    );
+
+    await _pumpForUi(tester, frames: 12);
+    await tester.tap(find.byKey(adminDashboardOperationsTabKey).hitTestable());
+    await _pumpForUi(tester, frames: 8);
+
+    expect(find.text('Verification QR operations'), findsOneWidget);
+    expect(find.text('Client request code'), findsOneWidget);
+    expect(find.text('Scan client QR and generate'), findsOneWidget);
+    expect(find.text('Generate from pasted code'), findsOneWidget);
+    expect(
+      find.textContaining('session-bound admin approval QR'),
+      findsOneWidget,
+    );
+  });
 }
 
 Future<void> _pumpForUi(WidgetTester tester, {int frames = 8}) async {
@@ -378,6 +424,7 @@ class _AdminDashboardHarness {
       mediaKeyBase64: keyBase64,
       cacheRootProvider: () async => tempRoot,
     );
+    final videoResumeService = VideoResumeService(cacheStore: cacheStore);
     final scanner = FileInventoryScanner(cacheStore: cacheStore);
     final versionTracker = JsonDataVersionTracker(cacheStore: cacheStore);
     final assetResolver = LocalAssetResolver(
@@ -437,6 +484,7 @@ class _AdminDashboardHarness {
       importCoordinator: importCoordinator,
       assetResolver: assetResolver,
       encryptedMediaService: encryptedMediaService,
+      videoResumeService: videoResumeService,
       encryptedJsonService: encryptedJsonService,
       encryptedImageService: encryptedImageService,
       secureContentCoordinator: secureContentCoordinator,
