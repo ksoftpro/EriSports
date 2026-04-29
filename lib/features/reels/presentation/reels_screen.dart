@@ -1254,33 +1254,36 @@ class _ReelCard extends StatelessWidget {
               Positioned(
                 left: 14,
                 right: 14,
-                bottom: 14,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (!isVerified) ...[
-                      const PendingVerificationChip(),
-                      const SizedBox(height: 8),
+                bottom: _ReelCardLayout.metadataBottomInset,
+                child: IgnorePointer(
+                  child: Column(
+                    key: const ValueKey<String>('reel-metadata-overlay'),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (!isVerified) ...[
+                        const PendingVerificationChip(),
+                        const SizedBox(height: 8),
+                      ],
+                      Text(
+                        item.fileName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${item.relativePath} • ${DateFormat('EEE d MMM HH:mm').format(item.lastModified.toLocal())}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.labelMedium?.copyWith(
+                          color: Colors.white70,
+                        ),
+                      ),
                     ],
-                    Text(
-                      item.fileName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${item.relativePath} • ${DateFormat('EEE d MMM HH:mm').format(item.lastModified.toLocal())}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.labelMedium?.copyWith(
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -1440,9 +1443,9 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
             ),
           if (isReady)
             Positioned(
-              left: 16,
-              right: 16,
-              bottom: 18,
+              left: _ReelCardLayout.controlHorizontalInset,
+              right: _ReelCardLayout.controlHorizontalInset,
+              bottom: _ReelCardLayout.controlBottomInset,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.58),
@@ -1455,38 +1458,48 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
                     children: [
                       SliderTheme(
                         data: SliderTheme.of(context).copyWith(
-                          trackHeight: 3,
+                          trackHeight: 4,
                           thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 6,
+                            enabledThumbRadius: 7,
                           ),
                           overlayShape: const RoundSliderOverlayShape(
-                            overlayRadius: 12,
+                            overlayRadius: 14,
                           ),
                         ),
-                        child: Slider(
-                          value: _sliderValue(
-                            position: displayPosition,
-                            duration: duration,
+                        child: SizedBox(
+                          height: 28,
+                          child: Slider(
+                            key: const ValueKey<String>('reel-progress-slider'),
+                            value: _sliderValue(
+                              position: displayPosition,
+                              duration: duration,
+                            ),
+                            min: 0,
+                            max: duration.inMilliseconds > 0
+                                ? duration.inMilliseconds.toDouble()
+                                : 1,
+                            onChanged: (value) => _handleScrubChanged(value),
+                            onChangeStart: (value) => _handleScrubStart(value),
+                            onChangeEnd: (value) => _handleScrubEnd(value),
                           ),
-                          min: 0,
-                          max: duration.inMilliseconds > 0
-                              ? duration.inMilliseconds.toDouble()
-                              : 1,
-                          onChanged: (value) => _handleScrubChanged(value),
-                          onChangeStart: (value) => _handleScrubStart(value),
-                          onChangeEnd: (value) => _handleScrubEnd(value),
                         ),
                       ),
                       Row(
                         children: [
                           Text(
                             _formatDuration(displayPosition),
+                            key: const ValueKey<String>(
+                              'reel-progress-current-time',
+                            ),
                             style: Theme.of(context).textTheme.labelMedium
                                 ?.copyWith(color: Colors.white),
                           ),
                           const Spacer(),
                           Text(
                             _formatDuration(duration),
+                            key: const ValueKey<String>(
+                              'reel-progress-total-time',
+                            ),
                             style: Theme.of(context).textTheme.labelMedium
                                 ?.copyWith(color: Colors.white70),
                           ),
@@ -1725,6 +1738,12 @@ class _InlineReelVideoState extends ConsumerState<_InlineReelVideo> {
     }
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
+}
+
+class _ReelCardLayout {
+  static const double controlHorizontalInset = 16;
+  static const double controlBottomInset = 18;
+  static const double metadataBottomInset = 112;
 }
 
 class _EmptyReelsState extends StatelessWidget {
