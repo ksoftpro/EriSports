@@ -10,6 +10,10 @@ void main() {
     final payload = VerificationQrPayload(
       qrPayload: 'ERI-QR1-test-payload',
       feature: 'offline_content',
+      requestCode: 'ERI-REQ1-test-request',
+      requestDayKey: '20260426',
+      deviceDigest: 'device-digest',
+      sessionDigest: 'session-digest',
       verificationCode: 'ERI-VER1-ABCD-EFGH-IJKL-MNOP-QRST',
       issuedAtUtc: DateTime.utc(2026, 4, 26, 12, 5),
       expiresAtUtc: DateTime.utc(2026, 4, 26, 12, 15),
@@ -20,10 +24,10 @@ void main() {
     );
 
     expect(
-      find.text('Scan this QR from the client Settings screen'),
+      find.text('Scan this session-bound QR from the client app'),
       findsOneWidget,
     );
-    expect(find.text('Direct admin approval'), findsOneWidget);
+    expect(find.text('Session-bound admin approval'), findsOneWidget);
     expect(find.text('Valid until'), findsOneWidget);
   });
 }

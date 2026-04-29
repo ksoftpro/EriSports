@@ -53,7 +53,23 @@ void main() {
       cacheStore: cacheStore,
     );
 
+    final request = verificationService.createClientVerificationRecord(
+      identity: const DeviceVerificationIdentity(
+        seed: 'admin-dashboard-test-device',
+        source: VerificationSeedSource.hostnameFallback,
+      ),
+      pendingCounts: const ContentVerificationPendingCounts(
+        reels: 1,
+        videoHighlights: 0,
+        videoNews: 0,
+        videoUpdates: 0,
+        newsImages: 0,
+      ),
+      now: DateTime.utc(2025, 1, 14, 9, 55),
+    );
+
     final verificationQr = verificationService.generateVerificationQrPayload(
+      request: request,
       now: DateTime.utc(2025, 1, 14, 10),
     );
 

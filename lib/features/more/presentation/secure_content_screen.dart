@@ -12,6 +12,7 @@ import 'package:eri_sports/features/admin/data/admin_models.dart';
 import 'package:eri_sports/features/admin/data/admin_providers.dart';
 import 'package:eri_sports/features/more/presentation/secure_content_import_routing.dart';
 import 'package:eri_sports/features/verification/data/content_verification_service.dart';
+import 'package:eri_sports/features/verification/presentation/admin_client_request_scanner_screen.dart';
 import 'package:eri_sports/features/verification/presentation/admin_verification_qr_screen.dart';
 import 'package:eri_sports/features/media/security/media_crypto.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1080,7 +1081,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
       final service = ref.read(contentVerificationServiceProvider);
       final request = service.parseClientRequest(requestCode);
       final verificationQr = service.generateVerificationQrPayload(
-        feature: request.feature,
+        request: request,
       );
       await _recordDashboardActivity(
         type: AdminActivityType.verificationCodeGenerated,
@@ -1129,6 +1130,26 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
         });
       }
     }
+  }
+
+  Future<void> _scanClientRequestAndGenerateQr() async {
+    if (_isGeneratingVerificationCode) {
+      return;
+    }
+
+    final scannedRequestCode = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const AdminClientRequestScannerScreen(),
+      ),
+    );
+    if (!mounted || scannedRequestCode == null || scannedRequestCode.isEmpty) {
+      return;
+    }
+
+    _verificationRequestController
+      ..text = scannedRequestCode
+      ..selection = TextSelection.collapsed(offset: scannedRequestCode.length);
+    await _generateVerificationQr();
   }
 
   Future<void> _openVerificationQrScreen(VerificationQrPayload payload) {
@@ -1632,7 +1653,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
           _SectionCard(
             title: 'Verification QR operations',
             subtitle:
-                'Convert client request codes into scannable admin QR approvals, while preserving a manual verification-code fallback and the local audit trail.',
+                'Scan the client request QR to mint a session-bound admin approval QR, while preserving a manual paste fallback and the local audit trail.',
             child: _VerificationOperationsPanel(
               requestController: _verificationRequestController,
               generatedVerificationQr: _generatedVerificationQr,
@@ -1641,6 +1662,7 @@ class _SecureContentScreenState extends ConsumerState<SecureContentScreen> {
               isGenerating: _isGeneratingVerificationCode,
               isClearing: _isClearingVerificationRecords,
               activities: activities,
+              onScanAndGenerate: _scanClientRequestAndGenerateQr,
               onGenerate: _generateVerificationQr,
               onClearRecords: _clearVerificationRecords,
             ),
@@ -3082,6 +3104,7 @@ class _VerificationOperationsPanel extends StatelessWidget {
     required this.isGenerating,
     required this.isClearing,
     required this.activities,
+    required this.onScanAndGenerate,
     required this.onGenerate,
     required this.onClearRecords,
   });
@@ -3093,6 +3116,7 @@ class _VerificationOperationsPanel extends StatelessWidget {
   final bool isGenerating;
   final bool isClearing;
   final List<AdminActivityRecord> activities;
+  final Future<void> Function() onScanAndGenerate;
   final Future<void> Function() onGenerate;
   final Future<void> Function() onClearRecords;
 
@@ -3134,6 +3158,11 @@ class _VerificationOperationsPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          'Scan the QR shown by the client app to generate the matching admin approval QR automatically. Manual paste remains available if camera scanning is unavailable.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
         TextField(
           controller: requestController,
           decoration: const InputDecoration(
@@ -3150,9 +3179,18 @@ class _VerificationOperationsPanel extends StatelessWidget {
           runSpacing: 10,
           children: [
             FilledButton.icon(
+              onPressed: isGenerating ? null : onScanAndGenerate,
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              label: Text(
+                isGenerating ? 'Scanning...' : 'Scan client QR and generate',
+              ),
+            ),
+            FilledButton.icon(
               onPressed: isGenerating ? null : onGenerate,
               icon: const Icon(Icons.qr_code_2_rounded),
-              label: Text(isGenerating ? 'Generating...' : 'Generate admin QR'),
+              label: Text(
+                isGenerating ? 'Generating...' : 'Generate from pasted code',
+              ),
             ),
             OutlinedButton.icon(
               onPressed: isClearing ? null : onClearRecords,
@@ -3180,7 +3218,7 @@ class _VerificationOperationsPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'A full-screen QR is shown immediately after generation so the client app can scan it from Settings.',
+                  'A full-screen, request-bound QR is shown immediately after generation so the same client session can scan and complete verification.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 12),

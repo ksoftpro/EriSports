@@ -37,13 +37,13 @@ class AdminVerificationQrScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Scan this QR from the client Settings screen',
+                      'Scan this session-bound QR from the client app',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'The client app will validate this direct admin approval and complete verification automatically after a successful scan.',
+                      'This approval is bound to the scanned client request, expires automatically, and completes the second half of the device verification flow after a successful scan.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium,
                     ),
@@ -82,7 +82,7 @@ class AdminVerificationQrScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Direct admin approval',
+                            'Session-bound admin approval',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: Colors.black54,
                             ),
